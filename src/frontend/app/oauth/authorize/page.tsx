@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { api } from '@/lib/api';
+import { rawApi } from '@/lib/api';
 import { useUserStore } from '@/stores/user';
 import { Loader2, Shield } from 'lucide-react';
 
@@ -33,7 +33,7 @@ function AuthorizeInner() {
     setApproving(true);
     setError(null);
     try {
-      const r = await api.post<{ redirect: string }>('/oauth/api/approve', {
+      const r = await rawApi.post<{ redirect: string }>('/oauth/api/approve', {
         client_id, redirect_uri, state, scope,
       });
       window.location.href = r.data.redirect;
