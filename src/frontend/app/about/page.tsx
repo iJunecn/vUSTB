@@ -37,6 +37,45 @@ const ABILITIES = [
   '红石逻辑、Prompt 工程与智能体调度交互',
 ];
 
+const ARCHIVE_ITEMS = [
+  {
+    type: 'Brand Project',
+    title: '像素北科',
+    date: '2024 - 2025',
+    description: '由元宇宙体素工作坊负责，使用 Minecraft 建设体素化电子北科校园，并结合数字孪生技术开展特色活动。联合多位同学完成北科校园主要建筑的 1:1 像素重构，持续更新中。',
+  },
+  {
+    type: 'Campus Recruitment',
+    title: '百团大战',
+    date: '每年春季',
+    description: '每年春季的重要招新活动。社团会策划互动体验、准备周边和特色展示，为社团传播带来持续曝光。',
+  },
+  {
+    type: 'College Showcase',
+    title: '智能文化节',
+    date: '2024 秋季',
+    description: '由智能科学与技术学院主办的 AI 文化宣传活动，像素北科项目曾结合 VR 技术在摊位展出，吸引大量关注。',
+  },
+  {
+    type: 'Training',
+    title: 'AI 秋令营',
+    date: '2024 秋季',
+    description: '社团代表性培训项目，围绕 LLM 应用、AIGC 图像生成与像素北科工程实践三条 Track，组织连续两个月左右的训练路径。',
+  },
+  {
+    type: 'Orientation',
+    title: '新生季开服活动',
+    date: '2024 秋季',
+    description: '面向北科 2024 级新生开放生存服与建造服，完成系列任务可获得限定皮肤。',
+  },
+  {
+    type: 'Recruitment',
+    title: '元宇宙体素工作坊招新',
+    date: '常态化',
+    description: '欢迎对 MC、像素建造、3D 引擎、Web 开发感兴趣的北科同学加入。',
+  },
+];
+
 export default function AboutPage() {
   return (
     <div style={{ maxWidth: '1120px', margin: '0 auto', padding: '40px 24px 60px' }}>
@@ -80,7 +119,6 @@ export default function AboutPage() {
           这里既有技术培训，也有特色项目与社团活动。你可以从 AI 技术、AIGC 内容、活动组织、数字校园建设等不同方向进入，再逐步把个人兴趣接入一个更完整的智能科技社群。
         </p>
 
-        {/* Hero side cards */}
         <div style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
@@ -195,7 +233,6 @@ export default function AboutPage() {
           gap: '18px',
           alignItems: 'start',
         }}>
-          {/* Main card */}
           <div className="surface-card" style={{ padding: '22px' }}>
             <p style={{
               fontSize: '12px',
@@ -247,7 +284,6 @@ export default function AboutPage() {
             </div>
           </div>
 
-          {/* Side boxes */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
             <div className="surface-card" style={{ padding: '20px' }}>
               <span style={{
@@ -301,6 +337,104 @@ export default function AboutPage() {
               </p>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* Activities / Timeline Section */}
+      <section id="activities">
+        <p className="section-kicker" style={{ margin: '0 0 8px' }}>活动归档</p>
+        <h2 style={{
+          fontSize: 'clamp(24px, 3.5vw, 34px)',
+          fontWeight: 700,
+          margin: '0 0 24px',
+          color: 'var(--color-heading)',
+          lineHeight: 1.14,
+        }}>
+          往期活动
+        </h2>
+
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '14px',
+          position: 'relative',
+          paddingLeft: '24px',
+        }}>
+          <div style={{
+            position: 'absolute',
+            left: '5px',
+            top: '8px',
+            bottom: '8px',
+            width: '2px',
+            background: 'linear-gradient(180deg, var(--color-primary), var(--color-border))',
+            borderRadius: '1px',
+          }} />
+
+          {ARCHIVE_ITEMS.map((item) => (
+            <article
+              key={item.title}
+              className="surface-card"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '12px 1fr',
+                gap: '14px',
+                padding: '18px',
+                alignItems: 'start',
+              }}
+            >
+              <div style={{
+                width: '12px',
+                height: '12px',
+                borderRadius: '50%',
+                background: 'var(--color-primary)',
+                border: '2px solid var(--color-card-background)',
+                boxShadow: '0 0 0 2px var(--color-primary)',
+                marginTop: '4px',
+              }} />
+              <div>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  flexWrap: 'wrap',
+                  marginBottom: '6px',
+                }}>
+                  <span style={{
+                    display: 'inline-flex',
+                    padding: '4px 9px',
+                    border: '1px solid var(--theme-border-strong)',
+                    borderRadius: '999px',
+                    background: 'var(--theme-accent-soft)',
+                    color: 'var(--theme-accent)',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    letterSpacing: '0.08em',
+                    textTransform: 'uppercase',
+                  }}>
+                    {item.type}
+                  </span>
+                  <span style={{
+                    fontSize: '13px',
+                    color: 'var(--color-text-light)',
+                  }}>
+                    {item.date}
+                  </span>
+                </div>
+                <h3 style={{
+                  fontSize: '20px',
+                  fontWeight: 600,
+                  margin: '0 0 6px',
+                  color: 'var(--color-heading)',
+                  lineHeight: 1.24,
+                }}>
+                  {item.title}
+                </h3>
+                <p style={{ margin: 0, color: 'var(--color-text-light)', lineHeight: 1.74 }}>
+                  {item.description}
+                </p>
+              </div>
+            </article>
+          ))}
         </div>
       </section>
     </div>
