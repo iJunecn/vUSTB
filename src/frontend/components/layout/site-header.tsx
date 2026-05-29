@@ -114,7 +114,7 @@ export function SiteHeader() {
 
         {/* Actions */}
         <div className="flex items-center gap-2">
-          {!isHome && <ThemeToggle />}
+          <ThemeToggle />
 
           {/* Mobile menu toggle */}
           <button

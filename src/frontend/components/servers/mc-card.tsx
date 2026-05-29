@@ -18,6 +18,7 @@ type McCardProps = {
   players_online?: number | null;
   players_max?: number | null;
   last_update?: string | null;
+  compact?: boolean;
 };
 
 function formatRelativeTime(value: string | null | undefined) {
@@ -35,6 +36,7 @@ export function MCCard(props: McCardProps) {
   const isOnline = props.server_status === 'online';
   const iconSrc = normalizeIconSrc(props.icon);
   const [iconValid, setIconValid] = useState(false);
+  const isCompact = props.compact ?? false;
 
   useEffect(() => {
     if (!iconSrc) { setIconValid(false); return; }
@@ -43,6 +45,18 @@ export function MCCard(props: McCardProps) {
     img.onerror = () => setIconValid(false);
     img.src = iconSrc;
   }, [iconSrc]);
+
+  // Compact mode: only name + online status
+  if (isCompact) {
+    return (
+      <div className="mc-sub-card">
+        <span className="mc-sub-card-name">{props.name}</span>
+        <span className={`mc-status-pill ${isOnline ? 'online' : 'offline'}`}>
+          {isOnline ? <><Wifi className="w-3 h-3" /> 在线</> : <><WifiOff className="w-3 h-3" /> 离线</>}
+        </span>
+      </div>
+    );
+  }
 
   const latencyClass = (() => {
     const ms = props.connect_ms;
@@ -61,7 +75,6 @@ export function MCCard(props: McCardProps) {
       <div className="mc-card-header">
         <div className="mc-card-info">
           {iconValid && iconSrc ? (
-            // eslint-disable-next-line @next/next/no-img-element
             <img src={iconSrc} alt="" className="mc-card-icon" />
           ) : (
             <div className="mc-card-icon mc-card-icon-placeholder">MC</div>
