@@ -1,0 +1,108 @@
+name: vustb
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: vustb-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-vustb}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vustb}
+      POSTGRES_DB: ${POSTGRES_DB:-vustb}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vustb}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: vustb-redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build:
+      context: ./src/backend
+      dockerfile: Dockerfile
+    container_name: vustb-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-vustb}:${POSTGRES_PASSWORD:-vustb}@postgres:5432/${POSTGRES_DB:-vustb}
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      SITE_URL: ${SITE_URL:-http://localhost}
+      API_URL: ${API_URL:-http://localhost/skinapi}
+      CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-["http://localhost","http://localhost:3000"]}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+    volumes:
+      - vustb_data:/data
+    expose:
+      - "8000"
+
+  worker:
+    build:
+      context: ./src/backend
+      dockerfile: Dockerfile
+    container_name: vustb-worker
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-vustb}:${POSTGRES_PASSWORD:-vustb}@postgres:5432/${POSTGRES_DB:-vustb}
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+    volumes:
+      - vustb_data:/data
+    command: ["celery", "-A", "app.workers.celery_app:celery_app", "worker", "--loglevel=info", "--beat"]
+
+  frontend:
+    build:
+      context: ./src/frontend
+      dockerfile: Dockerfile
+    container_name: vustb-frontend
+    restart: unless-stopped
+    environment:
+      BACKEND_INTERNAL_URL: http://backend:8000
+      NODE_ENV: production
+    expose:
+      - "3000"
+    depends_on:
+      - backend
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: vustb-caddy
+    restart: unless-stopped
+    ports:
+      - "${HOST_HTTP_PORT:-80}:80"
+    volumes:
+      - ./src/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+      - frontend
+
+volumes:
+  postgres_data:
+  redis_data:
+  vustb_data:
+  caddy_data:
+  caddy_config:

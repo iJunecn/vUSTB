@@ -1,0 +1,30 @@
+import axios from 'axios';
+
+export const api = axios.create({
+  baseURL: '/api',
+  withCredentials: true,
+  timeout: 15000,
+});
+
+api.interceptors.request.use((config) => {
+  if (typeof window !== 'undefined') {
+    const token = localStorage.getItem('vustb_token');
+    if (token) config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+api.interceptors.response.use(
+  (r) => r,
+  (err) => {
+    if (err.response?.status === 401 && typeof window !== 'undefined') {
+      localStorage.removeItem('vustb_token');
+    }
+    return Promise.reject(err);
+  }
+);
+
+export const skinApi = axios.create({
+  baseURL: '/skinapi',
+  timeout: 15000,
+});

@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+.env
+.env.local
+*.egg-info/
+
+# Node
+node_modules/
+.next/
+out/
+.turbo/
+
+# Build artifacts
+dist/
+build/
+*.log
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local data
+/data/
+*.sqlite
+*.db
+
+# Secrets
+*.pem
+*.key
+.claude/settings.local.json

@@ -1,0 +1,38 @@
+# vUSTB / 像素北科 统一网关
+# 域名最终为 mc.ustb.edu.cn，开发使用 localhost。
+{
+    auto_https off
+    admin off
+}
+
+:80 {
+    encode zstd gzip
+
+    # 后端 API（Web 业务）
+    handle /api/* {
+        reverse_proxy backend:8000
+    }
+
+    # Yggdrasil 协议 + OAuth Provider（路径名固定，不能改）
+    handle /skinapi/* {
+        reverse_proxy backend:8000
+    }
+
+    handle /oauth/* {
+        reverse_proxy backend:8000
+    }
+
+    handle /.well-known/* {
+        reverse_proxy backend:8000
+    }
+
+    # 材质静态文件由后端提供 FileResponse
+    handle /static/* {
+        reverse_proxy backend:8000
+    }
+
+    # 其余全部交给 Next.js 前端
+    handle {
+        reverse_proxy frontend:3000
+    }
+}
