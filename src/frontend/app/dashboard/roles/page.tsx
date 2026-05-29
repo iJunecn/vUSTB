@@ -64,7 +64,7 @@ export default function RolesPage() {
   }
 
   async function bind(playerId: number, type: 'skin' | 'cape', textureId: number | null) {
-    const body: any = {};
+    const body: Record<string, any> = {};
     if (type === 'skin') {
       if (textureId === null) body.clear_skin = true;
       else body.skin_texture_id = textureId;
@@ -83,52 +83,58 @@ export default function RolesPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <header className="space-y-1">
-        <h1 className="text-3xl font-bold">游戏角色</h1>
-        <p className="text-muted-foreground">
-          创建你的 Minecraft 角色,绑定皮肤后即可在 MC 客户端通过 authlib-injector 登录。
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <div>
+        <p className="section-kicker" style={{ marginBottom: 8 }}>CHARACTERS</p>
+        <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--color-heading)', margin: 0 }}>
+          游戏角色
+        </h1>
+        <p style={{ fontSize: 14, color: 'var(--color-text-light)', marginTop: 4 }}>
+          创建你的 Minecraft 角色，绑定皮肤后即可在 MC 客户端通过 authlib-injector 登录。
         </p>
-      </header>
+      </div>
 
-      <form onSubmit={createPlayer} className="glass-card p-5 flex items-end gap-3 flex-wrap">
-        <label className="flex-1 min-w-[200px] space-y-1">
-          <span className="text-sm font-medium block">新角色名（MC 用户名）</span>
+      {/* Create player form */}
+      <form onSubmit={createPlayer} className="surface-card" style={{ padding: 20, display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
+        <label style={{ flex: 1, minWidth: 200, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <span style={{ fontSize: 13, fontWeight: 500 }}>新角色名（MC 用户名）</span>
           <input
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             className="input"
-            placeholder="2-24 字符,不含空格"
+            placeholder="2-24 字符，不含空格"
             required
           />
         </label>
         <button type="submit" disabled={creating} className="btn-primary">
-          {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+          {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus style={{ width: 16, height: 16 }} />}
           创建
         </button>
-        {error && <p className="text-sm text-destructive w-full">{error}</p>}
+        {error && <p style={{ fontSize: 13, color: '#dc2626', width: '100%' }}>{error}</p>}
       </form>
 
+      {/* Player list */}
       {loading ? (
-        <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+        <Loader2 className="w-5 h-5 animate-spin" style={{ color: 'var(--color-text-light)' }} />
       ) : (
-        <div className="space-y-4">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {players.map((p) => (
-            <div key={p.id} className="glass-card p-5 space-y-3">
-              <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div key={p.id} className="surface-card" style={{ padding: 24 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: 16 }}>
                 <div>
-                  <h3 className="text-lg font-semibold">{p.name}</h3>
-                  <code className="text-xs text-muted-foreground">{p.uuid}</code>
+                  <h3 style={{ fontSize: 18, fontWeight: 600, color: 'var(--color-heading)', margin: 0 }}>{p.name}</h3>
+                  <code style={{ fontSize: 12, color: 'var(--color-text-light)' }}>{p.uuid}</code>
                 </div>
                 <button
                   onClick={() => removePlayer(p.id)}
-                  className="text-sm text-destructive hover:underline inline-flex items-center gap-1"
+                  className="btn-destructive"
+                  style={{ padding: '6px 12px', fontSize: 13 }}
                 >
-                  <Trash2 className="w-3 h-3" /> 删除角色
+                  <Trash2 style={{ width: 14, height: 14 }} /> 删除角色
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
                 <BindSlot
                   label="皮肤"
                   type="skin"
@@ -149,7 +155,7 @@ export default function RolesPage() {
             </div>
           ))}
           {players.length === 0 && (
-            <p className="text-muted-foreground">还没有角色,创建一个开始游戏。</p>
+            <p style={{ color: 'var(--color-text-light)' }}>还没有角色，创建一个开始游戏。</p>
           )}
         </div>
       )}
@@ -174,18 +180,25 @@ function BindSlot({
 }) {
   const options = wardrobe.filter((t) => t.type === type);
   return (
-    <div className="space-y-2">
-      <p className="text-sm font-medium">{label}</p>
-      <div className="flex items-center gap-3">
-        <div className="w-16 h-16 rounded-xl bg-muted/40 flex items-center justify-center overflow-hidden">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--color-text-light)' }}>{label}</p>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div
+          style={{
+            width: 64, height: 64, borderRadius: 12,
+            background: 'var(--color-background-mute)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            overflow: 'hidden', flexShrink: 0,
+          }}
+        >
           {currentUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={currentUrl} alt="" className="w-full h-full object-contain" style={{ imageRendering: 'pixelated' }} />
+            <img src={currentUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', imageRendering: 'pixelated' }} />
           ) : (
-            <Shirt className="w-6 h-6 text-muted-foreground" />
+            <Shirt style={{ width: 24, height: 24, color: 'var(--color-text-light)' }} />
           )}
         </div>
-        <div className="flex-1 space-y-1">
+        <div style={{ flex: 1 }}>
           <select
             value={currentId ?? ''}
             onChange={(e) => onBind(e.target.value ? Number(e.target.value) : null)}

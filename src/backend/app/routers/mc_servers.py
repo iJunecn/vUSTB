@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.deps import get_current_admin
 from app.models import MCServer, User
-from app.services.mc_status import get_status_with_fallback, refresh_one
+from app.services.mc_status import get_status_with_fallback, refresh_one, parse_motd_segments
 
 router = APIRouter(prefix="/api/mc-servers", tags=["mc_servers"])
 
@@ -94,12 +94,24 @@ async def server_statuses(db: AsyncSession = Depends(get_db)) -> list[dict[str, 
     out: list[dict[str, Any]] = []
     for s in rows:
         status = await get_status_with_fallback(s, db)
+        motd = status.get("motd", "") if status else ""
         out.append({
-            "id": s.id, "name": s.name,
+            "id": s.id,
+            "name": s.name,
             "address": s.address if _expose_address(s) else None,
             "icon_url": s.icon_url,
             "version_hint": s.version_hint,
-            "status": status,
+            "motd_segments": parse_motd_segments(motd),
+            "connect_ms": status.get("delay_ms") if status else None,
+            "protocol": status.get("protocol") if status else None,
+            "players_online": (status.get("players") or {}).get("online") if status else None,
+            "players_max": (status.get("players") or {}).get("max") if status else None,
+            "last_update": s.last_checked_at.isoformat() if s.last_checked_at else None,
+            "server_status": status.get("status") if status else "offline",
+            "expose_ip": _expose_address(s),
+            "type": status.get("type") if status else None,
+            "version": status.get("version") if status else None,
+            "icon": status.get("favicon") if status else None,
         })
     return out
 

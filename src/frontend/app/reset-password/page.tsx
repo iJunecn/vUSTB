@@ -20,7 +20,7 @@ export default function ResetPasswordPage() {
     setSending(true);
     try {
       await api.post('/auth/send-verification-code', { email, purpose: 'reset' });
-      setNotice('验证码已发送,请查收邮件。');
+      setNotice('验证码已发送，请查收邮件。');
     } catch (err: any) {
       setError(err?.response?.data?.detail || '发送失败');
     } finally {
@@ -38,7 +38,7 @@ export default function ResetPasswordPage() {
         verification_code: code,
         new_password: password,
       });
-      setNotice('密码已重置,请重新登录。');
+      setNotice('密码已重置，请重新登录。');
     } catch (err: any) {
       setError(err?.response?.data?.detail || '重置失败');
     } finally {
@@ -47,22 +47,28 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <div className="container py-20 max-w-md">
-      <div className="glass-card p-8 space-y-6">
-        <header className="space-y-2 text-center">
-          <h1 className="text-3xl font-bold">重置密码</h1>
+    <div className="auth-shell">
+      <div className="auth-panel">
+        <header style={{ textAlign: 'center', marginBottom: '28px' }}>
+          <h1 style={{ fontSize: '28px', fontWeight: 700, margin: '0 0 8px', color: 'var(--color-heading)' }}>
+            重置密码
+          </h1>
+          <p style={{ fontSize: '14px', color: 'var(--color-text-light)', margin: 0 }}>
+            通过邮箱验证码重置你的密码
+          </p>
         </header>
-        <form onSubmit={submit} className="space-y-4">
-          <label className="block space-y-1.5">
-            <span className="text-sm font-medium flex items-center justify-between">
+
+        <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <span style={{ fontSize: '14px', fontWeight: 500, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               邮箱
               <button
                 type="button"
                 onClick={sendCode}
                 disabled={sending}
-                className="text-xs text-primary hover:underline disabled:opacity-50"
+                style={{ fontSize: '12px', color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, opacity: sending ? 0.5 : 1 }}
               >
-                {sending ? '发送中…' : '获取验证码'}
+                {sending ? '发送中...' : '获取验证码'}
               </button>
             </span>
             <input
@@ -71,20 +77,24 @@ export default function ResetPasswordPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="input"
+              placeholder="your@email.com"
             />
           </label>
-          <label className="block space-y-1.5">
-            <span className="text-sm font-medium">邮箱验证码</span>
+
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <span style={{ fontSize: '14px', fontWeight: 500 }}>邮箱验证码</span>
             <input
               type="text"
               required
               value={code}
               onChange={(e) => setCode(e.target.value)}
               className="input"
+              placeholder="输入验证码"
             />
           </label>
-          <label className="block space-y-1.5">
-            <span className="text-sm font-medium">新密码</span>
+
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <span style={{ fontSize: '14px', fontWeight: 500 }}>新密码</span>
             <input
               type="password"
               required
@@ -92,19 +102,28 @@ export default function ResetPasswordPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="input"
+              autoComplete="new-password"
+              placeholder="至少 8 个字符"
             />
           </label>
-          {notice && <p className="text-sm text-primary">{notice}</p>}
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <button type="submit" disabled={loading} className="btn-primary w-full">
+
+          {notice && (
+            <p style={{ fontSize: '14px', color: 'var(--color-primary)', margin: 0 }}>{notice}</p>
+          )}
+          {error && (
+            <p style={{ fontSize: '14px', color: '#dc2626', margin: 0 }}>{error}</p>
+          )}
+
+          <button type="submit" disabled={loading} className="btn-primary" style={{ width: '100%' }}>
             {loading && <Loader2 className="w-4 h-4 animate-spin" />} 重置密码
           </button>
         </form>
-        <div className="text-sm text-center">
-          <Link href="/login" className="text-primary hover:underline">
+
+        <p style={{ fontSize: '14px', textAlign: 'center', marginTop: '20px' }}>
+          <Link href="/login" style={{ color: 'var(--color-primary)', textDecoration: 'none', fontWeight: 500 }}>
             返回登录
           </Link>
-        </div>
+        </p>
       </div>
     </div>
   );

@@ -42,9 +42,31 @@ class Settings(BaseSettings):
     smtp_from: str = ""
     smtp_use_tls: bool = True
 
+    # MCA download auth
+    mca_base_url: str = "/mca"
+    mca_access_level: str = "public"  # public | authenticated | admin
+
+    # GitHub OAuth
     github_client_id: str = ""
     github_client_secret: str = ""
     github_redirect_uri: str = ""
+
+    # MUA Union OAuth
+    mua_client_id: str = ""
+    mua_client_secret: str = ""
+    mua_redirect_uri: str = ""
+    mua_authorize_url: str = "https://login.mua.ax/oauth2/authorize"
+    mua_token_url: str = "https://login.mua.ax/oauth2/token"
+    mua_user_url: str = "https://login.mua.ax/api/user"
+    mua_scope: str = "openid profile email"
+
+    # USTB vSkin OAuth
+    ustb_client_id: str = ""
+    ustb_client_secret: str = ""
+    ustb_redirect_uri: str = ""
+    ustb_authorize_url: str = ""
+    ustb_token_url: str = ""
+    ustb_user_url: str = ""
 
 
 @lru_cache

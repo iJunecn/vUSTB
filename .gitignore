@@ -33,3 +33,8 @@ Thumbs.db
 *.pem
 *.key
 .claude/settings.local.json
+
+# about
+USTB-Official-Backend/
+USTB-Official-Website/
+vSkin/

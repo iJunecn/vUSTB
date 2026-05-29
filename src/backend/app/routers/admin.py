@@ -1,19 +1,22 @@
 """管理员后台 API。需要 admin 或 super_admin 权限。"""
 from __future__ import annotations
 
+import os
 import secrets
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.database import get_db
 from app.deps import get_current_admin, get_current_super_admin
 from app.models import (
-    User, UserGroup, InviteCode, OAuthApp, SiteSetting, Carousel,
+    User, UserGroup, InviteCode, OAuthApp, SiteSetting, Carousel, FallbackEndpoint,
 )
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -368,3 +371,349 @@ async def stats(
         "invites": invite_count,
         "oauth_apps": oauth_app_count,
     }
+
+
+# ============== Fallback Endpoints ==============
+class FallbackEndpointOut(BaseModel):
+    id: int
+    priority: int
+    note: str | None
+    session_url: str
+    account_url: str | None
+    services_url: str | None
+    skin_domains: dict | None
+    cache_ttl: int
+    enable_profile: bool
+    enable_hasjoined: bool
+    enable_whitelist: bool
+
+
+class FallbackEndpointCreate(BaseModel):
+    priority: int = 0
+    note: str | None = None
+    session_url: str
+    account_url: str | None = None
+    services_url: str | None = None
+    skin_domains: dict | None = None
+    cache_ttl: int = 60
+    enable_profile: bool = True
+    enable_hasjoined: bool = True
+    enable_whitelist: bool = False
+
+
+class FallbackEndpointUpdate(BaseModel):
+    priority: int | None = None
+    note: str | None = None
+    session_url: str | None = None
+    account_url: str | None = None
+    services_url: str | None = None
+    skin_domains: dict | None = None
+    cache_ttl: int | None = None
+    enable_profile: bool | None = None
+    enable_hasjoined: bool | None = None
+    enable_whitelist: bool | None = None
+
+
+@router.get("/fallback-endpoints", response_model=list[FallbackEndpointOut])
+async def list_fallback_endpoints(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_admin),
+):
+    rows = (
+        await db.execute(select(FallbackEndpoint).order_by(FallbackEndpoint.priority.desc(), FallbackEndpoint.id))
+    ).scalars().all()
+    return [
+        FallbackEndpointOut(
+            id=f.id, priority=f.priority, note=f.note,
+            session_url=f.session_url, account_url=f.account_url,
+            services_url=f.services_url, skin_domains=f.skin_domains,
+            cache_ttl=f.cache_ttl, enable_profile=f.enable_profile,
+            enable_hasjoined=f.enable_hasjoined, enable_whitelist=f.enable_whitelist,
+        )
+        for f in rows
+    ]
+
+
+@router.post("/fallback-endpoints", response_model=FallbackEndpointOut)
+async def create_fallback_endpoint(
+    body: FallbackEndpointCreate,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_admin),
+):
+    f = FallbackEndpoint(**body.model_dump())
+    db.add(f)
+    await db.commit()
+    await db.refresh(f)
+    return FallbackEndpointOut(
+        id=f.id, priority=f.priority, note=f.note,
+        session_url=f.session_url, account_url=f.account_url,
+        services_url=f.services_url, skin_domains=f.skin_domains,
+        cache_ttl=f.cache_ttl, enable_profile=f.enable_profile,
+        enable_hasjoined=f.enable_hasjoined, enable_whitelist=f.enable_whitelist,
+    )
+
+
+@router.put("/fallback-endpoints/{endpoint_id}", response_model=FallbackEndpointOut)
+async def update_fallback_endpoint(
+    endpoint_id: int,
+    body: FallbackEndpointUpdate,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_admin),
+):
+    f = (await db.execute(select(FallbackEndpoint).where(FallbackEndpoint.id == endpoint_id))).scalar_one_or_none()
+    if not f:
+        raise HTTPException(status_code=404, detail="not found")
+    for k, v in body.model_dump(exclude_unset=True).items():
+        setattr(f, k, v)
+    await db.commit()
+    await db.refresh(f)
+    return FallbackEndpointOut(
+        id=f.id, priority=f.priority, note=f.note,
+        session_url=f.session_url, account_url=f.account_url,
+        services_url=f.services_url, skin_domains=f.skin_domains,
+        cache_ttl=f.cache_ttl, enable_profile=f.enable_profile,
+        enable_hasjoined=f.enable_hasjoined, enable_whitelist=f.enable_whitelist,
+    )
+
+
+@router.delete("/fallback-endpoints/{endpoint_id}")
+async def delete_fallback_endpoint(
+    endpoint_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_admin),
+):
+    f = (await db.execute(select(FallbackEndpoint).where(FallbackEndpoint.id == endpoint_id))).scalar_one_or_none()
+    if not f:
+        raise HTTPException(status_code=404, detail="not found")
+    await db.delete(f)
+    await db.commit()
+    return {"ok": True}
+
+
+# ============== Mojang Fallback (combined) ==============
+class MojangFallbackEndpointOut(BaseModel):
+    id: int | None = None
+    session_url: str
+    account_url: str | None = None
+    services_url: str | None = None
+    cache_ttl: int = 60
+    enabled: bool = True
+
+
+class MojangFallbackOut(BaseModel):
+    strategy: str = "serial"
+    endpoints: list[MojangFallbackEndpointOut] = []
+
+
+class MojangFallbackUpdate(BaseModel):
+    strategy: str = "serial"
+    endpoints: list[MojangFallbackEndpointOut] = []
+
+
+@router.get("/mojang-fallback", response_model=MojangFallbackOut)
+async def get_mojang_fallback(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_admin),
+):
+    strategy_row = (
+        await db.execute(select(SiteSetting).where(SiteSetting.key == "fallback_strategy"))
+    ).scalar_one_or_none()
+    strategy = strategy_row.value if strategy_row else "serial"
+
+    endpoints = (
+        await db.execute(select(FallbackEndpoint).order_by(FallbackEndpoint.priority.desc(), FallbackEndpoint.id))
+    ).scalars().all()
+
+    return MojangFallbackOut(
+        strategy=strategy,
+        endpoints=[
+            MojangFallbackEndpointOut(
+                id=e.id,
+                session_url=e.session_url,
+                account_url=e.account_url,
+                services_url=e.services_url,
+                cache_ttl=e.cache_ttl,
+                enabled=e.enable_profile,
+            )
+            for e in endpoints
+        ],
+    )
+
+
+@router.put("/mojang-fallback", response_model=MojangFallbackOut)
+async def update_mojang_fallback(
+    body: MojangFallbackUpdate,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_admin),
+):
+    await _upsert_setting(db, "fallback_strategy", body.strategy)
+
+    # Replace all fallback endpoints
+    existing = (await db.execute(select(FallbackEndpoint))).scalars().all()
+    for e in existing:
+        await db.delete(e)
+
+    for i, ep in enumerate(body.endpoints):
+        f = FallbackEndpoint(
+            priority=len(body.endpoints) - i,
+            session_url=ep.session_url,
+            account_url=ep.account_url,
+            services_url=ep.services_url,
+            cache_ttl=ep.cache_ttl,
+            enable_profile=ep.enabled,
+            enable_hasjoined=ep.enabled,
+            enable_whitelist=False,
+        )
+        db.add(f)
+
+    await db.commit()
+
+    endpoints = (
+        await db.execute(select(FallbackEndpoint).order_by(FallbackEndpoint.priority.desc(), FallbackEndpoint.id))
+    ).scalars().all()
+
+    return MojangFallbackOut(
+        strategy=body.strategy,
+        endpoints=[
+            MojangFallbackEndpointOut(
+                id=e.id,
+                session_url=e.session_url,
+                account_url=e.account_url,
+                services_url=e.services_url,
+                cache_ttl=e.cache_ttl,
+                enabled=e.enable_profile,
+            )
+            for e in endpoints
+        ],
+    )
+
+
+# ============== 分组站点设置 ==============
+
+_SETTING_GROUPS: dict[str, list[str]] = {
+    "site": [
+        "site_name", "site_title", "site_logo", "site_subtitle",
+        "footer_text", "filing_icp", "filing_icp_link",
+        "filing_mps", "filing_mps_link", "home_image_urls",
+    ],
+    "security": [
+        "allow_register", "require_invite", "register_email_suffixes",
+    ],
+    "auth": [
+        "github_client_id", "github_client_secret", "github_redirect_uri",
+        "mua_client_id", "mua_client_secret", "mua_redirect_uri",
+        "ustb_client_id", "ustb_client_secret", "ustb_redirect_uri",
+    ],
+    "email": [
+        "smtp_host", "smtp_port", "smtp_user", "smtp_password",
+        "smtp_from", "smtp_use_tls", "email_verify_enabled",
+    ],
+    "microsoft": [
+        "msa_client_id", "msa_client_secret",
+    ],
+    "janus": [
+        "janus_url", "janus_token",
+    ],
+    "fallback": [
+        "fallback_session_url", "fallback_account_url",
+        "fallback_services_url", "fallback_skin_domains",
+        "fallback_cache_ttl", "fallback_enable_profile",
+        "fallback_enable_hasjoined", "fallback_enable_whitelist",
+    ],
+}
+
+_VALID_GROUPS = set(_SETTING_GROUPS.keys())
+
+
+async def _upsert_setting(db: AsyncSession, key: str, value: Any) -> SiteSetting:
+    existing = (await db.execute(select(SiteSetting).where(SiteSetting.key == key))).scalar_one_or_none()
+    if existing:
+        existing.value = value
+    else:
+        existing = SiteSetting(key=key, value=value)
+        db.add(existing)
+    return existing
+
+
+@router.get("/settings/{group}")
+async def get_settings_group(
+    group: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_admin),
+):
+    if group not in _VALID_GROUPS:
+        raise HTTPException(status_code=400, detail=f"Unknown settings group: {group}")
+    keys = _SETTING_GROUPS[group]
+    rows = (
+        await db.execute(select(SiteSetting).where(SiteSetting.key.in_(keys)))
+    ).scalars().all()
+    result = {s.key: s.value for s in rows}
+    # Fill missing keys with None
+    for k in keys:
+        if k not in result:
+            result[k] = None
+    return result
+
+
+@router.post("/settings/{group}")
+async def update_settings_group(
+    group: str,
+    body: dict[str, Any],
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_admin),
+):
+    if group not in _VALID_GROUPS:
+        raise HTTPException(status_code=400, detail=f"Unknown settings group: {group}")
+    allowed_keys = set(_SETTING_GROUPS[group])
+    for key, value in body.items():
+        if key not in allowed_keys:
+            raise HTTPException(status_code=400, detail=f"Setting key '{key}' does not belong to group '{group}'")
+        await _upsert_setting(db, key, value)
+    await db.commit()
+    # Return the updated group
+    rows = (
+        await db.execute(select(SiteSetting).where(SiteSetting.key.in_(allowed_keys)))
+    ).scalars().all()
+    result = {s.key: s.value for s in rows}
+    for k in allowed_keys:
+        if k not in result:
+            result[k] = None
+    return result
+
+
+@router.post("/site-logo")
+async def upload_site_logo(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_admin),
+):
+    """Upload a site logo image and save the URL to settings."""
+    allowed_types = {"image/png", "image/jpeg", "image/gif", "image/svg+xml", "image/webp"}
+    if file.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="Invalid image type")
+
+    ext_map = {
+        "image/png": ".png",
+        "image/jpeg": ".jpg",
+        "image/gif": ".gif",
+        "image/svg+xml": ".svg",
+        "image/webp": ".webp",
+    }
+    ext = ext_map.get(file.content_type, ".png")
+
+    upload_dir = settings.carousel_directory
+    os.makedirs(upload_dir, exist_ok=True)
+    filename = f"site-logo-{uuid.uuid4().hex[:8]}{ext}"
+    dest = os.path.join(upload_dir, filename)
+
+    content = await file.read()
+    with open(dest, "wb") as f:
+        f.write(content)
+
+    # Build a public URL. The static file router serves carousel_directory.
+    logo_url = f"/static/carousel/{filename}"
+
+    await _upsert_setting(db, "site_logo", logo_url)
+    await db.commit()
+
+    return {"ok": True, "url": logo_url}

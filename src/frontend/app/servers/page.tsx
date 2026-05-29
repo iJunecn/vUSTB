@@ -1,127 +1,96 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { api } from '@/lib/api';
-import { Loader2, Server, Users, Wifi, WifiOff } from 'lucide-react';
+import { MCCard } from '@/components/servers/mc-card';
+import { mapMcStatusRow, formatRelativeTime, McStatus } from '@/lib/mc-status';
 
-type ServerStatus = {
-  id: number;
-  name: string;
-  address: string | null;
-  icon_url: string | null;
-  version_hint: string | null;
-  status: {
-    status: 'online' | 'offline' | 'unknown';
-    type?: string;
-    motd?: string;
-    version?: string;
-    players?: { online: number | null; max: number | null; sample?: string[] };
-    delay_ms?: number;
-  };
-};
+const POLL_INTERVAL_MS = 125_000;
 
 export default function ServersPage() {
-  const [data, setData] = useState<ServerStatus[]>([]);
+  const [statuses, setStatuses] = useState<McStatus[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let aborted = false;
-    api
-      .get<ServerStatus[]>('/mc-servers/statuses')
-      .then((r) => {
-        if (!aborted) setData(r.data);
-      })
-      .catch((e) => {
-        if (!aborted) setError(e?.message || '加载失败');
-      })
-      .finally(() => {
-        if (!aborted) setLoading(false);
-      });
-    return () => {
-      aborted = true;
-    };
+  const loadStatuses = useCallback(async () => {
+    try {
+      const r = await api.get<Record<string, unknown>[]>('/mc-servers/statuses');
+      setStatuses(r.data.map(mapMcStatusRow));
+    } catch {
+      setStatuses([]);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
+  useEffect(() => {
+    loadStatuses();
+    const timer = setInterval(loadStatuses, POLL_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, [loadStatuses]);
+
+  const onlineCount = statuses.filter((s) => s.server_status === 'online').length;
+  const lastUpdated = statuses
+    .map((s) => s.last_update)
+    .filter((v): v is string => Boolean(v))
+    .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0];
+
   return (
-    <div className="container py-16 space-y-8">
-      <header className="space-y-2">
-        <h1 className="text-4xl font-bold tracking-tight">MC 服务器</h1>
-        <p className="text-muted-foreground">像素北科旗下的 Minecraft 服务器列表与实时状态。</p>
-      </header>
+    <div className="container py-8">
+      <div className="max-w-6xl mx-auto">
+        {/* Hero — USTB McServers pattern */}
+        <section className="glass-card p-6 md:p-8 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-[1.6fr_0.9fr] gap-6">
+            <div>
+              <p className="section-kicker">Server Status</p>
+              <h1 className="text-4xl md:text-5xl font-bold mt-1" style={{ color: 'var(--theme-text-strong, var(--color-heading))' }}>
+                服务器列表
+              </h1>
+              <p className="mt-2" style={{ color: 'var(--color-text-light)' }}>
+                像素北科 Minecraft 服务器在线状态
+              </p>
+              <p className="mt-4">
+                <a
+                  href="https://github.com/LYOfficial/USTBL/releases"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mc-download-link"
+                >
+                  下载 USTBL 启动器
+                </a>
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-3 self-start">
+              <div className="surface-card p-4 text-center">
+                <span className="section-kicker">节点总数</span>
+                <strong className="text-2xl block mt-1" style={{ color: 'var(--color-heading)' }}>{statuses.length}</strong>
+                <p className="text-xs mt-1" style={{ color: 'var(--color-text-light)' }}>当前服务器记录</p>
+              </div>
+              <div className="surface-card p-4 text-center" style={{ borderColor: 'var(--color-primary)', borderWidth: 2 }}>
+                <span className="section-kicker">在线节点</span>
+                <strong className="text-2xl block mt-1" style={{ color: 'var(--color-primary)' }}>{onlineCount}</strong>
+                <p className="text-xs mt-1" style={{ color: 'var(--color-text-light)' }}>最近刷新 {formatRelativeTime(lastUpdated)}</p>
+              </div>
+            </div>
+          </div>
+        </section>
 
-      {loading && (
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <Loader2 className="w-4 h-4 animate-spin" /> 正在加载服务器状态…
-        </div>
-      )}
-      {error && <p className="text-destructive">{error}</p>}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {data.map((s) => (
-          <ServerCard key={s.id} s={s} />
-        ))}
-        {!loading && !error && data.length === 0 && (
-          <p className="text-muted-foreground">暂无公开服务器。</p>
+        {/* Server Grid */}
+        {loading ? (
+          <div className="flex justify-center py-12">
+            <div className="w-6 h-6 border-2 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : statuses.length > 0 ? (
+          <div className="servers-grid">
+            {statuses.map((s) => (
+              <MCCard key={s.id ?? s.address ?? s.name} {...s} />
+            ))}
+          </div>
+        ) : (
+          <p className="text-center py-12" style={{ color: 'var(--color-text-light)' }}>
+            暂无服务器状态，等待后端缓存写入后会在这里展示。
+          </p>
         )}
       </div>
-    </div>
-  );
-}
-
-function ServerCard({ s }: { s: ServerStatus }) {
-  const online = s.status?.status === 'online';
-  return (
-    <div className="glass-card p-6 space-y-4">
-      <div className="flex items-start gap-4">
-        <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center overflow-hidden">
-          {s.icon_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={s.icon_url} alt="" className="w-full h-full object-cover" />
-          ) : s.status.type === 'java' && (s.status as any).favicon ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={(s.status as any).favicon} alt="" className="w-full h-full object-cover" />
-          ) : (
-            <Server className="w-6 h-6 text-muted-foreground" />
-          )}
-        </div>
-        <div className="flex-1 min-w-0">
-          <h3 className="text-xl font-semibold truncate">{s.name}</h3>
-          {s.address && (
-            <code className="text-xs text-muted-foreground break-all">{s.address}</code>
-          )}
-        </div>
-        <span
-          className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
-            online ? 'bg-green-500/15 text-green-500' : 'bg-red-500/15 text-red-500'
-          }`}
-        >
-          {online ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-          {online ? '在线' : '离线'}
-        </span>
-      </div>
-
-      {online && (
-        <>
-          {s.status.motd && (
-            <p className="text-sm text-muted-foreground whitespace-pre-line line-clamp-2">{s.status.motd}</p>
-          )}
-          <div className="flex flex-wrap gap-3 text-xs text-muted-foreground pt-1">
-            {s.status.version && (
-              <span className="px-2 py-1 rounded-md bg-muted">版本 {s.status.version}</span>
-            )}
-            {s.status.players && (
-              <span className="px-2 py-1 rounded-md bg-muted inline-flex items-center gap-1">
-                <Users className="w-3 h-3" />
-                {s.status.players.online ?? '?'} / {s.status.players.max ?? '?'}
-              </span>
-            )}
-            {typeof s.status.delay_ms === 'number' && (
-              <span className="px-2 py-1 rounded-md bg-muted">{s.status.delay_ms}ms</span>
-            )}
-          </div>
-        </>
-      )}
     </div>
   );
 }

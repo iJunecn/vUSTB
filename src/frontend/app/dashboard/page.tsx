@@ -1,34 +1,94 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useUserStore } from '@/stores/user';
-import Link from 'next/link';
+import { api } from '@/lib/api';
+import { Users, Shirt, Gamepad2 } from 'lucide-react';
+
+type Stats = {
+  users: number;
+  textures: number;
+  players: number;
+};
 
 export default function DashboardHome() {
   const user = useUserStore((s) => s.user);
+  const [stats, setStats] = useState<Stats | null>(null);
+
+  useEffect(() => {
+    api.get<Stats>('/admin/stats').then((r) => {
+      setStats({
+        users: r.data.users,
+        textures: (r.data as any).textures ?? 0,
+        players: (r.data as any).players ?? 0,
+      });
+    }).catch(() => {
+      // Non-admin users may not have access; show zeros
+      setStats({ users: 0, textures: 0, players: 0 });
+    });
+  }, []);
+
   if (!user) return null;
+
   return (
-    <div className="space-y-6">
-      <header className="space-y-1">
-        <h1 className="text-3xl font-bold">欢迎回来, {user.username}</h1>
-        <p className="text-muted-foreground">在这里管理你的账户、皮肤与 Minecraft 角色。</p>
-      </header>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Link href="/dashboard/wardrobe" className="glass-card p-5 hover:border-primary/50 transition">
-          <h3 className="font-semibold mb-1">皮肤衣柜</h3>
-          <p className="text-sm text-muted-foreground">上传与管理你收藏的皮肤、披风。</p>
-        </Link>
-        <Link href="/dashboard/roles" className="glass-card p-5 hover:border-primary/50 transition">
-          <h3 className="font-semibold mb-1">游戏角色</h3>
-          <p className="text-sm text-muted-foreground">创建 Minecraft 角色并绑定皮肤。</p>
-        </Link>
-        <Link href="/skin/settings" className="glass-card p-5 hover:border-primary/50 transition">
-          <h3 className="font-semibold mb-1">authlib-injector 接入</h3>
-          <p className="text-sm text-muted-foreground">查看在 MC 客户端中接入像素北科皮肤站的方法。</p>
-        </Link>
-        <Link href="/dashboard/security" className="glass-card p-5 hover:border-primary/50 transition">
-          <h3 className="font-semibold mb-1">账号安全</h3>
-          <p className="text-sm text-muted-foreground">修改密码、查看登录会话。</p>
-        </Link>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
+      {/* Welcome header */}
+      <div>
+        <p className="section-kicker" style={{ marginBottom: 8 }}>DASHBOARD</p>
+        <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--color-heading)', margin: 0 }}>
+          欢迎回来, {user.username}
+        </h1>
+        <p style={{ fontSize: 15, color: 'var(--color-text-light)', marginTop: 4 }}>
+          在这里管理你的账户、皮肤与 Minecraft 角色。
+        </p>
+      </div>
+
+      {/* Stats cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
+        <StatsCard
+          label="用户数"
+          value={stats?.users}
+          icon={<Users style={{ width: 28, height: 28 }} />}
+          gradientClass="bg-gradient-blue"
+        />
+        <StatsCard
+          label="材质数"
+          value={stats?.textures}
+          icon={<Shirt style={{ width: 28, height: 28 }} />}
+          gradientClass="bg-gradient-purple"
+        />
+        <StatsCard
+          label="角色数"
+          value={stats?.players}
+          icon={<Gamepad2 style={{ width: 28, height: 28 }} />}
+          gradientClass="bg-gradient-blue"
+        />
+      </div>
+    </div>
+  );
+}
+
+function StatsCard({
+  label,
+  value,
+  icon,
+  gradientClass,
+}: {
+  label: string;
+  value: number | undefined;
+  icon: React.ReactNode;
+  gradientClass: string;
+}) {
+  return (
+    <div className="surface-card">
+      <div className="stats-card-content">
+        <div className={`stats-card-icon ${gradientClass}`}>
+          {icon}
+        </div>
+        <div className="stats-card-info">
+          <span className="stats-card-label">{label}</span>
+          <span className="stats-card-value">{value ?? '--'}</span>
+        </div>
       </div>
     </div>
   );

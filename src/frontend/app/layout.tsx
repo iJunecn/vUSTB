@@ -14,12 +14,12 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: {
-    default: '像素北科 vUSTB | 北京科技大学元宇宙体素工作坊',
-    template: '%s | 像素北科 vUSTB',
+    default: '像素北科',
+    template: '%s | 像素北科',
   },
   description:
-    '北京科技大学元宇宙体素工作坊（vUSTB / 像素北科）官网。Minecraft 服务器、皮肤站、3D 校园游览与社区活动。',
-  keywords: ['北京科技大学', 'USTB', 'Minecraft', '元宇宙', '体素', '像素北科', 'vUSTB'],
+    '像素北科 — 北京科技大学 Minecraft 社区。MC 服务器、皮肤站、3D 校园游览与社区活动。',
+  keywords: ['北京科技大学', 'USTB', 'Minecraft', '像素北科'],
   metadataBase: new URL('https://mc.ustb.edu.cn'),
 };
 

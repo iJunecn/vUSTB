@@ -54,62 +54,74 @@ export default function AdminUsersPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-3xl font-bold">用户管理</h1>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <div>
+        <p className="section-kicker" style={{ marginBottom: 8 }}>USERS</p>
+        <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--color-heading)', margin: 0 }}>
+          用户管理
+        </h1>
+      </div>
+
       {loading ? (
-        <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+        <Loader2 className="w-5 h-5 animate-spin" style={{ color: 'var(--color-text-light)' }} />
       ) : (
-        <div className="glass-card overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="border-b border-border/40 text-left text-muted-foreground">
-              <tr>
-                <th className="px-4 py-3">ID</th>
-                <th className="px-4 py-3">用户名</th>
-                <th className="px-4 py-3">邮箱</th>
-                <th className="px-4 py-3">用户组</th>
-                <th className="px-4 py-3">状态</th>
-                <th className="px-4 py-3 text-right">操作</th>
+        <div className="surface-card" style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', fontSize: 14, borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
+                <ThCell>ID</ThCell>
+                <ThCell>用户名</ThCell>
+                <ThCell>邮箱</ThCell>
+                <ThCell>用户组</ThCell>
+                <ThCell>状态</ThCell>
+                <ThCell style={{ textAlign: 'right' }}>操作</ThCell>
               </tr>
             </thead>
             <tbody>
               {users.map((u) => (
-                <tr key={u.id} className="border-b border-border/20 last:border-0">
-                  <td className="px-4 py-3 text-muted-foreground">{u.id}</td>
-                  <td className="px-4 py-3 font-medium">{u.username}</td>
-                  <td className="px-4 py-3">{u.email}</td>
-                  <td className="px-4 py-3">
+                <tr key={u.id} style={{ borderBottom: '1px solid color-mix(in srgb, var(--color-border) 40%, transparent)' }}>
+                  <TdCell style={{ color: 'var(--color-text-light)' }}>{u.id}</TdCell>
+                  <TdCell style={{ fontWeight: 600, color: 'var(--color-heading)' }}>{u.username}</TdCell>
+                  <TdCell>{u.email}</TdCell>
+                  <TdCell>
                     <select
                       value={u.user_group}
                       onChange={(e) => update(u.id, { user_group: e.target.value })}
-                      className="input py-1"
+                      className="input"
+                      style={{ padding: '4px 8px', fontSize: 13 }}
                     >
                       {GROUPS.map((g) => (
                         <option key={g} value={g}>{g}</option>
                       ))}
                     </select>
-                  </td>
-                  <td className="px-4 py-3">
+                  </TdCell>
+                  <TdCell>
                     {u.is_banned ? (
-                      <span className="text-destructive">已封禁</span>
+                      <span style={{ color: '#dc2626', fontSize: 13, fontWeight: 500 }}>已封禁</span>
                     ) : (
-                      <span className="text-primary">正常</span>
+                      <span style={{ color: 'var(--color-primary)', fontSize: 13, fontWeight: 500 }}>正常</span>
                     )}
-                  </td>
-                  <td className="px-4 py-3 text-right space-x-2 whitespace-nowrap">
-                    <button
-                      onClick={() => update(u.id, { is_banned: !u.is_banned })}
-                      className="text-xs hover:underline inline-flex items-center gap-1"
-                    >
-                      {u.is_banned ? <ShieldCheck className="w-3 h-3" /> : <Ban className="w-3 h-3" />}
-                      {u.is_banned ? '解除' : '封禁'}
-                    </button>
-                    <button
-                      onClick={() => remove(u.id)}
-                      className="text-xs text-destructive hover:underline inline-flex items-center gap-1"
-                    >
-                      <Trash2 className="w-3 h-3" /> 删除
-                    </button>
-                  </td>
+                  </TdCell>
+                  <TdCell style={{ textAlign: 'right' }}>
+                    <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                      <button
+                        onClick={() => update(u.id, { is_banned: !u.is_banned })}
+                        className="btn-ghost"
+                        style={{ padding: '4px 10px', fontSize: 12 }}
+                      >
+                        {u.is_banned
+                          ? <><ShieldCheck style={{ width: 12, height: 12 }} /> 解除</>
+                          : <><Ban style={{ width: 12, height: 12 }} /> 封禁</>}
+                      </button>
+                      <button
+                        onClick={() => remove(u.id)}
+                        className="btn-destructive"
+                        style={{ padding: '4px 10px', fontSize: 12 }}
+                      >
+                        <Trash2 style={{ width: 12, height: 12 }} /> 删除
+                      </button>
+                    </div>
+                  </TdCell>
                 </tr>
               ))}
             </tbody>
@@ -117,5 +129,19 @@ export default function AdminUsersPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function ThCell({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
+  return (
+    <th style={{ padding: '12px 16px', color: 'var(--color-text-light)', fontWeight: 600, fontSize: 12, letterSpacing: '0.04em', textTransform: 'uppercase' as const, ...style }}>
+      {children}
+    </th>
+  );
+}
+
+function TdCell({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
+  return (
+    <td style={{ padding: '12px 16px', ...style }}>{children}</td>
   );
 }
