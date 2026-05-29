@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useUserStore } from '@/stores/user';
@@ -12,7 +12,7 @@ type Player = {
   uuid: string;
 };
 
-export default function OAuthDevicePage() {
+function DeviceInner() {
   const router = useRouter();
   const params = useSearchParams();
   const { user, loaded, hydrate } = useUserStore();
@@ -149,5 +149,17 @@ export default function OAuthDevicePage() {
         </button>
       </form>
     </div>
+  );
+}
+
+export default function OAuthDevicePage() {
+  return (
+    <Suspense fallback={
+      <div className="container py-20 flex justify-center">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    }>
+      <DeviceInner />
+    </Suspense>
   );
 }

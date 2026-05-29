@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useUserStore } from '@/stores/user';
 import { Loader2, Shield } from 'lucide-react';
 
-export default function OAuthAuthorizePage() {
+function AuthorizeInner() {
   const router = useRouter();
   const params = useSearchParams();
   const { user, loaded, hydrate } = useUserStore();
@@ -89,5 +89,17 @@ export default function OAuthAuthorizePage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function OAuthAuthorizePage() {
+  return (
+    <Suspense fallback={
+      <div className="container py-20 flex justify-center">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    }>
+      <AuthorizeInner />
+    </Suspense>
   );
 }
