@@ -28,3 +28,16 @@ export const skinApi = axios.create({
   baseURL: '/skinapi',
   timeout: 15000,
 });
+
+export const rawApi = axios.create({
+  timeout: 15000,
+  withCredentials: true,
+});
+
+rawApi.interceptors.request.use((config) => {
+  if (typeof window !== 'undefined') {
+    const token = localStorage.getItem('vustb_token');
+    if (token) config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});

@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { api } from '@/lib/api';
+import { api, rawApi } from '@/lib/api';
 import { useUserStore } from '@/stores/user';
 import { Loader2, Smartphone, CheckCircle2 } from 'lucide-react';
 
@@ -46,7 +46,7 @@ function DeviceInner() {
     setApproving(true);
     setError(null);
     try {
-      await api.post('/oauth/device/approve', {
+      await rawApi.post('/oauth/device/approve', {
         user_code: userCode.trim().toUpperCase(),
         selected_player_id: selectedPlayerId,
       });
