@@ -10,13 +10,13 @@
 
 ```
 ┌────────────────────────────────────────────┐
-│        Caddy 网关（80/443）                  │
+│           Caddy 网关（80/443）              │
 ├────────────────────────────────────────────┤
 │  /         → Next.js (frontend)            │
 │  /api/*    → FastAPI (backend) Web API     │
 │  /skinapi/*→ FastAPI Yggdrasil + OAuth     │
 │  /oauth/*  → FastAPI OAuth Provider        │
-│  /static/* → FastAPI 材质静态文件          │
+│  /static/* → FastAPI 材质静态文件           │
 └────────────────────────────────────────────┘
             ↓                  ↓
        PostgreSQL          Redis
@@ -106,6 +106,7 @@ https://mc.ustb.edu.cn/skinapi/.well-known/openid-configuration
 
 参考与致谢：
 
+- [USTB-Official-Website](https://github.com/USTB-SkyCode/USTB-Official-Website) 与 [USTB-Official-Backend](https://github.com/USTB-SkyCode/USTB-Official-Backend) 原官网代码与设计灵感
 - [vSkin](https://github.com/LYOfficial/vSkin) — 皮肤站协议实现
 - [Blessing Skin Server](https://github.com/bs-community/blessing-skin-server)
 - [mc.sjtu.cn](https://mc.sjtu.cn/) — UI 设计灵感
