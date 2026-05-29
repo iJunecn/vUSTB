@@ -1,0 +1,89 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --primary: 105 38% 45%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 25 79% 57%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 222 47% 11%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 105 38% 45%;
+    --radius: 1rem;
+  }
+
+  .dark {
+    --background: 222 30% 7%;
+    --foreground: 210 40% 98%;
+    --card: 222 26% 11%;
+    --card-foreground: 210 40% 98%;
+    --primary: 105 50% 50%;
+    --primary-foreground: 222 47% 11%;
+    --secondary: 25 79% 57%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 217 33% 17%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 63% 50%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217 33% 20%;
+    --input: 217 33% 20%;
+    --ring: 105 50% 50%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-card/70 backdrop-blur-xl border border-border/60 rounded-2xl shadow-lg;
+  }
+
+  .mc-gradient {
+    background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--secondary)) 100%);
+  }
+
+  .pixel-shadow {
+    box-shadow: 4px 4px 0 0 rgba(0, 0, 0, 0.2);
+  }
+
+  .input {
+    @apply w-full px-3 py-2 rounded-xl bg-muted/40 border border-input focus:outline-none focus:ring-2 focus:ring-ring/40 transition;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl bg-primary text-primary-foreground font-medium hover:opacity-90 transition disabled:opacity-60 disabled:cursor-not-allowed;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl glass-card font-medium hover:bg-card transition disabled:opacity-60 disabled:cursor-not-allowed;
+  }
+
+  .btn-destructive {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl bg-destructive text-destructive-foreground font-medium hover:opacity-90 transition disabled:opacity-60 disabled:cursor-not-allowed;
+  }
+}
