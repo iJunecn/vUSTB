@@ -78,62 +78,98 @@ export default function AdminOAuthAppsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-3xl font-bold">OAuth 应用</h1>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <div>
+        <p className="section-kicker" style={{ marginBottom: 8 }}>OAUTH</p>
+        <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--color-heading)', margin: 0 }}>
+          OAuth 应用
+        </h1>
+      </div>
 
-      <form onSubmit={create} className="glass-card p-5 space-y-3">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <Input label="应用名称" value={draft.name} onChange={(v) => setDraft({ ...draft, name: v })} required />
-          <Input label="redirect_uri" value={draft.redirect_uri} onChange={(v) => setDraft({ ...draft, redirect_uri: v })} required />
+      {/* Create form */}
+      <form onSubmit={create} className="surface-card" style={{ padding: 24 }}>
+        <h2 style={{ fontSize: 16, fontWeight: 600, color: 'var(--color-heading)', margin: '0 0 16px 0' }}>
+          新建应用
+        </h2>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12, marginBottom: 12 }}>
+          <FieldInput label="应用名称" value={draft.name} onChange={(v) => setDraft({ ...draft, name: v })} required />
+          <FieldInput label="redirect_uri" value={draft.redirect_uri} onChange={(v) => setDraft({ ...draft, redirect_uri: v })} required />
         </div>
-        <Input label="描述" value={draft.description} onChange={(v) => setDraft({ ...draft, description: v })} />
-        <div>
-          <p className="text-sm font-medium mb-2">scopes</p>
-          <div className="flex flex-wrap gap-2">
-            {ALL_SCOPES.map((s) => (
-              <label key={s} className={`text-xs px-2 py-1 rounded-lg cursor-pointer ${draft.scopes.includes(s) ? 'bg-primary text-primary-foreground' : 'glass-card'}`}>
-                <input type="checkbox" className="sr-only" checked={draft.scopes.includes(s)} onChange={() => toggleScope(s)} />
-                {s}
-              </label>
-            ))}
+        <div style={{ marginBottom: 12 }}>
+          <FieldInput label="描述" value={draft.description} onChange={(v) => setDraft({ ...draft, description: v })} />
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <p style={{ fontSize: 13, fontWeight: 500, marginBottom: 8 }}>Scopes</p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {ALL_SCOPES.map((s) => {
+              const active = draft.scopes.includes(s);
+              return (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => toggleScope(s)}
+                  style={{
+                    padding: '4px 10px', borderRadius: 8, fontSize: 12, fontWeight: 500,
+                    border: '1px solid',
+                    borderColor: active ? 'var(--color-primary)' : 'var(--color-border)',
+                    background: active
+                      ? 'color-mix(in srgb, var(--color-primary) 10%, transparent)'
+                      : 'var(--color-background-soft)',
+                    color: active ? 'var(--color-primary)' : 'var(--color-text-light)',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  {s}
+                </button>
+              );
+            })}
           </div>
         </div>
-        <label className="text-sm flex items-center gap-2">
-          <input type="checkbox" checked={draft.is_device_shared} onChange={(e) => setDraft({ ...draft, is_device_shared: e.target.checked })} />
+        <label style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16, cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={draft.is_device_shared}
+            onChange={(e) => setDraft({ ...draft, is_device_shared: e.target.checked })}
+            style={{ accentColor: 'var(--color-primary)' }}
+          />
           作为 Device Flow 共享 client_id（用于 USTBL 启动器等）
         </label>
         <button type="submit" disabled={creating} className="btn-primary">
-          {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+          {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus style={{ width: 16, height: 16 }} />}
           创建应用
         </button>
       </form>
 
+      {/* App list */}
       {loading ? (
-        <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+        <Loader2 className="w-5 h-5 animate-spin" style={{ color: 'var(--color-text-light)' }} />
       ) : (
-        <div className="space-y-3">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {items.map((a) => (
-            <div key={a.id} className="glass-card p-5 space-y-3">
-              <div className="flex items-start justify-between gap-3 flex-wrap">
-                <div className="space-y-1">
-                  <p className="font-semibold">
+            <div key={a.id} className="surface-card" style={{ padding: 24 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
+                <div>
+                  <p style={{ fontWeight: 600, fontSize: 16, color: 'var(--color-heading)', margin: 0 }}>
                     {a.name}
                     {a.is_device_shared && (
-                      <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-secondary/15 text-secondary">device shared</span>
+                      <span style={{ marginLeft: 8, fontSize: 11, padding: '2px 8px', borderRadius: 999, background: 'color-mix(in srgb, var(--color-primary) 10%, transparent)', color: 'var(--color-primary)', fontWeight: 600 }}>
+                        device shared
+                      </span>
                     )}
                   </p>
-                  {a.description && <p className="text-xs text-muted-foreground">{a.description}</p>}
+                  {a.description && <p style={{ fontSize: 12, color: 'var(--color-text-light)', marginTop: 4 }}>{a.description}</p>}
                 </div>
-                <div className="flex gap-2">
-                  <button onClick={() => regenerate(a.id)} className="text-xs glass-card px-3 py-1.5 hover:bg-card inline-flex items-center gap-1">
-                    <RefreshCw className="w-3 h-3" /> 重新生成 secret
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button onClick={() => regenerate(a.id)} className="btn-ghost" style={{ padding: '4px 12px', fontSize: 12 }}>
+                    <RefreshCw style={{ width: 12, height: 12 }} /> 重新生成 secret
                   </button>
-                  <button onClick={() => remove(a.id)} className="text-xs text-destructive px-3 py-1.5 hover:underline inline-flex items-center gap-1">
-                    <Trash2 className="w-3 h-3" /> 删除
+                  <button onClick={() => remove(a.id)} className="btn-destructive" style={{ padding: '4px 12px', fontSize: 12 }}>
+                    <Trash2 style={{ width: 12, height: 12 }} /> 删除
                   </button>
                 </div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
                 <CredRow label="client_id" value={String(a.id)} onCopy={() => copy(`id-${a.id}`, String(a.id))} copied={copied === `id-${a.id}`} />
                 <CredRow label="client_secret" value={a.client_secret} onCopy={() => copy(`sec-${a.id}`, a.client_secret)} copied={copied === `sec-${a.id}`} />
                 <CredRow label="redirect_uri" value={a.redirect_uri} onCopy={() => copy(`ru-${a.id}`, a.redirect_uri)} copied={copied === `ru-${a.id}`} />
@@ -141,17 +177,17 @@ export default function AdminOAuthAppsPage() {
               </div>
             </div>
           ))}
-          {items.length === 0 && <p className="text-muted-foreground">还没有任何 OAuth 应用。</p>}
+          {items.length === 0 && <p style={{ color: 'var(--color-text-light)' }}>还没有任何 OAuth 应用。</p>}
         </div>
       )}
     </div>
   );
 }
 
-function Input({ label, value, onChange, required }: { label: string; value: string; onChange: (v: string) => void; required?: boolean }) {
+function FieldInput({ label, value, onChange, required }: { label: string; value: string; onChange: (v: string) => void; required?: boolean }) {
   return (
-    <label className="space-y-1 block">
-      <span className="text-sm font-medium block">{label}</span>
+    <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <span style={{ fontSize: 13, fontWeight: 500 }}>{label}</span>
       <input value={value} onChange={(e) => onChange(e.target.value)} required={required} className="input" />
     </label>
   );
@@ -160,11 +196,17 @@ function Input({ label, value, onChange, required }: { label: string; value: str
 function CredRow({ label, value, onCopy, copied }: { label: string; value: string; onCopy: () => void; copied: boolean }) {
   return (
     <div>
-      <p className="text-muted-foreground mb-1">{label}</p>
-      <div className="flex items-center gap-2">
-        <code className="flex-1 px-2 py-1 rounded-md bg-muted/40 border border-input break-all">{value}</code>
-        <button onClick={onCopy} className="glass-card px-2 py-1 hover:bg-card">
-          {copied ? <Check className="w-3 h-3 text-primary" /> : <Copy className="w-3 h-3" />}
+      <p style={{ fontSize: 12, color: 'var(--color-text-light)', marginBottom: 4 }}>{label}</p>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <code style={{
+          flex: 1, padding: '4px 8px', borderRadius: 6, fontSize: 12,
+          background: 'var(--color-background-mute)', border: '1px solid var(--color-border)',
+          wordBreak: 'break-all', color: 'var(--color-heading)',
+        }}>
+          {value}
+        </code>
+        <button onClick={onCopy} className="btn-ghost" style={{ padding: '4px 8px' }}>
+          {copied ? <Check style={{ width: 14, height: 14, color: 'var(--color-primary)' }} /> : <Copy style={{ width: 14, height: 14 }} />}
         </button>
       </div>
     </div>

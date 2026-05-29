@@ -56,53 +56,69 @@ export default function AdminInvitesPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-3xl font-bold">邀请码</h1>
-      <div className="glass-card p-4 flex items-end gap-3 flex-wrap">
-        <label className="space-y-1">
-          <span className="text-sm font-medium block">数量</span>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <div>
+        <p className="section-kicker" style={{ marginBottom: 8 }}>INVITES</p>
+        <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--color-heading)', margin: 0 }}>
+          邀请码
+        </h1>
+      </div>
+
+      {/* Generate form */}
+      <div className="surface-card" style={{ padding: 20, display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <span style={{ fontSize: 13, fontWeight: 500 }}>数量</span>
           <input
             type="number"
             min={1}
             max={100}
             value={count}
             onChange={(e) => setCount(Number(e.target.value))}
-            className="input w-24"
+            className="input"
+            style={{ width: 96 }}
           />
         </label>
         <button onClick={create} disabled={creating} className="btn-primary">
-          {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+          {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus style={{ width: 16, height: 16 }} />}
           生成
         </button>
       </div>
 
+      {/* Table */}
       {loading ? (
-        <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+        <Loader2 className="w-5 h-5 animate-spin" style={{ color: 'var(--color-text-light)' }} />
       ) : (
-        <div className="glass-card overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="text-left text-muted-foreground border-b border-border/40">
-              <tr>
-                <th className="px-4 py-3">邀请码</th>
-                <th className="px-4 py-3">状态</th>
-                <th className="px-4 py-3">使用者</th>
-                <th className="px-4 py-3 text-right">操作</th>
+        <div className="surface-card" style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', fontSize: 14, borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
+                <th style={{ padding: '12px 16px', color: 'var(--color-text-light)', fontWeight: 600, fontSize: 12, letterSpacing: '0.04em', textTransform: 'uppercase' as const }}>邀请码</th>
+                <th style={{ padding: '12px 16px', color: 'var(--color-text-light)', fontWeight: 600, fontSize: 12, letterSpacing: '0.04em', textTransform: 'uppercase' as const }}>状态</th>
+                <th style={{ padding: '12px 16px', color: 'var(--color-text-light)', fontWeight: 600, fontSize: 12, letterSpacing: '0.04em', textTransform: 'uppercase' as const }}>使用者</th>
+                <th style={{ padding: '12px 16px', color: 'var(--color-text-light)', fontWeight: 600, fontSize: 12, letterSpacing: '0.04em', textTransform: 'uppercase' as const, textAlign: 'right' }}>操作</th>
               </tr>
             </thead>
             <tbody>
               {items.map((i) => (
-                <tr key={i.id} className="border-b border-border/20 last:border-0">
-                  <td className="px-4 py-3 font-mono">{i.code}</td>
-                  <td className="px-4 py-3">{i.used ? <span className="text-muted-foreground">已使用</span> : <span className="text-primary">未使用</span>}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{i.used_by_id ?? '-'}</td>
-                  <td className="px-4 py-3 text-right space-x-3 whitespace-nowrap">
-                    <button onClick={() => copy(i)} className="text-xs hover:underline inline-flex items-center gap-1">
-                      {copiedId === i.id ? <Check className="w-3 h-3 text-primary" /> : <Copy className="w-3 h-3" />}
-                      复制
-                    </button>
-                    <button onClick={() => remove(i.id)} className="text-xs text-destructive hover:underline inline-flex items-center gap-1">
-                      <Trash2 className="w-3 h-3" /> 删除
-                    </button>
+                <tr key={i.id} style={{ borderBottom: '1px solid color-mix(in srgb, var(--color-border) 40%, transparent)' }}>
+                  <td style={{ padding: '12px 16px', fontFamily: 'ui-monospace, SFMono-Regular, Consolas, monospace', color: 'var(--color-heading)' }}>{i.code}</td>
+                  <td style={{ padding: '12px 16px' }}>
+                    {i.used
+                      ? <span style={{ color: 'var(--color-text-light)', fontSize: 13 }}>已使用</span>
+                      : <span style={{ color: 'var(--color-primary)', fontSize: 13, fontWeight: 500 }}>未使用</span>}
+                  </td>
+                  <td style={{ padding: '12px 16px', color: 'var(--color-text-light)' }}>{i.used_by_id ?? '-'}</td>
+                  <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                    <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                      <button onClick={() => copy(i)} className="btn-ghost" style={{ padding: '4px 10px', fontSize: 12 }}>
+                        {copiedId === i.id
+                          ? <><Check style={{ width: 12, height: 12, color: 'var(--color-primary)' }} /> 已复制</>
+                          : <><Copy style={{ width: 12, height: 12 }} /> 复制</>}
+                      </button>
+                      <button onClick={() => remove(i.id)} className="btn-destructive" style={{ padding: '4px 10px', fontSize: 12 }}>
+                        <Trash2 style={{ width: 12, height: 12 }} /> 删除
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

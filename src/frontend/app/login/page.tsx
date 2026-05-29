@@ -1,14 +1,16 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { useUserStore } from '@/stores/user';
 import { Loader2 } from 'lucide-react';
 
-export default function LoginPage() {
+function LoginInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const next = searchParams.get('next') || '/dashboard';
   const setToken = useUserStore((s) => s.setToken);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -25,7 +27,7 @@ export default function LoginPage() {
         password,
       });
       setToken(r.data.access_token);
-      router.push('/dashboard');
+      router.push(next);
     } catch (err: any) {
       setError(err?.response?.data?.detail || '登录失败');
     } finally {
@@ -34,14 +36,20 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="container py-20 max-w-md">
-      <div className="glass-card p-8 space-y-6">
-        <header className="space-y-2 text-center">
-          <h1 className="text-3xl font-bold">登录</h1>
-          <p className="text-sm text-muted-foreground">登录像素北科账户</p>
+    <div className="auth-shell">
+      <div className="auth-panel">
+        <header style={{ textAlign: 'center', marginBottom: '28px' }}>
+          <h1 style={{ fontSize: '28px', fontWeight: 700, margin: '0 0 8px', color: 'var(--color-heading)' }}>
+            欢迎回来
+          </h1>
+          <p style={{ fontSize: '14px', color: 'var(--color-text-light)', margin: 0 }}>
+            登录你的像素北科账户
+          </p>
         </header>
-        <form onSubmit={submit} className="space-y-4">
-          <Field label="邮箱">
+
+        <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <span style={{ fontSize: '14px', fontWeight: 500 }}>邮箱</span>
             <input
               type="email"
               value={email}
@@ -49,9 +57,12 @@ export default function LoginPage() {
               required
               className="input"
               autoComplete="email"
+              placeholder="your@email.com"
             />
-          </Field>
-          <Field label="密码">
+          </label>
+
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <span style={{ fontSize: '14px', fontWeight: 500 }}>密码</span>
             <input
               type="password"
               value={password}
@@ -59,19 +70,37 @@ export default function LoginPage() {
               required
               className="input"
               autoComplete="current-password"
+              placeholder="输入密码"
             />
-          </Field>
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <button type="submit" disabled={loading} className="btn-primary w-full">
+          </label>
+
+          {error && (
+            <p style={{ fontSize: '14px', color: '#dc2626', margin: 0 }}>{error}</p>
+          )}
+
+          <button type="submit" disabled={loading} className="btn-primary" style={{ width: '100%' }}>
             {loading && <Loader2 className="w-4 h-4 animate-spin" />} 登录
           </button>
         </form>
-        <div className="flex items-center justify-between text-sm">
-          <Link href="/reset-password" className="text-muted-foreground hover:text-primary">
-            忘记密码？
+
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginTop: '20px',
+          fontSize: '14px',
+        }}>
+          <Link
+            href="/reset-password"
+            style={{ color: 'var(--color-text-light)', textDecoration: 'none' }}
+          >
+            忘记密码?
           </Link>
-          <Link href="/register" className="text-primary hover:underline">
-            注册新账户
+          <Link
+            href="/register"
+            style={{ color: 'var(--color-primary)', textDecoration: 'none', fontWeight: 500 }}
+          >
+            没有账户？立即注册
           </Link>
         </div>
       </div>
@@ -79,11 +108,14 @@ export default function LoginPage() {
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+export default function LoginPage() {
   return (
-    <label className="block space-y-1.5">
-      <span className="text-sm font-medium">{label}</span>
-      {children}
-    </label>
+    <Suspense fallback={
+      <div className="auth-shell">
+        <Loader2 className="w-6 h-6 animate-spin" style={{ color: 'var(--color-text-light)' }} />
+      </div>
+    }>
+      <LoginInner />
+    </Suspense>
   );
 }

@@ -5,6 +5,7 @@ def register_routers(app: FastAPI) -> None:
     from app.routers import (
         site_auth, users, yggdrasil, oauth_provider, static_files,
         mc_servers, files, textures, admin,
+        public, camera_presets, oauth_login,
     )
 
     app.include_router(site_auth.router)
@@ -17,3 +18,6 @@ def register_routers(app: FastAPI) -> None:
     app.include_router(textures.router)
     app.include_router(textures.players_router)
     app.include_router(admin.router)
+    app.include_router(public.router)
+    app.include_router(camera_presets.router)
+    app.include_router(oauth_login.router)

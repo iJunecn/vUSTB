@@ -5,6 +5,8 @@ from app.models.oauth import OAuthApp, AuthorizationCode, AccessToken, DeviceCod
 from app.models.verification import VerificationCode, InviteCode
 from app.models.site import SiteSetting, Carousel
 from app.models.managed_file import ManagedFile
+from app.models.scene_camera_preset import SceneCameraPreset
+from app.models.fallback import FallbackEndpoint
 
 __all__ = [
     "User", "UserGroup",
@@ -14,4 +16,6 @@ __all__ = [
     "VerificationCode", "InviteCode",
     "SiteSetting", "Carousel",
     "ManagedFile",
+    "SceneCameraPreset",
+    "FallbackEndpoint",
 ]

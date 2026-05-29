@@ -45,45 +45,95 @@ function AuthorizeInner() {
 
   if (!loaded || !user) {
     return (
-      <div className="container py-20 flex justify-center">
-        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      <div className="auth-shell">
+        <Loader2 className="w-6 h-6 animate-spin" style={{ color: 'var(--color-text-light)' }} />
       </div>
     );
   }
 
   return (
-    <div className="container py-16 max-w-md">
-      <div className="glass-card p-8 space-y-6">
-        <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto">
-          <Shield className="w-6 h-6 text-primary" />
-        </div>
-        <header className="text-center space-y-2">
-          <h1 className="text-2xl font-bold">第三方应用申请授权</h1>
-          <p className="text-sm text-muted-foreground">
-            client_id <code className="text-foreground">{client_id || '?'}</code> 想要访问你的像素北科账户
+    <div className="auth-shell">
+      <div className="auth-panel">
+        <header style={{ textAlign: 'center', marginBottom: '24px' }}>
+          <div style={{
+            width: '48px',
+            height: '48px',
+            borderRadius: '14px',
+            background: 'var(--color-background-mute)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: '0 auto 16px',
+          }}>
+            <Shield style={{ width: '24px', height: '24px', color: 'var(--color-primary)' }} />
+          </div>
+          <h1 style={{ fontSize: '22px', fontWeight: 700, margin: '0 0 8px', color: 'var(--color-heading)' }}>
+            第三方应用申请授权
+          </h1>
+          <p style={{ fontSize: '14px', color: 'var(--color-text-light)', margin: 0 }}>
+            client_id <code style={{ color: 'var(--color-text)', fontWeight: 600 }}>{client_id || '?'}</code> 想要访问你的像素北科账户
           </p>
         </header>
 
-        <div className="glass-card p-4 space-y-2">
-          <p className="text-xs text-muted-foreground">将授权以下权限</p>
-          <ul className="space-y-1">
+        {/* Scopes */}
+        <div style={{
+          padding: '14px',
+          border: '1px solid var(--color-border)',
+          borderRadius: '12px',
+          background: 'var(--color-background-soft)',
+          marginBottom: '16px',
+        }}>
+          <p style={{ fontSize: '12px', color: 'var(--color-text-light)', margin: '0 0 8px' }}>
+            将授权以下权限
+          </p>
+          <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '6px' }}>
             {scope.split(/\s+/).filter(Boolean).map((s) => (
-              <li key={s} className="text-sm flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-primary" /> {s}
+              <li key={s} style={{ fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-text)' }}>
+                <span style={{
+                  width: '6px',
+                  height: '6px',
+                  borderRadius: '50%',
+                  background: 'var(--color-primary)',
+                  flexShrink: 0,
+                }} />
+                {s}
               </li>
             ))}
           </ul>
         </div>
-        <div className="text-xs text-muted-foreground space-y-1">
-          <p>回调地址: <code className="text-foreground break-all">{redirect_uri || '(missing)'}</code></p>
-          <p>当前用户: <b className="text-foreground">{user.username}</b></p>
+
+        {/* Details */}
+        <div style={{
+          fontSize: '13px',
+          color: 'var(--color-text-light)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '4px',
+          marginBottom: '16px',
+        }}>
+          <p style={{ margin: 0 }}>
+            回调地址: <code style={{ color: 'var(--color-text)', wordBreak: 'break-all' }}>{redirect_uri || '(missing)'}</code>
+          </p>
+          <p style={{ margin: 0 }}>
+            当前用户: <strong style={{ color: 'var(--color-heading)' }}>{user.username}</strong>
+          </p>
         </div>
 
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {error && (
+          <p style={{ fontSize: '14px', color: '#dc2626', margin: '0 0 12px' }}>{error}</p>
+        )}
 
-        <div className="flex gap-3">
-          <button onClick={() => router.back()} className="btn-ghost flex-1">取消</button>
-          <button onClick={approve} disabled={approving || !client_id || !redirect_uri} className="btn-primary flex-1">
+        {/* Buttons */}
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <button onClick={() => router.back()} className="btn-ghost" style={{ flex: 1 }}>
+            取消
+          </button>
+          <button
+            onClick={approve}
+            disabled={approving || !client_id || !redirect_uri}
+            className="btn-primary"
+            style={{ flex: 1 }}
+          >
             {approving && <Loader2 className="w-4 h-4 animate-spin" />} 同意授权
           </button>
         </div>
@@ -95,8 +145,8 @@ function AuthorizeInner() {
 export default function OAuthAuthorizePage() {
   return (
     <Suspense fallback={
-      <div className="container py-20 flex justify-center">
-        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      <div className="auth-shell">
+        <Loader2 className="w-6 h-6 animate-spin" style={{ color: 'var(--color-text-light)' }} />
       </div>
     }>
       <AuthorizeInner />

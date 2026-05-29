@@ -63,71 +63,92 @@ export default function WardrobePage() {
   }
 
   return (
-    <div className="space-y-6">
-      <header className="space-y-1">
-        <h1 className="text-3xl font-bold">皮肤衣柜</h1>
-        <p className="text-muted-foreground">上传 64×64 / 64×32 PNG 材质,绑定到游戏角色后即可在 MC 中使用。</p>
-      </header>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <div>
+        <p className="section-kicker" style={{ marginBottom: 8 }}>WARDROBE</p>
+        <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--color-heading)', margin: 0 }}>
+          皮肤衣柜
+        </h1>
+        <p style={{ fontSize: 14, color: 'var(--color-text-light)', marginTop: 4 }}>
+          上传 64x64 / 64x32 PNG 材质，绑定到游戏角色后即可在 MC 中使用。
+        </p>
+      </div>
 
-      <div className="glass-card p-5 flex flex-wrap items-end gap-4">
-        <label className="space-y-1">
-          <span className="text-sm font-medium block">类型</span>
-          <select value={type} onChange={(e) => setType(e.target.value as any)} className="input">
+      {/* Upload form */}
+      <div className="surface-card" style={{ padding: 20, display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: 16 }}>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <span style={{ fontSize: 13, fontWeight: 500 }}>类型</span>
+          <select value={type} onChange={(e) => setType(e.target.value as any)} className="input" style={{ width: 'auto' }}>
             <option value="skin">皮肤 skin</option>
             <option value="cape">披风 cape</option>
           </select>
         </label>
         {type === 'skin' && (
-          <label className="space-y-1">
-            <span className="text-sm font-medium block">模型</span>
-            <select value={model} onChange={(e) => setModel(e.target.value as any)} className="input">
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span style={{ fontSize: 13, fontWeight: 500 }}>模型</span>
+            <select value={model} onChange={(e) => setModel(e.target.value as any)} className="input" style={{ width: 'auto' }}>
               <option value="classic">classic (Steve)</option>
               <option value="slim">slim (Alex)</option>
             </select>
           </label>
         )}
-        <button
-          onClick={() => fileRef.current?.click()}
-          disabled={uploading}
-          className="btn-primary"
-        >
-          {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+        <button onClick={() => fileRef.current?.click()} disabled={uploading} className="btn-primary">
+          {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload style={{ width: 16, height: 16 }} />}
           上传
         </button>
         <input ref={fileRef} type="file" accept="image/png" hidden onChange={onUpload} />
       </div>
 
+      {/* Texture grid */}
       {loading ? (
-        <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+        <Loader2 className="w-5 h-5 animate-spin" style={{ color: 'var(--color-text-light)' }} />
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
+            gap: 16,
+          }}
+        >
           {items.map((t) => (
-            <div key={t.id} className="glass-card p-3 space-y-2">
-              <div className="aspect-square bg-muted/40 rounded-xl overflow-hidden flex items-center justify-center">
+            <div key={t.id} className="surface-card" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div
+                style={{
+                  aspectRatio: '1',
+                  borderRadius: 8,
+                  overflow: 'hidden',
+                  background: 'var(--color-background-mute)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={t.url}
                   alt={t.name}
-                  className="w-full h-full object-contain"
-                  style={{ imageRendering: 'pixelated' }}
+                  style={{ width: '100%', height: '100%', objectFit: 'contain', imageRendering: 'pixelated' }}
                 />
               </div>
-              <div className="text-xs">
-                <p className="font-medium truncate">{t.name}</p>
-                <p className="text-muted-foreground">
-                  {t.type} · {t.type === 'skin' ? t.model : ''}
+              <div style={{ fontSize: 12 }}>
+                <p style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--color-heading)' }}>{t.name}</p>
+                <p style={{ color: 'var(--color-text-light)', marginTop: 2 }}>
+                  {t.type} {t.type === 'skin' ? `· ${t.model}` : ''}
                 </p>
               </div>
               <button
                 onClick={() => remove(t.id)}
-                className="text-xs text-destructive hover:underline inline-flex items-center gap-1"
+                className="btn-ghost"
+                style={{ padding: '4px 8px', fontSize: 12, color: '#dc2626', borderColor: 'transparent', background: 'transparent' }}
               >
-                <Trash2 className="w-3 h-3" /> 移除
+                <Trash2 style={{ width: 12, height: 12 }} /> 移除
               </button>
             </div>
           ))}
           {items.length === 0 && (
-            <p className="text-muted-foreground col-span-full">衣柜为空,先上传一个皮肤吧。</p>
+            <p style={{ color: 'var(--color-text-light)', gridColumn: '1 / -1' }}>
+              衣柜为空，先上传一个皮肤吧。
+            </p>
           )}
         </div>
       )}

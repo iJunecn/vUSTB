@@ -60,24 +60,35 @@ function DeviceInner() {
 
   if (!loaded || !user) {
     return (
-      <div className="container py-20 flex justify-center">
-        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      <div className="auth-shell">
+        <Loader2 className="w-6 h-6 animate-spin" style={{ color: 'var(--color-text-light)' }} />
       </div>
     );
   }
 
   if (done) {
     return (
-      <div className="container py-16 max-w-md">
-        <div className="glass-card p-8 space-y-4 text-center">
-          <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto">
-            <CheckCircle2 className="w-6 h-6 text-primary" />
+      <div className="auth-shell">
+        <div className="auth-panel" style={{ textAlign: 'center' }}>
+          <div style={{
+            width: '48px',
+            height: '48px',
+            borderRadius: '14px',
+            background: 'var(--color-background-mute)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: '0 auto 16px',
+          }}>
+            <CheckCircle2 style={{ width: '24px', height: '24px', color: 'var(--color-primary)' }} />
           </div>
-          <h1 className="text-2xl font-bold">授权成功</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 style={{ fontSize: '22px', fontWeight: 700, margin: '0 0 8px', color: 'var(--color-heading)' }}>
+            授权成功
+          </h1>
+          <p style={{ fontSize: '14px', color: 'var(--color-text-light)', margin: '0 0 20px' }}>
             你现在可以回到启动器或设备，应用会自动完成登录。
           </p>
-          <button onClick={() => router.push('/dashboard')} className="btn-primary w-full">
+          <button onClick={() => router.push('/dashboard')} className="btn-primary" style={{ width: '100%' }}>
             回到用户中心
           </button>
         </div>
@@ -86,34 +97,51 @@ function DeviceInner() {
   }
 
   return (
-    <div className="container py-16 max-w-md">
-      <form onSubmit={approve} className="glass-card p-8 space-y-6">
-        <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto">
-          <Smartphone className="w-6 h-6 text-primary" />
-        </div>
-        <header className="text-center space-y-2">
-          <h1 className="text-2xl font-bold">设备授权</h1>
-          <p className="text-sm text-muted-foreground">
+    <div className="auth-shell">
+      <form onSubmit={approve} className="auth-panel">
+        <header style={{ textAlign: 'center', marginBottom: '24px' }}>
+          <div style={{
+            width: '48px',
+            height: '48px',
+            borderRadius: '14px',
+            background: 'var(--color-background-mute)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: '0 auto 16px',
+          }}>
+            <Smartphone style={{ width: '24px', height: '24px', color: 'var(--color-primary)' }} />
+          </div>
+          <h1 style={{ fontSize: '22px', fontWeight: 700, margin: '0 0 8px', color: 'var(--color-heading)' }}>
+            设备授权
+          </h1>
+          <p style={{ fontSize: '14px', color: 'var(--color-text-light)', margin: 0 }}>
             在启动器或第三方应用中获得用户码后，在此输入并确认。
           </p>
         </header>
 
-        <label className="space-y-1 block">
-          <span className="text-sm font-medium block">用户码 (User Code)</span>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '16px' }}>
+          <span style={{ fontSize: '14px', fontWeight: 500 }}>用户码 (User Code)</span>
           <input
             value={userCode}
             onChange={(e) => setUserCode(e.target.value)}
             required
             placeholder="例如 ABCD-EFGH"
             autoComplete="off"
-            className="input text-center tracking-widest text-lg uppercase"
+            className="input"
+            style={{
+              textAlign: 'center',
+              letterSpacing: '0.2em',
+              fontSize: '18px',
+              textTransform: 'uppercase',
+            }}
           />
         </label>
 
         {players.length > 0 ? (
-          <label className="space-y-1 block">
-            <span className="text-sm font-medium block">选择绑定角色</span>
-            <span className="text-xs text-muted-foreground block">
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '16px' }}>
+            <span style={{ fontSize: '14px', fontWeight: 500 }}>选择绑定角色</span>
+            <span style={{ fontSize: '12px', color: 'var(--color-text-light)', marginBottom: '2px' }}>
               当前会话将以该角色登录 Minecraft 服务器
             </span>
             <select
@@ -127,23 +155,26 @@ function DeviceInner() {
             </select>
           </label>
         ) : (
-          <p className="text-xs text-muted-foreground">
+          <p style={{ fontSize: '13px', color: 'var(--color-text-light)', marginBottom: '16px' }}>
             你还没有创建任何 MC 角色，可以在
-            <a href="/dashboard/roles" className="text-primary hover:underline mx-1">游戏角色</a>
+            <a href="/dashboard/roles" style={{ color: 'var(--color-primary)', marginLeft: '4px' }}>游戏角色</a>
             页面创建后再来授权。
           </p>
         )}
 
-        <div className="text-xs text-muted-foreground">
-          当前用户: <b className="text-foreground">{user.username}</b>
+        <div style={{ fontSize: '13px', color: 'var(--color-text-light)', marginBottom: '16px' }}>
+          当前用户: <strong style={{ color: 'var(--color-heading)' }}>{user.username}</strong>
         </div>
 
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {error && (
+          <p style={{ fontSize: '14px', color: '#dc2626', margin: '0 0 12px' }}>{error}</p>
+        )}
 
         <button
           type="submit"
           disabled={approving || !userCode.trim() || players.length === 0}
-          className="btn-primary w-full"
+          className="btn-primary"
+          style={{ width: '100%' }}
         >
           {approving && <Loader2 className="w-4 h-4 animate-spin" />} 确认授权
         </button>
@@ -155,8 +186,8 @@ function DeviceInner() {
 export default function OAuthDevicePage() {
   return (
     <Suspense fallback={
-      <div className="container py-20 flex justify-center">
-        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      <div className="auth-shell">
+        <Loader2 className="w-6 h-6 animate-spin" style={{ color: 'var(--color-text-light)' }} />
       </div>
     }>
       <DeviceInner />
