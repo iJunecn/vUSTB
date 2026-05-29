@@ -18,7 +18,7 @@ export const metadata: Metadata = {
     template: '%s | 像素北科',
   },
   description:
-    '像素北科 — 北京科技大学 Minecraft 社区。MC 服务器、皮肤站、3D 校园游览与社区活动。',
+    '像素北科 — 北京科技大学 Minecraft 数字校园社区',
   keywords: ['北京科技大学', 'USTB', 'Minecraft', '像素北科'],
   metadataBase: new URL('https://mc.ustb.edu.cn'),
 };
