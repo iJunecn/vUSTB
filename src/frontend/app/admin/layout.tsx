@@ -8,6 +8,7 @@ import {
   LayoutDashboard, Users, KeySquare, Settings, Mail,
   Shield, Image as ImageIcon, Monitor, LogOut, Loader2, Menu, X,
 } from 'lucide-react';
+import { SkinAvatar } from '@/components/skin/SkinAvatar';
 
 const NAV = [
   { href: '/admin', label: '概览', icon: LayoutDashboard, exact: true },
@@ -115,16 +116,24 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               管理后台
             </p>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
-              <div
-                style={{
-                  width: 32, height: 32, borderRadius: '50%',
-                  background: 'var(--color-primary)', color: '#fff',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontWeight: 700, fontSize: 14, flexShrink: 0,
-                }}
-              >
-                {initial}
-              </div>
+              {user.avatar_hash ? (
+                <SkinAvatar
+                  skinUrl={`/static/textures/${user.avatar_hash}.png`}
+                  size={32}
+                  style={{ borderRadius: 6, flexShrink: 0 }}
+                />
+              ) : (
+                <div
+                  style={{
+                    width: 32, height: 32, borderRadius: 6,
+                    background: 'var(--color-primary)', color: '#fff',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontWeight: 700, fontSize: 14, flexShrink: 0,
+                  }}
+                >
+                  {initial}
+                </div>
+              )}
               <div style={{ minWidth: 0 }}>
                 <p style={{ fontWeight: 600, fontSize: 13, color: 'var(--color-heading)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {displayName}

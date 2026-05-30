@@ -8,6 +8,7 @@ import { CapeViewer } from '@/components/skin/CapeViewer';
 import { SkinAvatar } from '@/components/skin/SkinAvatar';
 
 type Texture = {
+  id: number;
   hash: string;
   type: 'skin' | 'cape';
   model: string;
@@ -97,7 +98,7 @@ export default function WardrobePage() {
     try {
       const res = await rawApi.get(`/api/me/textures/${tex.hash}/${tex.type}`);
       const data = res.data;
-      setEditNote(data.note || data.name || '');
+      setEditNote(data.name || '');
       setEditModel(data.model || 'classic');
       setEditPublic(!!data.is_public);
     } catch {

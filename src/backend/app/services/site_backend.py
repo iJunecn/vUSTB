@@ -378,16 +378,16 @@ class SiteBackend:
         await db.refresh(player)
         return {"id": player.uuid, "name": player.name, "model": model}
 
-    async def delete_profile(self, db: AsyncSession, user_id: int, player_uuid: str):
-        player = (await db.execute(select(Player).where(Player.uuid == player_uuid, Player.owner_id == user_id))).scalar_one_or_none()
+    async def delete_profile(self, db: AsyncSession, user_id: int, player_id: int):
+        player = (await db.execute(select(Player).where(Player.id == player_id, Player.owner_id == user_id))).scalar_one_or_none()
         if not player:
             raise HTTPException(status_code=404, detail="profile not found")
         await db.delete(player)
         await db.commit()
 
-    async def apply_texture_to_profile(self, db: AsyncSession, user_id: int, player_uuid: str, texture_hash: str, texture_type: str):
+    async def apply_texture_to_profile(self, db: AsyncSession, user_id: int, player_id: int, texture_hash: str, texture_type: str):
         # Verify player ownership
-        player = (await db.execute(select(Player).where(Player.uuid == player_uuid, Player.owner_id == user_id))).scalar_one_or_none()
+        player = (await db.execute(select(Player).where(Player.id == player_id, Player.owner_id == user_id))).scalar_one_or_none()
         if not player:
             raise ValueError("Profile not yours")
 
@@ -410,8 +410,8 @@ class SiteBackend:
             raise ValueError("Invalid texture_type")
         await db.commit()
 
-    async def clear_profile_texture(self, db: AsyncSession, user_id: int, player_uuid: str, texture_type: str):
-        player = (await db.execute(select(Player).where(Player.uuid == player_uuid, Player.owner_id == user_id))).scalar_one_or_none()
+    async def clear_profile_texture(self, db: AsyncSession, user_id: int, player_id: int, texture_type: str):
+        player = (await db.execute(select(Player).where(Player.id == player_id, Player.owner_id == user_id))).scalar_one_or_none()
         if not player:
             raise ValueError("Not allowed")
 
