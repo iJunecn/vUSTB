@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/api';
 import { Loader2, Upload, Trash2 } from 'lucide-react';
+import { SkinPreview } from '@/components/skin/SkinViewer';
 
 type Texture = {
   id: number;
@@ -70,11 +71,11 @@ export default function WardrobePage() {
           皮肤衣柜
         </h1>
         <p style={{ fontSize: 14, color: 'var(--color-text-light)', marginTop: 4 }}>
-          上传 64x64 / 64x32 PNG 材质，绑定到游戏角色后即可在 MC 中使用。
+          管理你上传和收藏的皮肤与披风，绑定到游戏角色后即可在 MC 中使用。
         </p>
       </div>
 
-      {/* Upload form */}
+      {/* Quick upload form */}
       <div className="surface-card" style={{ padding: 20, display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: 16 }}>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <span style={{ fontSize: 13, fontWeight: 500 }}>类型</span>
@@ -94,8 +95,11 @@ export default function WardrobePage() {
         )}
         <button onClick={() => fileRef.current?.click()} disabled={uploading} className="btn-primary">
           {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload style={{ width: 16, height: 16 }} />}
-          上传
+          快速上传
         </button>
+        <span style={{ fontSize: 12, color: 'var(--color-text-light)', alignSelf: 'center' }}>
+          或前往 <a href="/skin/upload" style={{ color: 'var(--color-primary)' }}>上传页面</a> 预览后保存
+        </span>
         <input ref={fileRef} type="file" accept="image/png" hidden onChange={onUpload} />
       </div>
 
@@ -106,7 +110,7 @@ export default function WardrobePage() {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
             gap: 16,
           }}
         >
@@ -123,17 +127,22 @@ export default function WardrobePage() {
                   justifyContent: 'center',
                 }}
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={t.url}
-                  alt={t.name}
-                  style={{ width: '100%', height: '100%', objectFit: 'contain', imageRendering: 'pixelated' }}
-                />
+                {t.type === 'skin' ? (
+                  <SkinPreview skinUrl={t.url} model={t.model} size={150} />
+                ) : (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src={t.url}
+                    alt={t.name}
+                    style={{ width: '100%', height: '100%', objectFit: 'contain', imageRendering: 'pixelated' }}
+                  />
+                )}
               </div>
               <div style={{ fontSize: 12 }}>
                 <p style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--color-heading)' }}>{t.name}</p>
                 <p style={{ color: 'var(--color-text-light)', marginTop: 2 }}>
                   {t.type} {t.type === 'skin' ? `· ${t.model}` : ''}
+                  {t.is_public ? ' · 公开' : ' · 私有'}
                 </p>
               </div>
               <button

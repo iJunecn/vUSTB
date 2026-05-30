@@ -6,11 +6,25 @@ const nextConfig = {
   async headers() {
     return [
       {
-        // COOP/COEP headers required for SharedArrayBuffer (WASM engine)
+        // COOP/COEP headers required for SharedArrayBuffer (WASM engine / campus page)
         source: '/campus',
         headers: [
           { key: 'Cross-Origin-Embedder-Policy', value: 'require-corp' },
           { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
+        ],
+      },
+      {
+        // Also apply COOP/COEP for resource subrequests from campus page
+        source: '/resource/:path*',
+        headers: [
+          { key: 'Cross-Origin-Resource-Policy', value: 'cross-origin' },
+        ],
+      },
+      {
+        // Allow packs resources to be loaded cross-origin
+        source: '/packs/:path*',
+        headers: [
+          { key: 'Cross-Origin-Resource-Policy', value: 'cross-origin' },
         ],
       },
     ];

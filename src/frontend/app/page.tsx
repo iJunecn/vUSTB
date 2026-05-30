@@ -75,14 +75,18 @@ export default function HomePage() {
           <div className="home-card-block" style={{ borderLeftColor: '#a855f7' }}>
             <h2 className="home-card-h2">加入像素北科交流群</h2>
             <p className="home-card-p">
-              QQ：
               <a
-                href="https://qm.qq.com/q/981823947"
                 target="_blank"
+                href="https://qm.qq.com/cgi-bin/qm/qr?k=ija7cOnwjqzqwbep-3gmS-lQQtuYvjyv&jump_from=webapi&authKey=ZLoJ8z4ZFe2SdSeKluF/x6HW+R5+LFp/8PAvJud5dc2nCYtUx59saphFZx8LUW4w"
                 rel="noreferrer"
-                className="home-card-link"
               >
-                981823947
+                <img
+                  src="//pub.idqqimg.com/wpa/images/group.png"
+                  alt="像素北科交流群"
+                  title="像素北科交流群"
+                  style={{ verticalAlign: 'middle', marginRight: 6, border: 0 }}
+                />
+                像素北科交流群
               </a>
             </p>
           </div>

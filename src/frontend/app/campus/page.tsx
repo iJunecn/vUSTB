@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, lazy, Suspense } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Map, Lock } from 'lucide-react';
 
 const CampusEngine = lazy(() =>
   import('@/components/campus/campus-engine').then((m) => ({ default: m.CampusEngine }))
@@ -9,12 +9,99 @@ const CampusEngine = lazy(() =>
 
 type AccordionKey = 'desktop' | 'mobile' | 'legend' | null;
 
+// Read from environment variable - default to disabled
+const CAMPUS_ENABLED = process.env.NEXT_PUBLIC_CAMPUS_ENABLED === 'true';
+const MCA_BASE_URL = process.env.NEXT_PUBLIC_MCA_BASE_URL || '/resource/mca/ustb';
+const RESOURCE_PACK_BASE_URL = process.env.NEXT_PUBLIC_RESOURCE_PACK_BASE_URL || '/packs';
+
 export default function CampusPage() {
   const [activeAccordion, setActiveAccordion] = useState<AccordionKey>(null);
   const [engineReady, setEngineReady] = useState(false);
+  const [enableEngine, setEnableEngine] = useState(false);
 
   function toggleAccordion(key: AccordionKey) {
     setActiveAccordion((prev) => (prev === key ? null : key));
+  }
+
+  // If campus feature is disabled via env, show disabled page
+  if (!CAMPUS_ENABLED && !enableEngine) {
+    return (
+      <div style={{
+        minHeight: 'calc(100vh - 56px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '24px',
+        background: 'var(--color-background)',
+      }}>
+        <div className="glass-card" style={{
+          padding: '40px',
+          borderRadius: '24px',
+          textAlign: 'center',
+          maxWidth: '480px',
+        }}>
+          <div style={{
+            width: '64px',
+            height: '64px',
+            borderRadius: '16px',
+            background: 'color-mix(in srgb, var(--color-primary) 10%, transparent)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: '0 auto 20px',
+          }}>
+            <Map style={{ width: 32, height: 32, color: 'var(--color-primary)' }} />
+          </div>
+          <h2 style={{
+            margin: '0 0 12px',
+            fontSize: '24px',
+            fontWeight: 700,
+            color: 'var(--color-heading)',
+          }}>
+            在线校园游览
+          </h2>
+          <p style={{
+            margin: '0 0 8px',
+            color: 'var(--color-text-light)',
+            lineHeight: 1.6,
+            fontSize: '14px',
+          }}>
+            校园游览功能需要加载大量 Minecraft 存档数据与资源包，渲染时间较长。
+          </p>
+          <p style={{
+            margin: '0 0 20px',
+            color: 'var(--color-text-light)',
+            lineHeight: 1.6,
+            fontSize: '14px',
+          }}>
+            如需使用，请点击下方按钮手动启用。建议在性能较好的设备上使用。
+          </p>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '8px 12px',
+            borderRadius: '12px',
+            background: 'color-mix(in srgb, #eab308 10%, transparent)',
+            border: '1px solid color-mix(in srgb, #eab308 24%, transparent)',
+            marginBottom: '16px',
+            textAlign: 'left',
+          }}>
+            <Lock style={{ width: 16, height: 16, color: '#a16207', flexShrink: 0 }} />
+            <span style={{ fontSize: '12px', color: '#a16207', lineHeight: 1.5 }}>
+              需要 MCA 存档数据和资源包已正确部署到服务器，且浏览器支持 WebGL2 与 SharedArrayBuffer。
+            </span>
+          </div>
+          <button
+            onClick={() => setEnableEngine(true)}
+            className="btn-primary"
+            style={{ width: '100%' }}
+          >
+            启用校园游览
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -149,9 +236,11 @@ export default function CampusPage() {
                   校园游览功能基于 Minecraft 存档文件（.mca）的浏览器端实时渲染。
                   引擎使用 WebGL2 技术加载和渲染体素世界数据。
                 </p>
+                <p style={{ margin: '0 0 8px' }}>
+                  MCA 数据路径：<code style={{ color: 'var(--color-heading)', fontSize: '12px' }}>{MCA_BASE_URL}</code>
+                </p>
                 <p style={{ margin: 0 }}>
-                  渲染引擎代码源自 USTB-Official-Website 项目的自定义 WebGL2 渲染器，
-                  支持区块动态加载、PBR 材质、CSM 阴影等高级渲染特性。
+                  资源包路径：<code style={{ color: 'var(--color-heading)', fontSize: '12px' }}>{RESOURCE_PACK_BASE_URL}</code>
                 </p>
               </div>
             </Accordion>
@@ -201,7 +290,7 @@ export default function CampusPage() {
           }
         >
           <CampusEngine
-            mcaBaseUrl="/resource/mca/ustb"
+            mcaBaseUrl={MCA_BASE_URL}
             onReady={() => setEngineReady(true)}
             onError={(msg) => console.error('[CampusPage] Engine error:', msg)}
           />

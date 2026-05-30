@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { Loader2, Bookmark, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useUserStore } from '@/stores/user';
+import { SkinPreview } from '@/components/skin/SkinViewer';
 
 type Texture = {
   id: number;
@@ -37,7 +38,6 @@ export default function SkinLibraryPage() {
       .get<Texture[]>('/textures/library', { params })
       .then((r) => {
         setItems(r.data);
-        // If response has fewer items than PAGE_SIZE, we're on the last page
         setTotal(r.data.length < PAGE_SIZE ? page * PAGE_SIZE : (page + 1) * PAGE_SIZE);
       })
       .finally(() => setLoading(false));
@@ -104,13 +104,13 @@ export default function SkinLibraryPage() {
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
               gap: 16,
             }}
           >
             {items.map((t) => (
               <div key={t.id} className="surface-card" style={{ display: 'flex', flexDirection: 'column' }}>
-                {/* Texture preview */}
+                {/* 3D Texture preview */}
                 <div
                   style={{
                     aspectRatio: '1', background: 'var(--color-background-mute)',
@@ -118,12 +118,16 @@ export default function SkinLibraryPage() {
                     overflow: 'hidden',
                   }}
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={t.url}
-                    alt={t.name}
-                    style={{ width: '100%', height: '100%', objectFit: 'contain', imageRendering: 'pixelated' }}
-                  />
+                  {t.type === 'skin' ? (
+                    <SkinPreview skinUrl={t.url} model={t.model} size={180} />
+                  ) : (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img
+                      src={t.url}
+                      alt={t.name}
+                      style={{ width: '100%', height: '100%', objectFit: 'contain', imageRendering: 'pixelated' }}
+                    />
+                  )}
                 </div>
 
                 {/* Info */}
@@ -132,14 +136,14 @@ export default function SkinLibraryPage() {
                     {t.name}
                   </p>
                   <p style={{ fontSize: 12, color: 'var(--color-text-light)', margin: 0 }}>
-                    {t.uploader ?? '未知上传者'}
+                    {t.uploader ?? '未知上传者'} · {t.type === 'skin' ? t.model : '披风'}
                   </p>
                   <button
                     onClick={() => collect(t.id)}
                     className="btn-ghost"
                     style={{ padding: '6px 0', fontSize: 12, marginTop: 4, justifyContent: 'flex-start' }}
                   >
-                    <Bookmark style={{ width: 14, height: 14 }} /> 收藏
+                    <Bookmark style={{ width: 14, height: 14 }} /> 收藏到衣柜
                   </button>
                 </div>
               </div>

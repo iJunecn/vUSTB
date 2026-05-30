@@ -21,6 +21,11 @@ export const metadata: Metadata = {
     '像素北科 — 北京科技大学 Minecraft 数字校园社区',
   keywords: ['北京科技大学', 'USTB', 'Minecraft', '像素北科'],
   metadataBase: new URL('https://mc.ustb.edu.cn'),
+  icons: {
+    icon: '/img/logo.webp',
+    shortcut: '/img/logo.webp',
+    apple: '/img/logo.webp',
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
