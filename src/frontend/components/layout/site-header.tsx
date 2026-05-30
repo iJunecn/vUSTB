@@ -141,7 +141,7 @@ export function SiteHeader() {
                 <img
                   src={`/api/users/${user.id}/avatar`}
                   alt=""
-                  className="w-7 h-7 rounded object-cover bg-gray-300 dark:bg-gray-600"
+                  className="w-7 h-7 rounded-md object-cover bg-gray-300 dark:bg-gray-600"
                   onError={(e) => {
                     (e.target as HTMLImageElement).src = '/img/steve.svg';
                   }}
@@ -155,7 +155,7 @@ export function SiteHeader() {
                     <img
                       src={`/api/users/${user.id}/avatar`}
                       alt=""
-                      className="w-12 h-12 rounded object-cover bg-gray-300 dark:bg-gray-600"
+                      className="w-12 h-12 rounded-md object-cover bg-gray-300 dark:bg-gray-600"
                       onError={(e) => {
                         (e.target as HTMLImageElement).src = '/img/steve.svg';
                       }}

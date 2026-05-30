@@ -7,6 +7,7 @@ import { useUserStore } from '@/stores/user';
 import {
   LayoutDashboard, Shirt, Users, Shield, LogOut, Loader2, Menu, X,
 } from 'lucide-react';
+import { SkinAvatar } from '@/components/skin/SkinAvatar';
 
 const NAV = [
   { href: '/dashboard', label: '概览', icon: LayoutDashboard, exact: true },
@@ -104,17 +105,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               background: 'var(--color-background-soft)',
             }}
           >
-            <div
-              style={{
-                width: 40, height: 40, borderRadius: '50%',
-                background: 'var(--color-primary)',
-                color: '#fff', display: 'flex', alignItems: 'center',
-                justifyContent: 'center', fontWeight: 700, fontSize: 16,
-                flexShrink: 0,
-              }}
-            >
-              {initial}
-            </div>
+            {user.avatar_hash ? (
+              <SkinAvatar
+                skinUrl={`/static/textures/${user.avatar_hash}.png`}
+                size={40}
+                style={{ borderRadius: 6, flexShrink: 0 }}
+              />
+            ) : (
+              <div
+                style={{
+                  width: 40, height: 40, borderRadius: 6,
+                  background: 'var(--color-primary)',
+                  color: '#fff', display: 'flex', alignItems: 'center',
+                  justifyContent: 'center', fontWeight: 700, fontSize: 16,
+                  flexShrink: 0,
+                }}
+              >
+                {initial}
+              </div>
+            )}
             <div style={{ minWidth: 0 }}>
               <p style={{ fontWeight: 600, fontSize: 14, color: 'var(--color-heading)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {displayName}

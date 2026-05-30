@@ -32,7 +32,7 @@ export default function SkinHome() {
           href="/skin/library"
           icon={<Library style={{ width: 24, height: 24 }} />}
           title="皮肤库"
-          desc="浏览社区上传的公共皮肤与披风，一键收藏到你的衣柜。"
+          desc="浏览所有公开材质和你的私有材质，一键收藏到衣柜。"
         />
         <EntryCard
           href="/skin/upload"

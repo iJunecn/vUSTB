@@ -42,13 +42,11 @@ export default function ServersPage() {
     const newMain = new Map<string, McStatus>();
     const newSub = new Map<string, McStatus>();
 
-    // Query all main servers in parallel
     const mainPromises = SERVER_GROUPS.map(async (group) => {
       const status = await queryMotdApi(group.address, group.port);
       newMain.set(group.address, status);
     });
 
-    // Query all sub-servers in parallel
     const subPromises = SERVER_GROUPS.flatMap((group) =>
       (group.subs ?? []).map(async (sub) => {
         const key = `${sub.address}:${sub.port ?? 25565}`;
@@ -80,158 +78,138 @@ export default function ServersPage() {
 
   return (
     <div className="servers-page-container">
-      <div className="servers-page-inner">
-        {/* Hero */}
-        <section className="glass-card servers-hero">
-          <div className="servers-hero-grid">
+      {/* Background */}
+      <div className="home-bg">
+        <picture>
+          <source srcSet="/img/background.webp" type="image/webp" />
+          <img src="/img/background.jpg" alt="" />
+        </picture>
+      </div>
+      <div className="home-bg-overlay" />
+
+      {/* Content */}
+      <div className="servers-page-content">
+        <div className="servers-page-card">
+          {/* Header */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
             <div>
-              <p className="section-kicker">Server Status</p>
-              <h1 className="servers-hero-title">
+              <p className="section-kicker" style={{ marginBottom: 4, color: 'rgba(255,255,255,0.7)' }}>SERVER STATUS</p>
+              <h1 style={{ fontSize: 24, fontWeight: 700, color: '#fff', margin: 0 }}>
                 服务器列表
               </h1>
-              <p className="servers-hero-subtitle">
-                像素北科 Minecraft 服务器在线状态
-              </p>
-              <p className="mt-3">
-                <a
-                  href="https://github.com/LYOfficial/USTBL/releases"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mc-download-link"
-                >
-                  下载 USTBL 启动器
-                </a>
-              </p>
             </div>
-            <div className="servers-hero-stats">
-              <div className="surface-card servers-stat-card">
-                <span className="section-kicker">节点总数</span>
-                <strong className="servers-stat-value">{totalCount}</strong>
-                <p className="servers-stat-label">当前服务器记录</p>
-              </div>
-              <div className="surface-card servers-stat-card servers-stat-online">
-                <span className="section-kicker">在线节点</span>
-                <strong className="servers-stat-value" style={{ color: 'var(--color-primary)' }}>{onlineCount}</strong>
-                <p className="servers-stat-label">最近刷新 {formatRelativeTime(lastUpdated)}</p>
-              </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <span style={{ padding: '4px 10px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.85)' }}>
+                {onlineCount}/{totalCount} 在线
+              </span>
+              {lastUpdated && (
+                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>
+                  {formatRelativeTime(lastUpdated)}
+                </span>
+              )}
             </div>
           </div>
-        </section>
 
-        {/* Server Groups */}
-        {loading ? (
-          <div className="flex justify-center py-8">
-            <div className="w-5 h-5 border-2 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
-          </div>
-        ) : (
-          <div className="servers-grid">
-            {SERVER_GROUPS.map((group) => {
-              const mainStatus = mainStatuses.get(group.address);
-              const isOnline = mainStatus?.server_status === 'online';
-              const iconSrc = normalizeIconSrc(mainStatus?.icon);
+          <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', marginBottom: 4 }}>
+            <a
+              href="https://github.com/LYOfficial/USTBL/releases"
+              target="_blank"
+              rel="noreferrer"
+              style={{ color: 'rgba(255,255,255,0.85)', textDecoration: 'underline', textUnderlineOffset: 2 }}
+            >
+              下载 USTBL 启动器
+            </a>
+          </p>
 
-              return (
-                <div key={group.address} className="mc-group-card">
-                  {/* Main server info */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      {iconSrc ? (
-                        <img src={iconSrc} alt="" style={{ width: 40, height: 40, borderRadius: '50%', border: '2px solid var(--color-border)', objectFit: 'cover' }} />
-                      ) : (
-                        <div className="mc-card-icon mc-card-icon-placeholder" style={{ width: 40, height: 40, fontSize: 12 }}>MC</div>
-                      )}
-                      <div>
-                        <h3 className="mc-group-title" style={{ fontSize: 17 }}>{group.label}</h3>
-                        <p className="mc-group-ip">{group.address}{group.port ? `:${group.port}` : ''}</p>
+          {/* Server cards */}
+          {loading ? (
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '32px 0' }}>
+              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
+              {SERVER_GROUPS.map((group) => {
+                const mainStatus = mainStatuses.get(group.address);
+                const isOnline = mainStatus?.server_status === 'online';
+                const iconSrc = normalizeIconSrc(mainStatus?.icon);
+
+                return (
+                  <div key={group.address} style={{ padding: 14, borderRadius: 10, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                    {/* Main server row */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                        {iconSrc ? (
+                          <img src={iconSrc} alt="" style={{ width: 28, height: 28, borderRadius: '50%', border: '1.5px solid rgba(255,255,255,0.2)', objectFit: 'cover', flexShrink: 0 }} />
+                        ) : (
+                          <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'rgba(255,255,255,0.5)', flexShrink: 0 }}>MC</div>
+                        )}
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ fontSize: 14, fontWeight: 600, color: '#fff' }}>{group.label}</span>
+                            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace' }}>{group.address}{group.port ? `:${group.port}` : ''}</span>
+                          </div>
+                        </div>
                       </div>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 600, background: isOnline ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)', color: isOnline ? '#4ade80' : '#f87171', flexShrink: 0 }}>
+                        {isOnline ? <><Wifi style={{ width: 10, height: 10 }} /> 在线</> : <><WifiOff style={{ width: 10, height: 10 }} /> 离线</>}
+                      </span>
                     </div>
-                    <span className={`mc-status-pill ${isOnline ? 'online' : 'offline'}`}>
-                      {isOnline ? <><Wifi className="w-3 h-3" /> 在线</> : <><WifiOff className="w-3 h-3" /> 离线</>}
-                    </span>
-                  </div>
 
-                  {mainStatus && isOnline && (
-                    <>
-                      {/* MOTD */}
-                      {mainStatus.motdSegments && mainStatus.motdSegments.length > 0 && (
-                        <div className="mc-card-motd">
-                          <p className="mc-motd-text">
+                    {mainStatus && isOnline && (
+                      <div style={{ marginTop: 8 }}>
+                        {/* MOTD */}
+                        {mainStatus.motdSegments && mainStatus.motdSegments.length > 0 && (
+                          <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', margin: '0 0 4px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {mainStatus.motdSegments.map((seg, i) => (
                               <span key={i} style={getMotdSegmentStyle(seg)}>{seg.text}</span>
                             ))}
                           </p>
-                        </div>
-                      )}
-
-                      {/* Metrics */}
-                      <div className="mc-card-metrics">
-                        <div className="mc-metric">
-                          <span className="mc-metric-label">在线玩家</span>
-                          <strong>{mainStatus.players_online ?? '—'} / {mainStatus.players_max ?? '—'}</strong>
-                        </div>
-                        <div className="mc-metric">
-                          <span className="mc-metric-label">延迟</span>
-                          <strong>{mainStatus.connect_ms ?? '—'} ms</strong>
+                        )}
+                        {/* Metrics row */}
+                        <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>
+                          <span>玩家 {mainStatus.players_online ?? '—'}/{mainStatus.players_max ?? '—'}</span>
+                          <span>延迟 {mainStatus.connect_ms ?? '—'}ms</span>
+                          {group.versionOverride && <span>{group.versionOverride}</span>}
+                          {group.themeOverride && <span>主题：{group.themeOverride}</span>}
+                          {!group.versionOverride && !group.themeOverride && mainStatus.version && (
+                            <span>{mainStatus.type === 'java' ? 'Java' : 'Bedrock'} {mainStatus.version}</span>
+                          )}
                         </div>
                       </div>
+                    )}
 
-                      {/* Version or Theme override */}
-                      {group.versionOverride ? (
-                        <div style={{ marginTop: '6px', fontSize: '12px', color: 'var(--color-text-light)' }}>
-                          {group.versionOverride}
-                        </div>
-                      ) : group.themeOverride ? (
-                        <div style={{ marginTop: '6px', fontSize: '12px', color: 'var(--color-text-light)' }}>
-                          主题：{group.themeOverride}
-                        </div>
-                      ) : mainStatus.version ? (
-                        <div style={{ marginTop: '6px', fontSize: '12px', color: 'var(--color-text-light)' }}>
-                          {mainStatus.type === 'java' ? 'Java' : 'Bedrock'} {mainStatus.version} (协议 {mainStatus.protocol ?? '—'})
-                        </div>
-                      ) : null}
-                    </>
-                  )}
+                    {/* Version/theme when offline */}
+                    {!(mainStatus && isOnline) && (
+                      <div style={{ marginTop: 6, fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
+                        {group.versionOverride && <span>{group.versionOverride}</span>}
+                        {group.themeOverride && <span>主题：{group.themeOverride}</span>}
+                      </div>
+                    )}
 
-                  {/* Show version/theme even when offline */}
-                  {!(mainStatus && isOnline) && (
-                    <>
-                      {group.versionOverride && (
-                        <div style={{ marginTop: '6px', fontSize: '12px', color: 'var(--color-text-light)' }}>
-                          {group.versionOverride}
-                        </div>
-                      )}
-                      {group.themeOverride && (
-                        <div style={{ marginTop: '6px', fontSize: '12px', color: 'var(--color-text-light)' }}>
-                          主题：{group.themeOverride}
-                        </div>
-                      )}
-                    </>
-                  )}
-
-                  {/* Sub-servers */}
-                  {group.subs && group.subs.length > 0 && (
-                    <div className="mc-group-subs">
-                      <p className="mc-group-subs-title">下设服务器</p>
-                      {group.subs.map((sub) => {
-                        const key = `${sub.address}:${sub.port ?? 25565}`;
-                        const subStatus = subStatuses.get(key);
-                        const subOnline = subStatus?.server_status === 'online';
-                        return (
-                          <div key={key} className="mc-sub-card">
-                            <span className="mc-sub-card-name">{sub.name}</span>
-                            <span className={`mc-status-pill ${subOnline ? 'online' : 'offline'}`}>
-                              {subOnline ? <><Wifi className="w-3 h-3" /> 在线</> : <><WifiOff className="w-3 h-3" /> 离线</>}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
+                    {/* Sub-servers */}
+                    {group.subs && group.subs.length > 0 && (
+                      <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        {group.subs.map((sub) => {
+                          const key = `${sub.address}:${sub.port ?? 25565}`;
+                          const subStatus = subStatuses.get(key);
+                          const subOnline = subStatus?.server_status === 'online';
+                          return (
+                            <div key={key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 8px', borderRadius: 6, background: 'rgba(255,255,255,0.04)' }}>
+                              <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)' }}>{sub.name}</span>
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10, fontWeight: 600, color: subOnline ? '#4ade80' : '#f87171' }}>
+                                {subOnline ? <><Wifi style={{ width: 9, height: 9 }} /> 在线</> : <><WifiOff style={{ width: 9, height: 9 }} /> 离线</>}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

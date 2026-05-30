@@ -6,7 +6,7 @@
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -43,6 +43,17 @@ async def _get_jwt_user_id(creds: HTTPAuthorizationCredentials = Depends(securit
     if not user_id:
         raise HTTPException(status_code=401, detail="invalid token")
     return int(user_id)
+
+
+async def _get_jwt_user_id_optional(creds: HTTPAuthorizationCredentials = Depends(security)) -> int | None:
+    """可选认证：有 token 返回 user_id，无 token 返回 None"""
+    if not creds:
+        return None
+    payload = decode_jwt(creds.credentials)
+    if not payload:
+        return None
+    user_id = payload.get("sub")
+    return int(user_id) if user_id else None
 
 
 # ========== 登录 / 注册 / 验证码 ==========
@@ -153,19 +164,19 @@ async def create_profile(
 
 
 @router.delete("/api/me/profiles/{pid}")
-async def delete_profile(pid: str, user_id: int = Depends(_get_jwt_user_id), db: AsyncSession = Depends(get_db)):
+async def delete_profile(pid: int, user_id: int = Depends(_get_jwt_user_id), db: AsyncSession = Depends(get_db)):
     await site_backend.delete_profile(db, user_id, pid)
     return {"ok": True}
 
 
 @router.delete("/api/me/profiles/{pid}/skin")
-async def clear_profile_skin(pid: str, user_id: int = Depends(_get_jwt_user_id), db: AsyncSession = Depends(get_db)):
+async def clear_profile_skin(pid: int, user_id: int = Depends(_get_jwt_user_id), db: AsyncSession = Depends(get_db)):
     await site_backend.clear_profile_texture(db, user_id, pid, "skin")
     return {"ok": True}
 
 
 @router.delete("/api/me/profiles/{pid}/cape")
-async def clear_profile_cape(pid: str, user_id: int = Depends(_get_jwt_user_id), db: AsyncSession = Depends(get_db)):
+async def clear_profile_cape(pid: int, user_id: int = Depends(_get_jwt_user_id), db: AsyncSession = Depends(get_db)):
     await site_backend.clear_profile_texture(db, user_id, pid, "cape")
     return {"ok": True}
 
@@ -218,7 +229,7 @@ async def upload_texture_to_library(
         db.add(Wardrobe(user_id=user_id, texture_id=tex.id))
 
     await db.commit()
-    return {"hash": h, "type": texture_type, "note": note, "is_public": 1 if public_bool else 0, "model": model}
+    return {"hash": h, "type": texture_type, "name": note or f"{texture_type}-{h[:8]}", "is_public": 1 if public_bool else 0, "model": model}
 
 
 @router.get("/api/me/textures")
@@ -230,9 +241,10 @@ async def list_my_textures(user_id: int = Depends(_get_jwt_user_id), db: AsyncSe
     base_url = settings.site_url.rstrip("/") + "/static/textures/"
     return [
         {
+            "id": r.id,
             "hash": r.hash,
             "type": r.type,
-            "note": r.name,
+            "name": r.name,
             "model": r.model,
             "is_public": r.is_public,
             "url": base_url + r.hash + ".png",
@@ -262,9 +274,10 @@ async def get_my_texture_detail(
 
     base_url = settings.site_url.rstrip("/") + "/static/textures/"
     return {
+        "id": tex.id,
         "hash": tex.hash,
         "type": tex.type,
-        "note": tex.name,
+        "name": tex.name,
         "model": tex.model,
         "is_public": tex.is_public,
         "uploader_id": tex.uploader_id,
@@ -300,9 +313,10 @@ async def update_my_texture(
     base_url = settings.site_url.rstrip("/") + "/static/textures/"
     return {
         "ok": True,
+        "id": tex.id,
         "hash": tex.hash,
         "type": tex.type,
-        "note": tex.name,
+        "name": tex.name,
         "model": tex.model,
         "is_public": tex.is_public,
         "url": base_url + tex.hash + ".png",
@@ -360,6 +374,8 @@ async def apply_texture_to_profile(
 ):
     profile_id = body.get("profile_id")
     texture_type = body.get("texture_type")
+    if profile_id is not None:
+        profile_id = int(profile_id)
     try:
         await site_backend.apply_texture_to_profile(db, user_id, profile_id, hash, texture_type)
         return {"ok": True}
@@ -408,9 +424,18 @@ async def textures_upload(
     if not already:
         db.add(Wardrobe(user_id=user_id, texture_id=tex.id))
 
-    # 应用到角色
+    # 应用到角色 — uuid form field may be a player UUID or numeric ID
     try:
-        await site_backend.apply_texture_to_profile(db, user_id, uuid, h, texture_type)
+        # Try to interpret as numeric ID first
+        try:
+            player_id = int(uuid)
+        except (ValueError, TypeError):
+            # Lookup player by UUID to get numeric ID
+            player = (await db.execute(select(Player).where(Player.uuid == uuid, Player.owner_id == user_id))).scalar_one_or_none()
+            if not player:
+                raise ValueError("Profile not found")
+            player_id = player.id
+        await site_backend.apply_texture_to_profile(db, user_id, player_id, h, texture_type)
     except ValueError as e:
         raise HTTPException(status_code=403, detail=str(e))
 
@@ -425,6 +450,7 @@ async def get_skin_library(
     page: int = 1,
     limit: int = 20,
     texture_type: str | None = None,
+    user_id: int | None = Depends(_get_jwt_user_id_optional),
     db: AsyncSession = Depends(get_db),
 ):
     enabled_row = (await db.execute(
@@ -435,15 +461,37 @@ async def get_skin_library(
         raise HTTPException(status_code=403, detail="Skin library is disabled by administrator")
 
     offset = (page - 1) * limit
-    q = select(Texture).where(Texture.is_public == True)
+
+    # Build visibility filter based on auth status
+    from app.utils.user_groups import resolve_user_group, SUPER_ADMIN_GROUP
+    if user_id is not None:
+        user_row = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+        user_group = resolve_user_group(
+            getattr(user_row, "user_group", None),
+            getattr(user_row, "is_admin", 0),
+        ) if user_row else "user"
+        if user_group == SUPER_ADMIN_GROUP:
+            base_q = select(Texture)
+            count_q = select(func.count(Texture.id))
+        else:
+            base_q = select(Texture).where(
+                or_(Texture.is_public == True, Texture.uploader_id == user_id)
+            )
+            count_q = select(func.count(Texture.id)).where(
+                or_(Texture.is_public == True, Texture.uploader_id == user_id)
+            )
+    else:
+        base_q = select(Texture).where(Texture.is_public == True)
+        count_q = select(func.count(Texture.id)).where(Texture.is_public == True)
+
     if texture_type in ("skin", "cape"):
-        q = q.where(Texture.type == texture_type)
-    total = (await db.execute(
-        select(func.count(Texture.id)).where(Texture.is_public == True)
-    )).scalar_one()
+        base_q = base_q.where(Texture.type == texture_type)
+        count_q = count_q.where(Texture.type == texture_type)
+
+    total = (await db.execute(count_q)).scalar_one()
 
     items = (await db.execute(
-        q.order_by(Texture.created_at.desc()).offset(offset).limit(limit)
+        base_q.order_by(Texture.created_at.desc()).offset(offset).limit(limit)
     )).scalars().all()
 
     # 批量获取上传者信息

@@ -6,8 +6,9 @@ export function SiteFooter() {
   const pathname = usePathname();
   const isAuthPage = ['/login', '/register', '/reset-password'].includes(pathname);
   const isHome = pathname === '/';
+  const isServers = pathname === '/servers';
 
-  if (isAuthPage || isHome) return null;
+  if (isAuthPage || isHome || isServers) return null;
 
   return (
     <footer className="mt-auto border-t" style={{ borderColor: 'var(--color-border)' }}>

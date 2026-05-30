@@ -68,10 +68,10 @@ export default function SkinLibraryPage() {
         <div>
           <p className="section-kicker" style={{ marginBottom: 8 }}>LIBRARY</p>
           <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--color-heading)', margin: 0 }}>
-            公共皮肤库
+            皮肤库
           </h1>
           <p style={{ fontSize: 14, color: 'var(--color-text-light)', marginTop: 4 }}>
-            社区上传的公开材质，可一键收藏到自己的衣柜。
+            浏览所有公开材质和你的私有材质，可一键收藏到衣柜。
           </p>
         </div>
 
@@ -120,7 +120,7 @@ export default function SkinLibraryPage() {
                     style={{
                       aspectRatio: '1', background: 'var(--color-background-mute)',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      overflow: 'hidden',
+                      overflow: 'hidden', position: 'relative',
                     }}
                   >
                     {t.type === 'skin' ? (
@@ -132,6 +132,18 @@ export default function SkinLibraryPage() {
                         alt={t.name}
                         style={{ width: '100%', height: '100%', objectFit: 'contain', imageRendering: 'pixelated' }}
                       />
+                    )}
+                    {!t.is_public && (
+                      <span
+                        style={{
+                          position: 'absolute', top: 6, right: 6,
+                          padding: '2px 8px', borderRadius: 6, fontSize: 10, fontWeight: 600,
+                          background: 'color-mix(in srgb, #888 15%, transparent)',
+                          color: '#888',
+                        }}
+                      >
+                        私有
+                      </span>
                     )}
                   </div>
 
@@ -156,7 +168,7 @@ export default function SkinLibraryPage() {
             })}
             {items.length === 0 && (
               <p style={{ color: 'var(--color-text-light)', gridColumn: '1 / -1' }}>
-                公共皮肤库暂时是空的。
+                皮肤库暂时是空的。
               </p>
             )}
           </div>

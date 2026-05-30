@@ -81,10 +81,10 @@ export default function HomePage() {
                 rel="noreferrer"
               >
                 <img
-                  src="//pub.idqqimg.com/wpa/images/group.png"
+                  src="/img/qq.webp"
                   alt="像素北科交流群"
                   title="像素北科交流群"
-                  style={{ verticalAlign: 'middle', marginRight: 6, border: 0 }}
+                  style={{ verticalAlign: 'middle', marginRight: 6, borderRadius: 6, height: 24 }}
                 />
                 像素北科交流群
               </a>
