@@ -1,8 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { api } from '@/lib/api';
-import { Loader2, Plus, Trash2, Shirt } from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { rawApi } from '@/lib/api';
+import { Loader2, Plus, Trash2, Shirt, X, Link2, Check } from 'lucide-react';
+import { SkinViewer } from '@/components/skin/SkinViewer';
+import { SkinAvatar } from '@/components/skin/SkinAvatar';
 
 type Texture = {
   id: number;
@@ -10,6 +13,7 @@ type Texture = {
   model: string;
   name: string;
   url: string;
+  hash: string;
 };
 
 type Player = {
@@ -23,19 +27,28 @@ type Player = {
 };
 
 export default function RolesPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [players, setPlayers] = useState<Player[]>([]);
   const [wardrobe, setWardrobe] = useState<Texture[]>([]);
   const [loading, setLoading] = useState(true);
   const [newName, setNewName] = useState('');
   const [creating, setCreating] = useState(false);
+  const [createProgress, setCreateProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
+
+  // Microsoft auth state
+  const [msProfile, setMsProfile] = useState<any>(null);
+  const [msHasGame, setMsHasGame] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [showMsDialog, setShowMsDialog] = useState(false);
 
   async function refresh() {
     setLoading(true);
     try {
       const [p, w] = await Promise.all([
-        api.get<Player[]>('/players'),
-        api.get<Texture[]>('/textures/wardrobe'),
+        rawApi.get<Player[]>('/api/players'),
+        rawApi.get<Texture[]>('/api/me/textures'),
       ]);
       setPlayers(p.data);
       setWardrobe(w.data);
@@ -46,20 +59,55 @@ export default function RolesPage() {
 
   useEffect(() => {
     refresh();
+
+    // Handle Microsoft auth callback
+    const msToken = searchParams.get('ms_token');
+    const msError = searchParams.get('error');
+    if (msError) {
+      setError(decodeURIComponent(msError));
+      router.replace('/dashboard/roles');
+    } else if (msToken) {
+      rawApi.post('/api/microsoft/get-profile', { ms_token: msToken })
+        .then((res) => {
+          setMsProfile(res.data.profile);
+          setMsHasGame(res.data.has_game);
+          setShowMsDialog(true);
+        })
+        .catch((err) => {
+          setError(err?.response?.data?.detail || '获取角色信息失败');
+        });
+      router.replace('/dashboard/roles');
+    }
   }, []);
 
   async function createPlayer(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setCreating(true);
+    setCreateProgress(0);
+
+    // Simulate progress bar for UX feedback
+    const progressInterval = setInterval(() => {
+      setCreateProgress((prev) => {
+        if (prev >= 90) return prev;
+        return prev + Math.random() * 15;
+      });
+    }, 200);
+
     try {
-      await api.post('/players', { name: newName });
+      await rawApi.post('/api/me/profiles', { name: newName });
+      setCreateProgress(100);
+      clearInterval(progressInterval);
       setNewName('');
       await refresh();
     } catch (err: any) {
       setError(err?.response?.data?.detail || '创建失败');
     } finally {
-      setCreating(false);
+      clearInterval(progressInterval);
+      setTimeout(() => {
+        setCreating(false);
+        setCreateProgress(0);
+      }, 500);
     }
   }
 
@@ -72,14 +120,72 @@ export default function RolesPage() {
       if (textureId === null) body.clear_cape = true;
       else body.cape_texture_id = textureId;
     }
-    await api.post(`/players/${playerId}/bind`, body);
+    await rawApi.post(`/api/players/${playerId}/bind`, body);
     await refresh();
   }
 
   async function removePlayer(id: number) {
     if (!confirm('删除该角色？皮肤绑定将被清除。')) return;
-    await api.delete(`/players/${id}`);
+    await rawApi.delete(`/api/players/${id}`);
     await refresh();
+  }
+
+  async function clearSkin(playerId: number) {
+    if (!confirm('确定要清除该角色的皮肤吗？')) return;
+    await rawApi.post(`/api/players/${playerId}/bind`, { clear_skin: true });
+    await refresh();
+  }
+
+  async function clearCape(playerId: number) {
+    if (!confirm('确定要清除该角色的披风吗？')) return;
+    await rawApi.post(`/api/players/${playerId}/bind`, { clear_cape: true });
+    await refresh();
+  }
+
+  async function startMicrosoftAuth() {
+    try {
+      const res = await rawApi.get('/api/microsoft/auth-url');
+      window.location.href = res.data.auth_url;
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || '启动微软登录失败');
+    }
+  }
+
+  async function importMicrosoftProfile() {
+    if (!msProfile) return;
+    setImporting(true);
+    try {
+      const skinData = msProfile.skins?.[0];
+      const capeData = msProfile.capes?.[0];
+      await rawApi.post('/api/microsoft/import-profile', {
+        profile_id: msProfile.id,
+        profile_name: msProfile.name,
+        skin_url: skinData?.url || null,
+        skin_variant: skinData?.variant || 'classic',
+        cape_url: capeData?.url || null,
+      });
+      setShowMsDialog(false);
+      setMsProfile(null);
+      await refresh();
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || '导入失败');
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  function formatUUID(uuid: string) {
+    if (uuid.length === 32) {
+      return `${uuid.slice(0, 8)}-${uuid.slice(8, 12)}-${uuid.slice(12, 16)}-${uuid.slice(16, 20)}-${uuid.slice(20)}`;
+    }
+    return uuid;
+  }
+
+  function texturesUrl(url: string | null) {
+    if (!url) return '';
+    // If url is already absolute, use it
+    if (url.startsWith('http')) return url;
+    return url;
   }
 
   return (
@@ -104,37 +210,132 @@ export default function RolesPage() {
             className="input"
             placeholder="2-24 字符，不含空格"
             required
+            disabled={creating}
           />
         </label>
         <button type="submit" disabled={creating} className="btn-primary">
           {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus style={{ width: 16, height: 16 }} />}
-          创建
+          新建角色
+        </button>
+        <button type="button" onClick={startMicrosoftAuth} className="btn-ghost" style={{ padding: '8px 16px', fontSize: 13, borderColor: '#22c55e', color: '#22c55e' }}>
+          <Link2 style={{ width: 14, height: 14 }} />
+          绑定正版角色
         </button>
         {error && <p style={{ fontSize: 13, color: '#dc2626', width: '100%' }}>{error}</p>}
+        {/* Progress bar during creation */}
+        {creating && (
+          <div style={{ width: '100%' }}>
+            <div
+              style={{
+                height: 4,
+                borderRadius: 2,
+                background: 'var(--color-background-mute)',
+                overflow: 'hidden',
+              }}
+            >
+              <div
+                style={{
+                  height: '100%',
+                  borderRadius: 2,
+                  background: 'var(--color-primary)',
+                  width: `${Math.min(createProgress, 100)}%`,
+                  transition: 'width 0.3s ease',
+                }}
+              />
+            </div>
+            <p style={{ fontSize: 12, color: 'var(--color-text-light)', marginTop: 4 }}>
+              正在创建角色…
+            </p>
+          </div>
+        )}
       </form>
 
       {/* Player list */}
       {loading ? (
         <Loader2 className="w-5 h-5 animate-spin" style={{ color: 'var(--color-text-light)' }} />
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+            gap: 16,
+          }}
+        >
           {players.map((p) => (
-            <div key={p.id} className="surface-card" style={{ padding: 24 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: 16 }}>
-                <div>
-                  <h3 style={{ fontSize: 18, fontWeight: 600, color: 'var(--color-heading)', margin: 0 }}>{p.name}</h3>
-                  <code style={{ fontSize: 12, color: 'var(--color-text-light)' }}>{p.uuid}</code>
+            <div key={p.id} className="surface-card" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              {/* 3D Player preview */}
+              <div
+                style={{
+                  height: 260,
+                  background: 'var(--color-background-mute)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  position: 'relative',
+                }}
+              >
+                {p.skin_url ? (
+                  <SkinViewer
+                    skinUrl={texturesUrl(p.skin_url)}
+                    capeUrl={p.cape_url ? texturesUrl(p.cape_url) : undefined}
+                    width={180}
+                    height={250}
+                    autoRotate
+                    animate
+                    zoom={0.8}
+                  />
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, color: 'var(--color-text-light)' }}>
+                    <Shirt style={{ width: 40, height: 40 }} />
+                    <span style={{ fontSize: 13 }}>未设置皮肤</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Player info */}
+              <div style={{ padding: 16, textAlign: 'center', background: 'var(--color-background-soft)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 4 }}>
+                  {p.skin_url && (
+                    <SkinAvatar skinUrl={texturesUrl(p.skin_url)} size={24} style={{ borderRadius: 4 }} />
+                  )}
+                  <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--color-heading)' }}>{p.name}</span>
                 </div>
+                <p style={{ fontSize: 12, color: 'var(--color-text-light)', fontFamily: 'monospace' }}>{p.uuid}</p>
+              </div>
+
+              {/* Actions */}
+              <div style={{ display: 'flex', gap: 8, padding: '12px 16px', borderTop: '1px solid var(--color-border)' }}>
+                {p.skin_url && (
+                  <button
+                    onClick={() => clearSkin(p.id)}
+                    className="btn-ghost"
+                    style={{ flex: 1, padding: '6px 8px', fontSize: 12 }}
+                    title="清除皮肤"
+                  >
+                    <X style={{ width: 12, height: 12 }} /> 皮肤
+                  </button>
+                )}
+                {p.cape_url && (
+                  <button
+                    onClick={() => clearCape(p.id)}
+                    className="btn-ghost"
+                    style={{ flex: 1, padding: '6px 8px', fontSize: 12 }}
+                    title="清除披风"
+                  >
+                    <X style={{ width: 12, height: 12 }} /> 披风
+                  </button>
+                )}
                 <button
                   onClick={() => removePlayer(p.id)}
-                  className="btn-destructive"
-                  style={{ padding: '6px 12px', fontSize: 13 }}
+                  className="btn-ghost"
+                  style={{ flex: 1, padding: '6px 8px', fontSize: 12, color: '#dc2626' }}
                 >
-                  <Trash2 style={{ width: 14, height: 14 }} /> 删除角色
+                  <Trash2 style={{ width: 12, height: 12 }} /> 删除
                 </button>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
+              {/* Bind slots */}
+              <div style={{ padding: '0 16px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <BindSlot
                   label="皮肤"
                   type="skin"
@@ -155,8 +356,66 @@ export default function RolesPage() {
             </div>
           ))}
           {players.length === 0 && (
-            <p style={{ color: 'var(--color-text-light)' }}>还没有角色，创建一个开始游戏。</p>
+            <p style={{ color: 'var(--color-text-light)', gridColumn: '1 / -1' }}>
+              还没有角色，创建一个开始游戏。
+            </p>
           )}
+        </div>
+      )}
+
+      {/* Microsoft auth dialog */}
+      {showMsDialog && msProfile && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)',
+          }}
+          onClick={() => { setShowMsDialog(false); setMsProfile(null); }}
+        >
+          <div
+            className="surface-card"
+            style={{ width: '90%', maxWidth: 420, padding: 24 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ fontSize: 18, fontWeight: 600, color: 'var(--color-heading)', marginBottom: 16 }}>绑定正版角色</h3>
+            <div
+              style={{
+                display: 'flex', alignItems: 'center', gap: 20, padding: 20,
+                background: 'var(--color-background-soft)', borderRadius: 8,
+              }}
+            >
+              <div style={{ flex: 1 }}>
+                <p style={{ fontSize: 20, fontWeight: 600, color: 'var(--color-heading)', margin: 0 }}>{msProfile.name}</p>
+                <p style={{ fontSize: 13, fontFamily: 'monospace', color: 'var(--color-text-light)', marginTop: 4 }}>
+                  {formatUUID(msProfile.id || '')}
+                </p>
+              </div>
+              <span
+                style={{
+                  padding: '4px 12px', borderRadius: 6, fontSize: 13, fontWeight: 600,
+                  background: msHasGame ? 'color-mix(in srgb, #22c55e 15%, transparent)' : 'color-mix(in srgb, #ef4444 15%, transparent)',
+                  color: msHasGame ? '#22c55e' : '#ef4444',
+                }}
+              >
+                {msHasGame ? '拥有游戏' : '无游戏权限'}
+              </span>
+            </div>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 16 }}>
+              <button onClick={() => { setShowMsDialog(false); setMsProfile(null); }} className="btn-ghost" style={{ padding: '8px 16px', fontSize: 13 }} disabled={importing}>
+                取消
+              </button>
+              <button
+                onClick={importMicrosoftProfile}
+                disabled={importing || !msHasGame}
+                className="btn-primary"
+                style={{ padding: '8px 16px', fontSize: 13 }}
+              >
+                {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check style={{ width: 14, height: 14 }} />}
+                确认导入
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -180,38 +439,41 @@ function BindSlot({
 }) {
   const options = wardrobe.filter((t) => t.type === type);
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--color-text-light)' }}>{label}</p>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <p style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-text-light)' }}>{label}</p>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <div
           style={{
-            width: 64, height: 64, borderRadius: 12,
+            width: 32, height: 32, borderRadius: 6,
             background: 'var(--color-background-mute)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             overflow: 'hidden', flexShrink: 0,
           }}
         >
           {currentUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={currentUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', imageRendering: 'pixelated' }} />
+            type === 'skin' ? (
+              <SkinAvatar skinUrl={currentUrl} size={32} style={{ borderRadius: 6 }} />
+            ) : (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img src={currentUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', imageRendering: 'pixelated' }} />
+            )
           ) : (
-            <Shirt style={{ width: 24, height: 24, color: 'var(--color-text-light)' }} />
+            <Shirt style={{ width: 16, height: 16, color: 'var(--color-text-light)' }} />
           )}
         </div>
-        <div style={{ flex: 1 }}>
-          <select
-            value={currentId ?? ''}
-            onChange={(e) => onBind(e.target.value ? Number(e.target.value) : null)}
-            className="input"
-          >
-            <option value="">未绑定</option>
-            {options.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name} {type === 'skin' ? `(${t.model})` : ''}
-              </option>
-            ))}
-          </select>
-        </div>
+        <select
+          value={currentId ?? ''}
+          onChange={(e) => onBind(e.target.value ? Number(e.target.value) : null)}
+          className="input"
+          style={{ flex: 1, fontSize: 12, padding: '6px 8px' }}
+        >
+          <option value="">未绑定</option>
+          {options.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name || t.hash.slice(0, 8)} {type === 'skin' ? `(${t.model})` : ''}
+            </option>
+          ))}
+        </select>
       </div>
     </div>
   );

@@ -1,13 +1,16 @@
 import { create } from 'zustand';
-import { api } from '@/lib/api';
+import { rawApi } from '@/lib/api';
 
 export type User = {
   id: number;
   email: string;
   username: string;
+  display_name: string;
   user_group: 'super_admin' | 'admin' | 'teacher' | 'user';
   avatar_hash: string | null;
   email_verified: boolean;
+  is_banned: boolean;
+  banned_until: number | null;
 };
 
 type State = {
@@ -33,7 +36,7 @@ export const useUserStore = create<State>((set, get) => ({
     }
     set({ loading: true });
     try {
-      const r = await api.get<User>('/users/me');
+      const r = await rawApi.get<User>('/api/me');
       set({ user: r.data, loading: false, loaded: true });
     } catch {
       localStorage.removeItem('vustb_token');

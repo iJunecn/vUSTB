@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { api } from '@/lib/api';
+import { rawApi } from '@/lib/api';
 import { useUserStore } from '@/stores/user';
 import { Loader2, Upload, Save, Eye } from 'lucide-react';
 import { SkinViewer } from '@/components/skin/SkinViewer';
@@ -51,16 +51,20 @@ export default function SkinUploadPage() {
 
   async function handleSave() {
     if (!previewFile) return;
+    if (!name.trim()) {
+      setMsg({ ok: false, text: '请为材质起一个名称' });
+      return;
+    }
     setUploading(true);
     setMsg(null);
     try {
       const fd = new FormData();
       fd.append('file', previewFile);
-      fd.append('type', type);
-      fd.append('model', model);
-      if (name) fd.append('name', name);
+      fd.append('texture_type', type);
+      if (type === 'skin') fd.append('model', model === 'slim' ? 'slim' : 'default');
+      fd.append('note', name.trim());
       fd.append('is_public', String(isPublic));
-      await api.post('/textures/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      await rawApi.post('/api/me/textures', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       setMsg({ ok: true, text: '上传成功，已加入衣柜。' });
       // Reset to select step after successful upload
       resetForm();
@@ -193,12 +197,13 @@ export default function SkinUploadPage() {
               </div>
 
               <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <span style={{ fontSize: 13, fontWeight: 500 }}>名称</span>
+                <span style={{ fontSize: 13, fontWeight: 500 }}>名称 <span style={{ color: '#dc2626' }}>*</span></span>
                 <input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="给材质起个名字（可选）"
+                  placeholder="给材质起个名字（必填）"
                   className="input"
+                  required
                 />
               </label>
 
@@ -224,7 +229,7 @@ export default function SkinUploadPage() {
               </button>
               <button
                 onClick={handleSave}
-                disabled={uploading}
+                disabled={uploading || !name.trim()}
                 className="btn-primary"
                 style={{ flex: 2 }}
               >
