@@ -42,7 +42,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     );
   }
 
-  const initial = user.username.charAt(0).toUpperCase();
+  const displayName = user.username || user.display_name || user.email || '';
+  const initial = (displayName.charAt(0) || '?').toUpperCase();
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
@@ -116,7 +117,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
             <div style={{ minWidth: 0 }}>
               <p style={{ fontWeight: 600, fontSize: 14, color: 'var(--color-heading)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {user.username}
+                {displayName}
               </p>
               <p style={{ fontSize: 12, color: 'var(--color-text-light)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {user.email}

@@ -264,27 +264,39 @@ class SiteBackend:
             raise HTTPException(status_code=404, detail="user not found")
 
         players = (await db.execute(select(Player).where(Player.owner_id == user.id))).scalars().all()
-        profiles_list = [
-            {
+
+        # 收集需要查的 texture id，一次性查出 hash/model
+        tex_ids = {tid for p in players for tid in (p.skin_texture_id, p.cape_texture_id) if tid}
+        tex_map: dict[int, Texture] = {}
+        if tex_ids:
+            rows = (await db.execute(select(Texture).where(Texture.id.in_(tex_ids)))).scalars().all()
+            tex_map = {t.id: t for t in rows}
+
+        profiles_list = []
+        for p in players:
+            skin = tex_map.get(p.skin_texture_id) if p.skin_texture_id else None
+            cape = tex_map.get(p.cape_texture_id) if p.cape_texture_id else None
+            profiles_list.append({
                 "id": p.uuid,
                 "name": p.name,
-                "model": "slim" if _player_skin_model(db, p) == "slim" else "default",
-                "skin_hash": _player_skin_hash(db, p),
-                "cape_hash": _player_cape_hash(db, p),
-            }
-            for p in players
-        ]
+                "model": (skin.model if skin else "default") or "default",
+                "skin_hash": skin.hash if skin else None,
+                "cape_hash": cape.hash if cape else None,
+            })
 
         user_group = resolve_user_group(getattr(user, "user_group", None), user.is_admin)
         return {
-            "id": str(user.id),
+            "id": user.id,
             "email": user.email,
-            "display_name": user.display_name,
+            "username": user.username,
+            "display_name": user.display_name or user.username,
             "avatar_hash": getattr(user, "avatar_hash", None),
             "avatar_url": self._avatar_url_from_hash(getattr(user, "avatar_hash", None)),
             "is_admin": bool(is_admin_group(user_group)),
             "user_group": user_group,
             "user_group_meta": get_user_group_meta(user_group),
+            "email_verified": bool(getattr(user, "email_verified", False)),
+            "is_banned": bool(getattr(user, "is_banned", False)),
             "banned_until": getattr(user, "banned_until", None),
             "profiles": profiles_list,
         }
@@ -480,15 +492,6 @@ def _validate_strong_password(password: str) -> list[str]:
     if (has_upper + has_lower + has_digit) == 1 and not has_special:
         errors.append("请使用更复杂的密码")
     return errors
-
-
-def _player_skin_hash(db: AsyncSession, player: Player) -> str | None:
-    """Quick access — use in list context only; for accurate data query the texture."""
-    return None  # Will be resolved via join in actual queries
-
-
-def _player_cape_hash(db: AsyncSession, player: Player) -> str | None:
-    return None
 
 
 site_backend = SiteBackend()
