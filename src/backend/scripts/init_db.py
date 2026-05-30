@@ -2,13 +2,15 @@
 import asyncio
 
 from app.database import Base, engine
+from app.database.schema_sync import sync_schema
 from app import models  # noqa: F401  确保所有模型被导入注册到 Base.metadata
 
 
 async def init_db() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    print("[init_db] all tables created")
+        await sync_schema(conn)
+    print("[init_db] all tables created / synced")
 
 
 if __name__ == "__main__":
