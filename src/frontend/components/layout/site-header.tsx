@@ -78,6 +78,11 @@ export function SiteHeader() {
           className="flex items-center gap-2 font-black text-lg tracking-tight rounded-lg px-3 py-1 transition-colors"
           style={{ color: logoColor }}
         >
+          <img
+            src="/img/logo.webp"
+            alt="像素北科"
+            style={{ width: 28, height: 28, borderRadius: 4, objectFit: 'cover' }}
+          />
           像素北科
         </Link>
 
