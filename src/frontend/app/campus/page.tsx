@@ -1,13 +1,13 @@
 'use client';
 
 import { useState, lazy, Suspense } from 'react';
-import { Settings, Play, ChevronDown } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 
-const CampusCanvas = lazy(() =>
-  import('@/components/campus/campus-canvas').then((m) => ({ default: m.CampusCanvas }))
+const CampusEngine = lazy(() =>
+  import('@/components/campus/campus-engine').then((m) => ({ default: m.CampusEngine }))
 );
 
-type AccordionKey = 'desktop' | 'mobile' | null;
+type AccordionKey = 'desktop' | 'mobile' | 'legend' | null;
 
 export default function CampusPage() {
   const [activeAccordion, setActiveAccordion] = useState<AccordionKey>(null);
@@ -53,7 +53,7 @@ export default function CampusPage() {
             lineHeight: 1.6,
             fontSize: '14px',
           }}>
-            在浏览器中以鸟瞰视角探索像素重构的北科校园。拖拽旋转视角，滚轮缩放距离。
+            在浏览器中渲染 Minecraft 存档，探索像素重构的北科校园。使用鼠标旋转视角，滚轮缩放距离。
           </p>
 
           {/* Status indicator */}
@@ -89,183 +89,77 @@ export default function CampusPage() {
           {/* Accordions */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
             {/* Desktop Controls Accordion */}
-            <div style={{
-              border: '1px solid var(--color-border)',
-              borderRadius: '12px',
-              overflow: 'hidden',
-              background: activeAccordion === 'desktop' ? 'var(--color-background-mute)' : 'var(--color-background-soft)',
-              transition: 'background 0.2s ease',
-            }}>
-              <button
-                type="button"
-                onClick={() => toggleAccordion('desktop')}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  width: '100%',
-                  padding: '12px 14px',
-                  border: 'none',
-                  background: 'transparent',
-                  color: 'var(--color-text)',
-                  fontSize: '14px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                <span>操作说明</span>
-                <ChevronDown style={{
-                  width: '16px',
-                  height: '16px',
-                  transition: 'transform 0.2s ease',
-                  transform: activeAccordion === 'desktop' ? 'rotate(180deg)' : 'rotate(0)',
-                }} />
-              </button>
-              {activeAccordion === 'desktop' && (
-                <ul style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(2, 1fr)',
-                  gap: '6px 14px',
-                  margin: 0,
-                  padding: '0 14px 14px',
-                  listStyle: 'disc inside',
-                  color: 'var(--color-text-light)',
-                  fontSize: '14px',
-                }}>
-                  <li>鼠标拖拽 旋转视角</li>
-                  <li>滚轮 缩放距离</li>
-                  <li>鸟瞰全局视角</li>
-                  <li>双击可重置视角</li>
-                </ul>
-              )}
-            </div>
+            <Accordion
+              title="操作说明"
+              isOpen={activeAccordion === 'desktop'}
+              onToggle={() => toggleAccordion('desktop')}
+            >
+              <ul style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(2, 1fr)',
+                gap: '6px 14px',
+                margin: 0,
+                padding: '0 14px 14px',
+                listStyle: 'disc inside',
+                color: 'var(--color-text-light)',
+                fontSize: '14px',
+              }}>
+                <li>鼠标拖拽 旋转视角</li>
+                <li>滚轮 缩放距离</li>
+                <li>WASD 移动位置</li>
+                <li>Space/Shift 升降</li>
+              </ul>
+            </Accordion>
 
             {/* Mobile Controls Accordion */}
-            <div style={{
-              border: '1px solid var(--color-border)',
-              borderRadius: '12px',
-              overflow: 'hidden',
-              background: activeAccordion === 'mobile' ? 'var(--color-background-mute)' : 'var(--color-background-soft)',
-              transition: 'background 0.2s ease',
-            }}>
-              <button
-                type="button"
-                onClick={() => toggleAccordion('mobile')}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  width: '100%',
-                  padding: '12px 14px',
-                  border: 'none',
-                  background: 'transparent',
-                  color: 'var(--color-text)',
-                  fontSize: '14px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                <span>移动端操作说明</span>
-                <ChevronDown style={{
-                  width: '16px',
-                  height: '16px',
-                  transition: 'transform 0.2s ease',
-                  transform: activeAccordion === 'mobile' ? 'rotate(180deg)' : 'rotate(0)',
-                }} />
-              </button>
-              {activeAccordion === 'mobile' && (
-                <ul style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr',
-                  gap: '6px',
-                  margin: 0,
-                  padding: '0 14px 14px',
-                  listStyle: 'disc inside',
-                  color: 'var(--color-text-light)',
-                  fontSize: '14px',
-                }}>
-                  <li>单指拖动 旋转视角</li>
-                  <li>双指缩放 调节距离</li>
-                </ul>
-              )}
-            </div>
+            <Accordion
+              title="移动端操作说明"
+              isOpen={activeAccordion === 'mobile'}
+              onToggle={() => toggleAccordion('mobile')}
+            >
+              <ul style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr',
+                gap: '6px',
+                margin: 0,
+                padding: '0 14px 14px',
+                listStyle: 'disc inside',
+                color: 'var(--color-text-light)',
+                fontSize: '14px',
+              }}>
+                <li>单指拖动 旋转视角</li>
+                <li>双指缩放 调节距离</li>
+                <li>双指拖动 平移视角</li>
+              </ul>
+            </Accordion>
 
-            {/* Buildings Legend */}
-            <div style={{
-              border: '1px solid var(--color-border)',
-              borderRadius: '12px',
-              overflow: 'hidden',
-              background: activeAccordion === 'desktop' ? undefined : 'var(--color-background-soft)',
-              transition: 'background 0.2s ease',
-            }}>
-              <button
-                type="button"
-                onClick={() => toggleAccordion('desktop')}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  width: '100%',
-                  padding: '12px 14px',
-                  border: 'none',
-                  background: 'transparent',
-                  color: 'var(--color-text)',
-                  fontSize: '14px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                <span>校园建筑一览</span>
-                <ChevronDown style={{
-                  width: '16px',
-                  height: '16px',
-                  transition: 'transform 0.2s ease',
-                  transform: activeAccordion === 'desktop' ? 'rotate(180deg)' : 'rotate(0)',
-                }} />
-              </button>
-              {activeAccordion === 'desktop' && (
-                <ul style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr',
-                  gap: '4px',
-                  margin: 0,
-                  padding: '0 14px 14px',
-                  listStyle: 'none',
-                  color: 'var(--color-text-light)',
-                  fontSize: '13px',
-                }}>
-                  <li style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <span style={{ width: '12px', height: '12px', borderRadius: '2px', background: '#d4c5a9', flexShrink: 0 }} />
-                    主楼
-                  </li>
-                  <li style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <span style={{ width: '12px', height: '12px', borderRadius: '2px', background: '#c8b896', flexShrink: 0 }} />
-                    机电信息楼 / 逸夫楼
-                  </li>
-                  <li style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <span style={{ width: '12px', height: '12px', borderRadius: '2px', background: '#bfb08a', flexShrink: 0 }} />
-                    科技楼 / 图书馆
-                  </li>
-                  <li style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <span style={{ width: '12px', height: '12px', borderRadius: '2px', background: '#baa478', flexShrink: 0 }} />
-                    计算机 / 材料学院楼
-                  </li>
-                  <li style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <span style={{ width: '12px', height: '12px', borderRadius: '2px', background: '#b0996e', flexShrink: 0 }} />
-                    学生公寓
-                  </li>
-                  <li style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <span style={{ width: '12px', height: '12px', borderRadius: '2px', background: '#a89070', flexShrink: 0 }} />
-                    校门
-                  </li>
-                </ul>
-              )}
-            </div>
+            {/* Legend */}
+            <Accordion
+              title="渲染引擎说明"
+              isOpen={activeAccordion === 'legend'}
+              onToggle={() => toggleAccordion('legend')}
+            >
+              <div style={{
+                padding: '0 14px 14px',
+                color: 'var(--color-text-light)',
+                fontSize: '13px',
+                lineHeight: 1.7,
+              }}>
+                <p style={{ margin: '0 0 8px' }}>
+                  校园游览功能基于 Minecraft 存档文件（.mca）的浏览器端实时渲染。
+                  引擎使用 WebGL2 技术加载和渲染体素世界数据。
+                </p>
+                <p style={{ margin: 0 }}>
+                  渲染引擎代码源自 USTB-Official-Website 项目的自定义 WebGL2 渲染器，
+                  支持区块动态加载、PBR 材质、CSM 阴影等高级渲染特性。
+                </p>
+              </div>
+            </Accordion>
           </div>
         </div>
       </div>
 
-      {/* Right Side - 3D Canvas */}
+      {/* Right Side - 3D Engine Canvas */}
       <div style={{
         flex: 1,
         position: 'relative',
@@ -306,9 +200,64 @@ export default function CampusPage() {
             </div>
           }
         >
-          <CampusCanvas onEngineReady={() => setEngineReady(true)} />
+          <CampusEngine
+            mcaBaseUrl="/resource/mca/ustb"
+            onReady={() => setEngineReady(true)}
+            onError={(msg) => console.error('[CampusPage] Engine error:', msg)}
+          />
         </Suspense>
       </div>
+    </div>
+  );
+}
+
+// ========== Accordion Component ==========
+
+function Accordion({
+  title,
+  isOpen,
+  onToggle,
+  children,
+}: {
+  title: string;
+  isOpen: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div style={{
+      border: '1px solid var(--color-border)',
+      borderRadius: '12px',
+      overflow: 'hidden',
+      background: isOpen ? 'var(--color-background-mute)' : 'var(--color-background-soft)',
+      transition: 'background 0.2s ease',
+    }}>
+      <button
+        type="button"
+        onClick={onToggle}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          width: '100%',
+          padding: '12px 14px',
+          border: 'none',
+          background: 'transparent',
+          color: 'var(--color-text)',
+          fontSize: '14px',
+          fontWeight: 600,
+          cursor: 'pointer',
+        }}
+      >
+        <span>{title}</span>
+        <ChevronDown style={{
+          width: '16px',
+          height: '16px',
+          transition: 'transform 0.2s ease',
+          transform: isOpen ? 'rotate(180deg)' : 'rotate(0)',
+        }} />
+      </button>
+      {isOpen && children}
     </div>
   );
 }

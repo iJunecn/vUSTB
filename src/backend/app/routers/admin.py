@@ -1,4 +1,7 @@
-"""管理员后台 API。需要 admin 或 super_admin 权限。"""
+"""管理员后台 API — 合并 vSkin admin_routes 功能。
+
+需要 admin 或 super_admin 权限。
+"""
 from __future__ import annotations
 
 import os
@@ -7,17 +10,20 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Body, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import get_db
-from app.deps import get_current_admin, get_current_super_admin
+from app.deps import get_current_admin, get_current_super_admin, get_current_user
 from app.models import (
     User, UserGroup, InviteCode, OAuthApp, SiteSetting, Carousel, FallbackEndpoint,
 )
+from app.services.admin_backend import admin_backend
+from app.services.oauth_backend import oauth_backend
+from app.utils.user_groups import is_admin_group, normalize_user_group
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -104,9 +110,11 @@ async def delete_user(
 class InviteOut(BaseModel):
     id: int
     code: str
-    used: bool
-    used_by_id: int | None
-    created_at: datetime
+    total_uses: int | None
+    used_count: int
+    used_by: str | None
+    note: str | None
+    created_at: int
 
 
 class InviteCreate(BaseModel):
@@ -123,8 +131,9 @@ async def list_invites(
     )).scalars().all()
     return [
         InviteOut(
-            id=i.id, code=i.code, used=i.used,
-            used_by_id=i.used_by_id, created_at=i.created_at,
+            id=i.id, code=i.code, total_uses=i.total_uses,
+            used_count=i.used_count, used_by=i.used_by,
+            note=i.note, created_at=i.created_at,
         )
         for i in rows
     ]
@@ -139,7 +148,7 @@ async def create_invites(
     new_items: list[InviteCode] = []
     for _i in range(body.count):
         code = secrets.token_urlsafe(8)
-        item = InviteCode(code=code)
+        item = InviteCode(code=code, total_uses=1)
         db.add(item)
         new_items.append(item)
     await db.commit()
@@ -147,8 +156,9 @@ async def create_invites(
         await db.refresh(item)
     return [
         InviteOut(
-            id=i.id, code=i.code, used=i.used,
-            used_by_id=i.used_by_id, created_at=i.created_at,
+            id=i.id, code=i.code, total_uses=i.total_uses,
+            used_count=i.used_count, used_by=i.used_by,
+            note=i.note, created_at=i.created_at,
         )
         for i in new_items
     ]
@@ -168,109 +178,10 @@ async def delete_invite(
     return {"ok": True}
 
 
-# ============== OAuth Apps ==============
-class OAuthAppOut(BaseModel):
-    id: int
-    name: str
-    description: str | None
-    client_secret: str
-    redirect_uri: str
-    scopes: list[str]
-    is_device_shared: bool
-    created_at: datetime
-
-
-class OAuthAppCreate(BaseModel):
-    name: str
-    description: str | None = None
-    redirect_uri: str
-    scopes: list[str] = Field(default_factory=lambda: ["userinfo"])
-    is_device_shared: bool = False
-
-
-class OAuthAppUpdate(BaseModel):
-    name: str | None = None
-    description: str | None = None
-    redirect_uri: str | None = None
-    scopes: list[str] | None = None
-    is_device_shared: bool | None = None
-    regenerate_secret: bool = False
-
-
-@router.get("/oauth-apps", response_model=list[OAuthAppOut])
-async def list_oauth_apps(
-    db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin),
-):
-    rows = (await db.execute(select(OAuthApp).order_by(OAuthApp.created_at.desc()))).scalars().all()
-    return [
-        OAuthAppOut(
-            id=a.id, name=a.name, description=a.description, client_secret=a.client_secret,
-            redirect_uri=a.redirect_uri, scopes=a.scopes or [],
-            is_device_shared=a.is_device_shared, created_at=a.created_at,
-        )
-        for a in rows
-    ]
-
-
-@router.post("/oauth-apps", response_model=OAuthAppOut)
-async def create_oauth_app(
-    body: OAuthAppCreate,
-    db: AsyncSession = Depends(get_db),
-    actor: User = Depends(get_current_admin),
-):
-    a = OAuthApp(
-        name=body.name, description=body.description,
-        client_secret=secrets.token_urlsafe(32),
-        redirect_uri=body.redirect_uri, scopes=body.scopes,
-        is_device_shared=body.is_device_shared, owner_id=actor.id,
-    )
-    db.add(a)
-    await db.commit()
-    await db.refresh(a)
-    return OAuthAppOut(
-        id=a.id, name=a.name, description=a.description, client_secret=a.client_secret,
-        redirect_uri=a.redirect_uri, scopes=a.scopes or [],
-        is_device_shared=a.is_device_shared, created_at=a.created_at,
-    )
-
-
-@router.put("/oauth-apps/{app_id}", response_model=OAuthAppOut)
-async def update_oauth_app(
-    app_id: int,
-    body: OAuthAppUpdate,
-    db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin),
-):
-    a = (await db.execute(select(OAuthApp).where(OAuthApp.id == app_id))).scalar_one_or_none()
-    if not a:
-        raise HTTPException(status_code=404, detail="not found")
-    data = body.model_dump(exclude_unset=True)
-    if data.pop("regenerate_secret", False):
-        a.client_secret = secrets.token_urlsafe(32)
-    for k, v in data.items():
-        setattr(a, k, v)
-    await db.commit()
-    await db.refresh(a)
-    return OAuthAppOut(
-        id=a.id, name=a.name, description=a.description, client_secret=a.client_secret,
-        redirect_uri=a.redirect_uri, scopes=a.scopes or [],
-        is_device_shared=a.is_device_shared, created_at=a.created_at,
-    )
-
-
-@router.delete("/oauth-apps/{app_id}")
-async def delete_oauth_app(
-    app_id: int,
-    db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin),
-):
-    a = (await db.execute(select(OAuthApp).where(OAuthApp.id == app_id))).scalar_one_or_none()
-    if not a:
-        raise HTTPException(status_code=404, detail="not found")
-    await db.delete(a)
-    await db.commit()
-    return {"ok": True}
+# ============== OAuth Apps (vSkin style — see /admin/oauth/apps) ==============
+# The vSkin-compatible OAuth app management is at the bottom of this file
+# using the oauth_backend service layer. The old Pydantic-model-based
+# CRUD endpoints have been replaced.
 
 
 # ============== 站点设置 ==============
@@ -365,7 +276,7 @@ async def stats(
 ):
     user_count = (await db.execute(select(func.count(User.id)))).scalar() or 0
     invite_count = (await db.execute(select(func.count(InviteCode.id)))).scalar() or 0
-    oauth_app_count = (await db.execute(select(func.count(OAuthApp.id)))).scalar() or 0
+    oauth_app_count = (await db.execute(select(func.count(OAuthApp.app_id)))).scalar() or 0
     return {
         "users": user_count,
         "invites": invite_count,
@@ -717,3 +628,168 @@ async def upload_site_logo(
     await db.commit()
 
     return {"ok": True, "url": logo_url}
+
+
+# ============== vSkin 兼容: 用户管理增强 ==============
+
+@router.post("/users/{user_id}/toggle-admin")
+async def toggle_user_admin(
+    user_id: int,
+    actor: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    await admin_backend.toggle_user_admin(db, user_id, actor.id)
+    return {"ok": True}
+
+
+@router.post("/users/{user_id}/set-group")
+async def set_user_group(
+    user_id: int,
+    body: dict = Body(...),
+    actor: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    user_group = normalize_user_group(body.get("user_group", ""))
+    await admin_backend.set_user_group(db, user_id, actor.id, user_group)
+    return {"ok": True, "user_group": user_group}
+
+
+@router.post("/users/{user_id}/ban")
+async def ban_user(
+    user_id: int,
+    body: dict = Body(...),
+    actor: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    banned_until = body.get("banned_until")
+    if banned_until is None:
+        raise HTTPException(status_code=400, detail="banned_until is required")
+    res = await admin_backend.ban_user(db, user_id, banned_until, actor.id)
+    return {"ok": True, "banned_until": res}
+
+
+@router.post("/users/{user_id}/unban")
+async def unban_user(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_admin),
+):
+    u = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    if not u:
+        raise HTTPException(status_code=404, detail="not found")
+    u.banned_until = None
+    await db.commit()
+    return {"ok": True}
+
+
+@router.post("/users/reset-password")
+async def reset_user_password(
+    body: dict = Body(...),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_admin),
+):
+    user_id = body.get("user_id")
+    new_password = body.get("new_password")
+    if not user_id or not new_password:
+        raise HTTPException(status_code=400, detail="user_id and new_password required")
+    return await admin_backend.reset_user_password(db, int(user_id), new_password)
+
+
+# ============== vSkin 兼容: 分组设置 ==============
+
+@router.get("/settings/site")
+async def get_site_settings(db: AsyncSession = Depends(get_db), _: User = Depends(get_current_admin)):
+    return await admin_backend.get_site_settings(db)
+
+
+@router.post("/settings/site")
+async def save_site_settings(body: dict = Body(...), db: AsyncSession = Depends(get_db), _: User = Depends(get_current_admin)):
+    await admin_backend.save_settings_group(db, "site", body)
+    return {"ok": True}
+
+
+@router.get("/settings/security")
+async def get_security_settings(db: AsyncSession = Depends(get_db), _: User = Depends(get_current_admin)):
+    return await admin_backend.get_security_settings(db)
+
+
+@router.post("/settings/security")
+async def save_security_settings(body: dict = Body(...), db: AsyncSession = Depends(get_db), _: User = Depends(get_current_admin)):
+    await admin_backend.save_settings_group(db, "security", body)
+    return {"ok": True}
+
+
+@router.get("/settings/email")
+async def get_email_settings(db: AsyncSession = Depends(get_db), _: User = Depends(get_current_admin)):
+    return await admin_backend.get_email_settings(db)
+
+
+@router.post("/settings/email")
+async def save_email_settings(body: dict = Body(...), db: AsyncSession = Depends(get_db), _: User = Depends(get_current_admin)):
+    await admin_backend.save_settings_group(db, "email", body)
+    return {"ok": True}
+
+
+@router.get("/settings/fallback")
+async def get_fallback_settings(db: AsyncSession = Depends(get_db), _: User = Depends(get_current_admin)):
+    return await admin_backend.get_fallback_services(db)
+
+
+@router.post("/settings/fallback")
+async def save_fallback_settings(body: dict = Body(...), db: AsyncSession = Depends(get_db), _: User = Depends(get_current_admin)):
+    await admin_backend.save_settings_group(db, "fallback", body)
+    return {"ok": True}
+
+
+# ============== vSkin 兼容: Carousel 文件上传/删除 ==============
+
+@router.post("/carousel")
+async def upload_carousel_file(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_admin),
+):
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in [".png", ".jpg", ".jpeg", ".webp"]:
+        raise HTTPException(status_code=400, detail="Unsupported file format")
+    filename = f"{uuid.uuid4().hex}{ext}"
+    content = await file.read()
+    return await admin_backend.upload_carousel_image(db, filename, content)
+
+
+@router.delete("/carousel/{filename}")
+async def delete_carousel_file(filename: str, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_admin)):
+    return await admin_backend.delete_carousel_image(db, filename)
+
+
+# ============== vSkin 兼容: OAuth App 管理 (vSkin 风格) ==============
+
+@router.get("/oauth/apps")
+async def get_oauth_apps_v2(db: AsyncSession = Depends(get_db), _: User = Depends(get_current_admin)):
+    return await oauth_backend.list_apps(db)
+
+
+@router.post("/oauth/apps")
+async def create_oauth_app_v2(
+    body: dict = Body(...),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_admin),
+):
+    client_name = body.get("client_name", "")
+    redirect_uri = body.get("redirect_uri", "")
+    return await oauth_backend.create_app(db, client_name, redirect_uri)
+
+
+@router.delete("/oauth/apps/{app_id}")
+async def delete_oauth_app_v2(app_id: int, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_admin)):
+    await oauth_backend.delete_app(db, app_id)
+    return {"ok": True}
+
+
+@router.get("/oauth/meta")
+async def get_oauth_meta(db: AsyncSession = Depends(get_db), _: User = Depends(get_current_admin)):
+    """返回 OAuth 支持的 scopes 和配置信息"""
+    return {
+        "supported_scopes": oauth_backend.SUPPORTED_SCOPES,
+        "apps": await oauth_backend.list_apps(db),
+    }
