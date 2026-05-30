@@ -4,6 +4,7 @@ import logging
 from sqlalchemy import text
 
 from app.database import Base, engine
+from app.database.schema_sync import sync_schema
 from app import models  # noqa: F401
 from app.config import settings
 
@@ -25,6 +26,9 @@ async def wait_for_db(retries: int = 30, delay: float = 1.0) -> None:
 async def ensure_schema() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # 为已存在的旧表补齐模型迭代后新增的列，避免 select 时 SQL 报错
+        # 导致老账号无法登录、重新注册又被唯一约束挡住。
+        await sync_schema(conn)
 
 
 def ensure_keys() -> None:
