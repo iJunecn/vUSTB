@@ -1,24 +1,27 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { api } from '@/lib/api';
+import { rawApi } from '@/lib/api';
 import { Loader2, Bookmark, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useUserStore } from '@/stores/user';
 import { SkinPreview } from '@/components/skin/SkinViewer';
 
-type Texture = {
-  id: number;
+type LibraryItem = {
+  hash: string;
   type: 'skin' | 'cape';
-  model: 'classic' | 'slim';
+  model: string;
   name: string;
-  url: string;
-  uploader?: string;
+  is_public: boolean;
+  uploader: number;
+  uploader_name: string;
+  created_at: string;
+  url?: string;
 };
 
-const PAGE_SIZE = 24;
+const PAGE_SIZE = 20;
 
 export default function SkinLibraryPage() {
-  const [items, setItems] = useState<Texture[]>([]);
+  const [items, setItems] = useState<LibraryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'skin' | 'cape'>('all');
   const [page, setPage] = useState(1);
@@ -32,24 +35,24 @@ export default function SkinLibraryPage() {
 
   useEffect(() => {
     setLoading(true);
-    const params: Record<string, any> = { page, page_size: PAGE_SIZE };
-    if (filter !== 'all') params.type = filter;
-    api
-      .get<Texture[]>('/textures/library', { params })
+    const params: Record<string, any> = { page, limit: PAGE_SIZE };
+    if (filter !== 'all') params.texture_type = filter;
+    rawApi
+      .get<{ total: number; items: LibraryItem[] }>('/api/public/skin-library', { params })
       .then((r) => {
-        setItems(r.data);
-        setTotal(r.data.length < PAGE_SIZE ? page * PAGE_SIZE : (page + 1) * PAGE_SIZE);
+        setItems(r.data.items);
+        setTotal(r.data.total);
       })
       .finally(() => setLoading(false));
   }, [filter, page]);
 
-  async function collect(id: number) {
+  async function collect(hash: string) {
     if (!user) {
       alert('请先登录');
       return;
     }
     try {
-      await api.post(`/textures/library/${id}/collect`);
+      await rawApi.post(`/api/me/textures/${hash}/add`);
       alert('已加入衣柜');
     } catch (err: any) {
       alert(err?.response?.data?.detail || '操作失败');
@@ -108,46 +111,49 @@ export default function SkinLibraryPage() {
               gap: 16,
             }}
           >
-            {items.map((t) => (
-              <div key={t.id} className="surface-card" style={{ display: 'flex', flexDirection: 'column' }}>
-                {/* 3D Texture preview */}
-                <div
-                  style={{
-                    aspectRatio: '1', background: 'var(--color-background-mute)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    overflow: 'hidden',
-                  }}
-                >
-                  {t.type === 'skin' ? (
-                    <SkinPreview skinUrl={t.url} model={t.model} size={180} />
-                  ) : (
-                    /* eslint-disable-next-line @next/next/no-img-element */
-                    <img
-                      src={t.url}
-                      alt={t.name}
-                      style={{ width: '100%', height: '100%', objectFit: 'contain', imageRendering: 'pixelated' }}
-                    />
-                  )}
-                </div>
-
-                {/* Info */}
-                <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-heading)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: 0 }}>
-                    {t.name}
-                  </p>
-                  <p style={{ fontSize: 12, color: 'var(--color-text-light)', margin: 0 }}>
-                    {t.uploader ?? '未知上传者'} · {t.type === 'skin' ? t.model : '披风'}
-                  </p>
-                  <button
-                    onClick={() => collect(t.id)}
-                    className="btn-ghost"
-                    style={{ padding: '6px 0', fontSize: 12, marginTop: 4, justifyContent: 'flex-start' }}
+            {items.map((t) => {
+              const texUrl = `/static/textures/${t.hash}.png`;
+              return (
+                <div key={t.hash} className="surface-card" style={{ display: 'flex', flexDirection: 'column' }}>
+                  {/* 3D Texture preview */}
+                  <div
+                    style={{
+                      aspectRatio: '1', background: 'var(--color-background-mute)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      overflow: 'hidden',
+                    }}
                   >
-                    <Bookmark style={{ width: 14, height: 14 }} /> 收藏到衣柜
-                  </button>
+                    {t.type === 'skin' ? (
+                      <SkinPreview skinUrl={texUrl} model={t.model === 'slim' ? 'slim' : 'classic'} size={180} />
+                    ) : (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img
+                        src={texUrl}
+                        alt={t.name}
+                        style={{ width: '100%', height: '100%', objectFit: 'contain', imageRendering: 'pixelated' }}
+                      />
+                    )}
+                  </div>
+
+                  {/* Info */}
+                  <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-heading)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: 0 }}>
+                      {t.name || '未命名材质'}
+                    </p>
+                    <p style={{ fontSize: 12, color: 'var(--color-text-light)', margin: 0 }}>
+                      {t.uploader_name || '未知上传者'} · {t.type === 'skin' ? t.model : '披风'}
+                    </p>
+                    <button
+                      onClick={() => collect(t.hash)}
+                      className="btn-ghost"
+                      style={{ padding: '6px 0', fontSize: 12, marginTop: 4, justifyContent: 'flex-start' }}
+                    >
+                      <Bookmark style={{ width: 14, height: 14 }} /> 收藏到衣柜
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
             {items.length === 0 && (
               <p style={{ color: 'var(--color-text-light)', gridColumn: '1 / -1' }}>
                 公共皮肤库暂时是空的。
