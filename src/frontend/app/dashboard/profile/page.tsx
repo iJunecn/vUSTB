@@ -127,7 +127,7 @@ export default function ProfilePage() {
   if (!user) return null;
 
   const avatarUrl = user.avatar_hash ? `/static/textures/${user.avatar_hash}.png` : null;
-  const initial = (user.display_name || user.username).charAt(0).toUpperCase();
+  const initial = ((user.display_name || user.username || user.email || '').charAt(0) || '?').toUpperCase();
   const isBanned = user.is_banned && user.banned_until && Date.now() < user.banned_until;
 
   return (

@@ -51,7 +51,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     );
   }
 
-  const initial = user.username.charAt(0).toUpperCase();
+  const displayName = user.username || user.display_name || user.email || '';
+  const initial = (displayName.charAt(0) || '?').toUpperCase();
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
@@ -126,7 +127,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               </div>
               <div style={{ minWidth: 0 }}>
                 <p style={{ fontWeight: 600, fontSize: 13, color: 'var(--color-heading)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {user.username}
+                  {displayName}
                 </p>
                 <span
                   style={{
