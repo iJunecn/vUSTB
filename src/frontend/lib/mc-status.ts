@@ -1,3 +1,11 @@
+/**
+ * Minecraft server status via motd.minebbs.com public API.
+ * API docs: https://motd.minebbs.com/docs
+ *
+ * GET https://motd.minebbs.com/api/status?ip=<host>&port=<port>&stype=auto
+ * Returns: { status, type, host, version, protocol, motd, online, max, delay, icon }
+ */
+
 export type MotdSegment = {
   text: string;
   color?: string | null;
@@ -8,7 +16,6 @@ export type MotdSegment = {
 };
 
 export type McStatus = {
-  id?: number;
   name: string;
   address?: string | null;
   icon?: string | null;
@@ -93,29 +100,72 @@ export function parseMotdSegments(raw: string | null | undefined): MotdSegment[]
   return segments;
 }
 
-export function mapMcStatusRow(item: Record<string, unknown>): McStatus {
-  const status = item.status as Record<string, unknown> | undefined;
-  const motdRaw = (status?.motd ?? item.motd ?? '') as string;
-  const motdSegments = parseMotdSegments(motdRaw);
-  const players = (status?.players ?? {}) as Record<string, unknown>;
+// ---------- motd.minebbs.com API response type ----------
+type MotdApiResponse = {
+  status: 'online' | 'error' | string;
+  type?: string;           // "je" or "be"
+  host?: string;
+  version?: string;
+  protocol?: number;
+  motd?: string;
+  online?: number;
+  max?: number;
+  delay?: number;
+  icon?: string;           // base64 data URI
+};
 
-  return {
-    id: item.id as number | undefined,
-    name: (item.name as string) || '',
-    address: (item.address as string) ?? null,
-    icon: (status?.icon as string) ?? (item.icon as string) ?? null,
-    connect_ms: (status?.connect_ms as number) ?? (item.connect_ms as number) ?? null,
-    type: (status?.type as string) ?? (item.type as string) ?? null,
-    server_status: (status?.status as string) ?? (item.server_status as string) ?? (item.status ? 'online' : 'offline'),
-    motd: motdSegments.map((s) => s.text).join('') || '',
-    motdSegments,
-    version: (status?.version as string) ?? (item.version as string) ?? null,
-    protocol: (status?.protocol as number) ?? (item.protocol as number) ?? null,
-    players_online: (players.online as number) ?? (item.players_online as number) ?? null,
-    players_max: (players.max as number) ?? (item.players_max as number) ?? null,
-    last_update: (item.last_update as string) ?? null,
-    expose_ip: item.expose_ip === true,
-  };
+/**
+ * Query a single MC server status from motd.minebbs.com.
+ */
+export async function queryMotdApi(
+  ip: string,
+  port?: number,
+  stype: string = 'auto',
+): Promise<McStatus> {
+  const params = new URLSearchParams({ ip, stype });
+  if (port != null) params.set('port', String(port));
+
+  try {
+    const res = await fetch(`https://motd.minebbs.com/api/status?${params}`, {
+      signal: AbortSignal.timeout(8000),
+    });
+    const data: MotdApiResponse = await res.json();
+
+    if (data.status !== 'online') {
+      return {
+        name: ip,
+        address: ip,
+        server_status: 'offline',
+        connect_ms: null,
+      };
+    }
+
+    const motdRaw = data.motd ?? '';
+    const motdSegments = parseMotdSegments(motdRaw);
+
+    return {
+      name: ip,
+      address: ip,
+      icon: data.icon ?? null,
+      connect_ms: data.delay ?? null,
+      type: data.type === 'je' ? 'java' : data.type === 'be' ? 'bedrock' : data.type,
+      server_status: 'online',
+      motd: motdSegments.map((s) => s.text).join('') || motdRaw,
+      motdSegments,
+      version: data.version ?? null,
+      protocol: data.protocol ?? null,
+      players_online: data.online ?? null,
+      players_max: data.max ?? null,
+      last_update: new Date().toISOString(),
+    };
+  } catch {
+    return {
+      name: ip,
+      address: ip,
+      server_status: 'offline',
+      connect_ms: null,
+    };
+  }
 }
 
 export function formatRelativeTime(value: string | null | undefined) {

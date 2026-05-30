@@ -1,10 +1,14 @@
 """材质静态文件服务"""
 from pathlib import Path
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, Response
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.utils.image import make_default_steve_head
+from app.database import get_db
+from app.models import User, Texture
+from app.utils.image import default_steve_head_avatar, extract_skin_head_avatar
 
 router = APIRouter(tags=["static"])
 
@@ -20,6 +24,35 @@ async def serve_texture(filename: str):
 
 
 @router.get("/api/users/{user_id}/avatar")
-async def user_avatar(user_id: int):
-    # 默认 Steve 头像；具体头像逻辑后续实现
-    return Response(content=make_default_steve_head(), media_type="image/png")
+async def user_avatar(user_id: int, db: AsyncSession = Depends(get_db)):
+    """获取用户头像"""
+    user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    if not user:
+        return Response(content=default_steve_head_avatar(output_size=256), media_type="image/png")
+
+    avatar_hash = getattr(user, "avatar_hash", None)
+    if avatar_hash:
+        avatar_path = Path(settings.textures_directory) / f"{avatar_hash}.png"
+        if avatar_path.exists():
+            return FileResponse(avatar_path, media_type="image/png")
+
+    # 如果没有自定义头像，尝试用皮肤截脸
+    from app.models import Player
+    players = (await db.execute(select(Player).where(Player.owner_id == user.id))).scalars().all()
+    if players:
+        player = players[0]
+        if player.skin_texture_id:
+            tex = (await db.execute(select(Texture).where(Texture.id == player.skin_texture_id))).scalar_one_or_none()
+            if tex:
+                skin_path = Path(settings.textures_directory) / f"{tex.hash}.png"
+                if skin_path.exists():
+                    with open(skin_path, "rb") as f:
+                        skin_bytes = f.read()
+                    try:
+                        avatar_bytes = extract_skin_head_avatar(skin_bytes, output_size=256)
+                        return Response(content=avatar_bytes, media_type="image/png")
+                    except Exception:
+                        pass
+
+    # 最终 fallback: Steve 头像
+    return Response(content=default_steve_head_avatar(output_size=256), media_type="image/png")

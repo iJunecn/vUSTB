@@ -1,0 +1,157 @@
+/**
+ * @file character_geometry.vsh
+ * @brief 角色几何通道顶点着色器
+ * 输入：角色模型顶点、实例模型矩阵、实例动画参数、皮肤索引、CameraUniforms
+ * 输出：法线、UV、视空间深度、纹理层索引
+ * 性能：实例路径与单体路径共用一份逻辑，避免重复 shader 变体
+ */
+
+#version 300 es
+
+/* 精度约定：
+ * highp 用于角色骨架近似动画、世界到视空间变换与法线计算
+ */
+precision highp float;
+
+layout(location = 0) in vec3 aPosition;
+layout(location = 1) in vec3 aNormal;
+layout(location = 2) in vec2 aUV0;
+layout(location = 3) in vec4 aColor0;
+layout(location = 4) in vec4 aInstanceModelRow0;
+layout(location = 5) in vec4 aInstanceModelRow1;
+layout(location = 6) in vec4 aInstanceModelRow2;
+layout(location = 7) in vec4 aInstanceModelRow3;
+layout(location = 8) in vec4 aInstanceAnimation;
+layout(location = 9) in vec4 aInstanceSkin;
+
+uniform mat4 uModel;
+uniform vec4 uCharacterAnimation;
+uniform float uSkinIndex;
+uniform bool uUseInstanceData;
+
+layout(std140) uniform CameraUniforms {
+    mat4 uView;
+    mat4 uProjection;
+    mat4 uViewProjection;
+    mat4 uInverseViewProj;
+    vec4 uViewPos;
+};
+
+out highp vec3 vNormal;
+out highp vec2 vUV;
+out highp float vViewDepth;
+out highp float vTextureIndex;
+
+// 从 aColor0.r 解码部件编号，约定由 CPU 侧写入 0..255。
+float decodePartId() {
+    return floor(aColor0.r * 255.0 + 0.5);
+}
+
+// 绕 X 轴旋转矩阵。
+mat3 rotationX(float angle) {
+    float c = cos(angle);
+    float s = sin(angle);
+    return mat3(
+        1.0, 0.0, 0.0,
+        0.0, c, -s,
+        0.0, s, c
+    );
+}
+
+// 绕 Y 轴旋转矩阵。
+mat3 rotationY(float angle) {
+    float c = cos(angle);
+    float s = sin(angle);
+    return mat3(
+        c, 0.0, s,
+        0.0, 1.0, 0.0,
+        -s, 0.0, c
+    );
+}
+
+// 判断当前顶点是否属于某个角色部件组。
+bool matchesPart(float partId, float firstId, float secondId) {
+    return abs(partId - firstId) < 0.5 || abs(partId - secondId) < 0.5;
+}
+
+// 解析实例矩阵或回退到全局 uModel。
+mat4 resolveModelMatrix() {
+    if (!uUseInstanceData) {
+        return uModel;
+    }
+
+    return mat4(
+        aInstanceModelRow0,
+        aInstanceModelRow1,
+        aInstanceModelRow2,
+        aInstanceModelRow3
+    );
+}
+
+// 解析实例动画参数。
+vec4 resolveCharacterAnimation() {
+    return uUseInstanceData ? aInstanceAnimation : uCharacterAnimation;
+}
+
+// 解析实例皮肤层索引。
+float resolveSkinIndex() {
+    return uUseInstanceData ? aInstanceSkin.x : uSkinIndex;
+}
+
+/**
+ * 对角色局部部件施加近似骨骼动画。
+ * 当前支持头部朝向与四肢摆动，pivot 采用角色局部空间中的经验值。
+ */
+void applyCharacterAnimation(float partId, inout vec3 position, inout vec3 normal) {
+    vec4 animation = resolveCharacterAnimation();
+    vec3 pivot = vec3(0.0);
+    mat3 partRotation = mat3(1.0);
+    bool hasRotation = false;
+    float walkSwing = sin(animation.x) * 0.85 * animation.y;
+
+    if (matchesPart(partId, 0.0, 1.0)) {
+        pivot = vec3(0.0, 3.0, 0.0);
+        partRotation = rotationY(animation.z) * rotationX(animation.w);
+        hasRotation = abs(animation.z) > 0.0001 || abs(animation.w) > 0.0001;
+    } else if (matchesPart(partId, 4.0, 5.0)) {
+        pivot = vec3(-0.75, 3.0, 0.0);
+        partRotation = rotationX(walkSwing);
+        hasRotation = animation.y > 0.001;
+    } else if (matchesPart(partId, 6.0, 7.0)) {
+        pivot = vec3(0.75, 3.0, 0.0);
+        partRotation = rotationX(-walkSwing);
+        hasRotation = animation.y > 0.001;
+    } else if (matchesPart(partId, 8.0, 9.0)) {
+        pivot = vec3(-0.25, 1.5, 0.0);
+        partRotation = rotationX(-walkSwing);
+        hasRotation = animation.y > 0.001;
+    } else if (matchesPart(partId, 10.0, 11.0)) {
+        pivot = vec3(0.25, 1.5, 0.0);
+        partRotation = rotationX(walkSwing);
+        hasRotation = animation.y > 0.001;
+    }
+
+    if (!hasRotation) {
+        return;
+    }
+
+    position = partRotation * (position - pivot) + pivot;
+    normal = partRotation * normal;
+}
+
+void main() {
+    vec3 localPosition = aPosition;
+    vec3 localNormal = aNormal;
+    applyCharacterAnimation(decodePartId(), localPosition, localNormal);
+
+    mat4 modelMatrix = resolveModelMatrix();
+    vec4 worldPos = modelMatrix * vec4(localPosition, 1.0);
+    vec3 worldPosRel = worldPos.xyz - uViewPos.xyz; // 相机相对坐标，降低大坐标精度损失
+    vec3 viewPos = mat3(uView) * worldPosRel;
+
+    gl_Position = uProjection * vec4(viewPos, 1.0);
+    vNormal = normalize(mat3(modelMatrix) * localNormal);
+    vUV = aUV0;
+    vViewDepth = max(0.0, -viewPos.z);
+    vTextureIndex = resolveSkinIndex();
+}
