@@ -12,6 +12,7 @@ export default function RegisterPage() {
   const setToken = useUserStore((s) => s.setToken);
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
@@ -39,6 +40,14 @@ export default function RegisterPage() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (!/^[A-Za-z0-9]+$/.test(username)) {
+      setError('用户名仅支持英文字母和数字');
+      return;
+    }
+    if (!/^[0-9+\-\s]{5,32}$/.test(phone)) {
+      setError('请输入有效的手机号');
+      return;
+    }
     if (password !== confirmPassword) {
       setError('两次输入的密码不一致');
       return;
@@ -49,6 +58,7 @@ export default function RegisterPage() {
       const r = await api.post<{ access_token: string }>('/auth/register', {
         email,
         username,
+        phone,
         password,
         verification_code: verificationCode || undefined,
         invite_code: inviteCode || undefined,
@@ -95,11 +105,25 @@ export default function RegisterPage() {
               required
               minLength={3}
               maxLength={32}
+              pattern="[A-Za-z0-9]+"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               className="input"
               autoComplete="username"
-              placeholder="3-32 个字符"
+              placeholder="3-32 位，仅限英文字母和数字"
+            />
+          </label>
+
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <span style={{ fontSize: '14px', fontWeight: 500 }}>手机号</span>
+            <input
+              type="tel"
+              required
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              className="input"
+              autoComplete="tel"
+              placeholder="11 位手机号"
             />
           </label>
 

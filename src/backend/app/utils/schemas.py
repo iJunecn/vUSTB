@@ -7,14 +7,18 @@ from typing import Optional, Dict, List
 class RegisterRequest(BaseModel):
     email: EmailStr
     username: str = Field(min_length=3, max_length=32)
+    phone: str = Field(min_length=5, max_length=32)
     password: str = Field(min_length=8, max_length=128)
     invite_code: Optional[str] = None
     verification_code: Optional[str] = None
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    # 用户名 / 邮箱 / 手机号
+    identifier: Optional[str] = None
     password: str
+    # 兼容旧前端：若客户端仍发送 email 字段，作为 identifier 回退
+    email: Optional[str] = None
 
 
 class LoginResponse(BaseModel):
@@ -41,6 +45,11 @@ class ChangePasswordRequest(BaseModel):
 
 class UpdateProfileRequest(BaseModel):
     username: Optional[str] = Field(default=None, min_length=3, max_length=32)
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = Field(default=None, min_length=5, max_length=32)
+    real_name: Optional[str] = Field(default=None, max_length=64)
+    student_id: Optional[str] = Field(default=None, max_length=32)
+    display_name: Optional[str] = Field(default=None, max_length=64)
 
 
 # ====== Yggdrasil 协议请求体 — 从 vSkin 搬运 ======

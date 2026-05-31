@@ -10,7 +10,7 @@ import string
 import time
 
 from fastapi import HTTPException
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -290,6 +290,9 @@ class SiteBackend:
             "email": user.email,
             "username": user.username,
             "display_name": user.display_name or user.username,
+            "phone": getattr(user, "phone", None),
+            "real_name": getattr(user, "real_name", None),
+            "student_id": getattr(user, "student_id", None),
             "avatar_hash": getattr(user, "avatar_hash", None),
             "avatar_url": self._avatar_url_from_hash(getattr(user, "avatar_hash", None)),
             "is_admin": bool(is_admin_group(user_group)),
@@ -349,15 +352,63 @@ class SiteBackend:
         if not user:
             return
 
-        if "display_name" in data and data["display_name"]:
-            new_name = data["display_name"].strip()
-            if not new_name:
-                raise HTTPException(status_code=400, detail="Username cannot be empty")
-            if user.display_name != new_name:
-                existing = (await db.execute(select(User).where(User.display_name == new_name, User.id != user_id))).scalar_one_or_none()
+        USERNAME_RE = re.compile(r"^[A-Za-z0-9]+$")
+        PHONE_RE = re.compile(r"^[0-9+\-\s]{5,32}$")
+        EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+        if "username" in data and data["username"] is not None:
+            new_username = str(data["username"]).strip()
+            if not (3 <= len(new_username) <= 32):
+                raise HTTPException(status_code=400, detail="用户名长度需 3-32 字符")
+            if not USERNAME_RE.match(new_username):
+                raise HTTPException(status_code=400, detail="用户名仅支持英文字母和数字")
+            if user.username != new_username:
+                existing = (await db.execute(
+                    select(User).where(User.username == new_username, User.id != user_id)
+                )).scalar_one_or_none()
                 if existing:
-                    raise HTTPException(status_code=400, detail="Username already exists")
-                user.display_name = new_name
+                    raise HTTPException(status_code=400, detail="用户名已被占用")
+                user.username = new_username
+
+        if "email" in data and data["email"] is not None:
+            new_email = str(data["email"]).strip()
+            if not EMAIL_RE.match(new_email):
+                raise HTTPException(status_code=400, detail="邮箱格式不正确")
+            if user.email != new_email:
+                existing = (await db.execute(
+                    select(User).where(User.email == new_email, User.id != user_id)
+                )).scalar_one_or_none()
+                if existing:
+                    raise HTTPException(status_code=400, detail="邮箱已被占用")
+                user.email = new_email
+                user.email_verified = False
+
+        if "phone" in data and data["phone"] is not None:
+            new_phone = str(data["phone"]).strip()
+            if not PHONE_RE.match(new_phone):
+                raise HTTPException(status_code=400, detail="手机号格式不正确")
+            if user.phone != new_phone:
+                existing = (await db.execute(
+                    select(User).where(User.phone == new_phone, User.id != user_id)
+                )).scalar_one_or_none()
+                if existing:
+                    raise HTTPException(status_code=400, detail="手机号已被占用")
+                user.phone = new_phone
+
+        if "real_name" in data:
+            value = data["real_name"]
+            user.real_name = str(value).strip() if value else None
+
+        if "student_id" in data:
+            value = data["student_id"]
+            user.student_id = str(value).strip() if value else None
+
+        if "display_name" in data and data["display_name"]:
+            new_name = str(data["display_name"]).strip()
+            if not new_name:
+                raise HTTPException(status_code=400, detail="昵称不能为空")
+            user.display_name = new_name
+
         await db.commit()
 
     # ========== Profile ==========
