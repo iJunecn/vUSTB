@@ -53,9 +53,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   const displayName = user.username || user.display_name || user.email || '';
-  const avatarUrl = user.avatar_hash
-    ? `/static/textures/${user.avatar_hash}.png`
-    : '/img/steve.png';
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
@@ -119,10 +116,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </p>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
               {user.avatar_hash ? (
-                <SkinAvatar
-                  skinUrl={avatarUrl}
-                  size={32}
-                  style={{ borderRadius: 6, flexShrink: 0 }}
+                <img
+                  src={`/static/textures/${user.avatar_hash}.png`}
+                  alt=""
+                  style={{
+                    width: 32, height: 32, borderRadius: 6,
+                    objectFit: 'cover', flexShrink: 0,
+                    imageRendering: 'pixelated',
+                    background: 'var(--color-background-mute)',
+                  }}
                 />
               ) : (
                 <SkinAvatar
