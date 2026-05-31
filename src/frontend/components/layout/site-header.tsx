@@ -12,6 +12,7 @@ const navItems = [
   { href: '/servers', label: '服务器' },
   { href: '/campus', label: '在线地图' },
   { href: '/skin', label: '皮肤站' },
+  { href: '/print', label: '打印预约' },
   { href: '/about', label: '关于' },
 ];
 
@@ -48,7 +49,7 @@ export function SiteHeader() {
 
   if (isAuthPage) return null;
 
-  const isAdmin = user && ['super_admin', 'admin'].includes(user.user_group);
+  const isAdmin = user && ['super_admin', 'admin', 'teacher'].includes(user.user_group);
   const groupLabel: Record<string, string> = {
     super_admin: '超级管理员',
     admin: '管理员',

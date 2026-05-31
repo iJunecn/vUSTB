@@ -6,7 +6,7 @@ def register_routers(app: FastAPI) -> None:
         site_auth, users, yggdrasil, oauth_provider, static_files,
         mc_servers, files, textures, admin,
         public, camera_presets, oauth_login,
-        site_routes, microsoft,
+        site_routes, microsoft, print_booking,
     )
 
     app.include_router(site_auth.router)
@@ -24,3 +24,4 @@ def register_routers(app: FastAPI) -> None:
     app.include_router(oauth_login.router)
     app.include_router(site_routes.router)
     app.include_router(microsoft.router)
+    app.include_router(print_booking.router)
