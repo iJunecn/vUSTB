@@ -57,7 +57,6 @@ function getMonday(d: Date): Date {
 
 export default function PrintDashboard() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { user, loaded, hydrate } = useUserStore();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [myBookings, setMyBookings] = useState<Booking[]>([]);
