@@ -15,7 +15,7 @@ class Settings(BaseSettings):
 
     site_name: str = "像素北科 vUSTB"
     site_url: str = "http://localhost"
-    api_url: str = "http://localhost/skinapi"
+    api_url: str = "http://localhost/api/yggdrasil"
     environment: str = "development"
 
     database_url: str = "postgresql+asyncpg://vustb:vustb@postgres:5432/vustb"

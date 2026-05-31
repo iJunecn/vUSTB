@@ -25,14 +25,43 @@ export default function SkinSettingsPage() {
   }, []);
 
   const base = (publicUrl || origin).replace(/\/$/, '');
-  const apiUrl = `${base}/skinapi`;
+  const apiUrl = `${base}/api/yggdrasil`;
   const dragHref = `authlib-injector:yggdrasil-server:${encodeURIComponent(apiUrl)}`;
   const launchArg = `-javaagent:authlib-injector.jar=${apiUrl}`;
 
-  function copy(key: string, value: string) {
-    navigator.clipboard.writeText(value);
-    setCopiedKey(key);
-    setTimeout(() => setCopiedKey(null), 1500);
+  async function copy(key: string, value: string) {
+    let ok = false;
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(value);
+        ok = true;
+      }
+    } catch {
+      // fall through to legacy fallback
+    }
+    if (!ok) {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = value;
+        ta.style.position = 'fixed';
+        ta.style.top = '-1000px';
+        ta.style.left = '-1000px';
+        ta.setAttribute('readonly', '');
+        document.body.appendChild(ta);
+        ta.select();
+        ta.setSelectionRange(0, value.length);
+        ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+      } catch {
+        ok = false;
+      }
+    }
+    if (ok) {
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey(null), 1500);
+    } else {
+      window.prompt('请手动复制：', value);
+    }
   }
 
   if (loadingSettings) {
