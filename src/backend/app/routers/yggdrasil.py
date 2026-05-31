@@ -20,10 +20,9 @@ import base64
 import json
 import time
 import uuid as uuid_lib
-from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Header, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi import APIRouter, Depends, File, Form, Header, Request, UploadFile
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -107,9 +106,24 @@ async def _build_profile_json(
     return profile_data
 
 
-def _yggdrasil_error(error: str, message: str, status_code: int = 403):
-    """返回 Yggdrasil 规范的错误格式"""
-    return HTTPException(status_code=status_code, detail={"error": error, "errorMessage": message})
+class YggdrasilError(Exception):
+    """Yggdrasil 规范错误。由 app.main 的 exception handler 统一序列化为：
+    {"error": ..., "errorMessage": ...}（顶层，无 detail 包装）。
+    """
+
+    def __init__(self, error: str, message: str, status_code: int = 403) -> None:
+        self.error = error
+        self.errorMessage = message
+        self.status_code = status_code
+        super().__init__(message)
+
+
+def _yggdrasil_error(error: str, message: str, status_code: int = 403) -> YggdrasilError:
+    """返回一个可 raise 的 YggdrasilError。
+
+    用法保留为 `raise _yggdrasil_error(...)`，由统一 handler 序列化。
+    """
+    return YggdrasilError(error, message, status_code)
 
 
 # ====== 收集 skinDomains ======
@@ -127,17 +141,17 @@ async def _get_site_url(db: AsyncSession) -> str:
 async def _get_texture_base_url(db: AsyncSession) -> str:
     """材质 URL 的基地址。
 
-    优先用站点设置 `texture_base_url`，否则用 `api_url`（含 /api/yggdrasil 前缀，
-    与启动器实际访问 API 的地址同源同前缀），最后回退到 public_url/site_url。
-    这样 nginx 把整个后端反向代理到 /api/yggdrasil/ 时，材质 URL 仍可访问。
+    必须指向 Caddy 实际反代 `/static/*` 的对外域名（即 site_url），
+    否则启动器即使通过 skinDomains 白名单也下载不到图。
+
+    可通过站点设置 `texture_base_url` 覆盖（需是绝对 URL，通常用于把材质
+    放到独立 CDN 域名）；否则一律回退到 site_url。
     """
     row = (await db.execute(
         select(SiteSetting).where(SiteSetting.key == "texture_base_url")
     )).scalar_one_or_none()
-    if row and row.value:
+    if row and row.value and str(row.value).startswith(("http://", "https://")):
         return str(row.value).rstrip("/")
-    if settings.api_url:
-        return settings.api_url.rstrip("/")
     return await _get_site_url(db)
 
 
@@ -194,34 +208,27 @@ async def yggdrasil_meta(db: AsyncSession = Depends(get_db)):
                 "homepage": site_url or settings.site_url,
                 "register": (site_url or settings.site_url).rstrip("/") + "/register",
             },
+            # 规范允许：支持邮箱以外（角色名 / 手机号 / 用户名）登录
             "feature.non_email_login": True,
-            "feature.legacy_skin_api": False,
-            "feature.no_mojang_namespace": False,
-            "feature.enable_mojang_anti_features": False,
-            "feature.enable_profile_key": True,
-            "feature.username_check": False,
         },
-        "signaturePublickey": crypto.public_pem_oneline,
+        "signaturePublickey": crypto.public_pem,
         "skinDomains": skin_domains,
     }
 
-    # OpenID 配置链接
-    api_url = settings.api_url.rstrip("/") or (site_url or "").rstrip("/")
-    if api_url:
-        meta["meta"]["feature.openid_configuration_url"] = f"{api_url}/.well-known/openid-configuration"
+    # OpenID 配置链接：固定走站点根的 /.well-known/openid-configuration
+    # （Caddy 已为该路径反代到后端，与 /skinapi 重写无关）
+    if site_url:
+        meta["meta"]["feature.openid_configuration_url"] = (
+            site_url.rstrip("/") + "/.well-known/openid-configuration"
+        )
 
     return JSONResponse(meta)
 
 
-# ====== 材质静态文件（挂载在 /api/yggdrasil/static/textures/ 下，供启动器直接下载） ======
-@router.get("/static/textures/{filename}")
-async def serve_skin_texture(filename: str):
-    if "/" in filename or ".." in filename:
-        raise HTTPException(status_code=400, detail="bad name")
-    path = Path(settings.textures_directory) / filename
-    if not path.exists():
-        raise HTTPException(status_code=404, detail="not found")
-    return FileResponse(path, media_type="image/png")
+# ====== 材质静态文件 ======
+# 注意：不在此挂载 /static/textures —— 该路径已由 app.main 静态挂载，
+# Caddy 直接反代 /static/*。在 Yggdrasil 路由内重复挂载会导致 URL 漂移到
+# /api/yggdrasil/static/textures/，破坏 skinDomains 白名单匹配。
 
 
 # ====== authserver ======
@@ -546,7 +553,7 @@ async def upload_texture(
     db: AsyncSession = Depends(get_db),
 ):
     if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="access token required")
+        raise _yggdrasil_error("ForbiddenOperationException", "Access token required.", 401)
     access_token = authorization.removeprefix("Bearer ").strip()
     sess = _SESSION_TOKENS.get(access_token)
     if not sess:
@@ -600,7 +607,7 @@ async def delete_texture_binding(
     db: AsyncSession = Depends(get_db),
 ):
     if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="access token required")
+        raise _yggdrasil_error("ForbiddenOperationException", "Access token required.", 401)
     access_token = authorization.removeprefix("Bearer ").strip()
     sess = _SESSION_TOKENS.get(access_token)
     if not sess:

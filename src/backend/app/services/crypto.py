@@ -28,17 +28,14 @@ class CryptoUtils:
 
     @property
     def public_pem(self) -> str:
+        """规范要求的 PEM：以 -----BEGIN/END PUBLIC KEY----- 包裹，
+        允许换行，不允许其它空白字符。cryptography 的输出原生符合。"""
         self._load()
         pem = self._public_key.public_bytes(
             encoding=serialization.Encoding.PEM,
             format=serialization.PublicFormat.SubjectPublicKeyInfo,
         ).decode("utf-8")
         return pem
-
-    @property
-    def public_pem_oneline(self) -> str:
-        """Yggdrasil meta 端点要求的单行格式（带 PEM header/footer 但去除换行内联）"""
-        return self.public_pem
 
     def sign_data(self, data: str) -> str:
         """SHA1withRSA 签名（Yggdrasil texture 签名要求 SHA1）"""

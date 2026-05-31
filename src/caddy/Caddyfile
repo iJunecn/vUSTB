@@ -8,7 +8,15 @@
 :80 {
     encode zstd gzip
 
-    # 后端 API（Web 业务 + Yggdrasil 协议 /api/yggdrasil/*）
+    # Yggdrasil 对外规范前缀：/skinapi/* → 后端 /api/yggdrasil/*
+    # 启动器可填 https://<域名>/skinapi/ 作为 ALI，与后端内部路径解耦
+    redir /skinapi /skinapi/ 308
+    handle_path /skinapi/* {
+        rewrite * /api/yggdrasil{uri}
+        reverse_proxy backend:8000
+    }
+
+    # 后端 API（Web 业务 + Yggdrasil 协议 /api/yggdrasil/* 内部规范路径）
     handle /api/* {
         reverse_proxy backend:8000
     }

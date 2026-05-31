@@ -88,13 +88,15 @@ BACKEND_INTERNAL_URL=http://localhost:8000 npm run dev
 
 ## Yggdrasil 接入
 
-MC 客户端使用 authlib-injector 时，将 URL 配置为：
+MC 客户端使用 authlib-injector 时，将 API 根地址配置为：
 
 ```
 https://mc.ustb.edu.cn/skinapi/
 ```
 
-启动器（如 USTBL）走 Device Flow 时，OpenID 配置端点：
+> Caddy 会自动将 `/skinapi/*` 重写到内部 `/api/yggdrasil/*`，两个路径均可用，但推荐对外使用 `/skinapi/`。
+
+启动器（如 HMCL、PCL2、BakaXL）走 Device Flow 时，OpenID 配置端点：
 
 ```
 https://mc.ustb.edu.cn/skinapi/.well-known/openid-configuration

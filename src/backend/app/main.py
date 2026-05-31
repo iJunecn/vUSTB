@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -31,6 +32,39 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ====== Yggdrasil 规范错误统一处理 ======
+# 规范要求：错误响应的 {error, errorMessage} 必须位于顶层 JSON 对象，不能被
+# FastAPI 默认的 {"detail": ...} 信封包裹。
+from app.routers.yggdrasil import YggdrasilError  # noqa: E402
+
+
+def _is_yggdrasil_path(request: Request) -> bool:
+    p = request.url.path
+    return p.startswith("/api/yggdrasil") or p.startswith("/skinapi")
+
+
+@app.exception_handler(YggdrasilError)
+async def _yggdrasil_exception_handler(_request: Request, exc: YggdrasilError):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": exc.error, "errorMessage": exc.errorMessage},
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def _validation_exception_handler(request: Request, exc: RequestValidationError):
+    if _is_yggdrasil_path(request):
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": "IllegalArgumentException",
+                "errorMessage": "Invalid request payload.",
+            },
+        )
+    # 非 Yggdrasil 路径走 FastAPI 默认格式
+    return JSONResponse(status_code=422, content={"detail": exc.errors()})
 
 
 @app.get("/api/health")

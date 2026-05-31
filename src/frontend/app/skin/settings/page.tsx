@@ -25,7 +25,7 @@ export default function SkinSettingsPage() {
   }, []);
 
   const base = (publicUrl || origin).replace(/\/$/, '');
-  const apiUrl = `${base}/api/yggdrasil`;
+  const apiUrl = `${base}/skinapi/`;
   const dragHref = `authlib-injector:yggdrasil-server:${encodeURIComponent(apiUrl)}`;
   const launchArg = `-javaagent:authlib-injector.jar=${apiUrl}`;
 
