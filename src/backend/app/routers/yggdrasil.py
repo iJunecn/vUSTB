@@ -37,7 +37,7 @@ from app.utils.schemas import AuthRequest, RefreshRequest, JoinRequest, Validati
 from app.utils.rate_limiter import rate_limiter
 from app.utils.user_groups import resolve_user_group, is_admin_group
 
-router = APIRouter(prefix="/skinapi", tags=["yggdrasil"])
+router = APIRouter(tags=["yggdrasil"])
 
 
 # ====== 会话 token（Yggdrasil 使用自定义 accessToken/clientToken 而非 JWT） ======
@@ -148,6 +148,7 @@ async def _collect_skin_domains(db: AsyncSession, site_url: str | None = None) -
 
 # ====== Meta 端点（authlib-injector 必需） ======
 @router.get("/")
+@router.get("")
 async def yggdrasil_meta(db: AsyncSession = Depends(get_db)):
     site_url = await _get_site_url(db)
     site_name_row = (await db.execute(
@@ -192,7 +193,6 @@ async def authserver_authenticate(req: AuthRequest, request: Request, db: AsyncS
 
     username = req.username
     password = req.password
-    client_token = req.clientToken or _new_token()
 
     if not username or not password:
         raise _yggdrasil_error("ForbiddenOperationException", "Invalid credentials. Invalid username or password.")
@@ -232,6 +232,7 @@ async def authserver_authenticate(req: AuthRequest, request: Request, db: AsyncS
 
     players = (await db.execute(select(Player).where(Player.owner_id == user.id))).scalars().all()
     access_token = _new_token()
+    client_token = req.clientToken or access_token
 
     # 选择 selectedProfile
     selected = None
@@ -444,6 +445,7 @@ async def session_profile(uuid: str, unsigned: bool = True, db: AsyncSession = D
 # ====== profiles by name / bulk ======
 @router.get("/api/users/profiles/minecraft/{playerName}")
 @router.get("/users/profiles/minecraft/{playerName}")
+@router.get("/api/profiles/minecraft/{playerName}")
 async def get_profile_by_name(playerName: str, db: AsyncSession = Depends(get_db)):
     """单个玩家名转 UUID"""
     player = (await db.execute(select(Player).where(Player.name == playerName))).scalar_one_or_none()
@@ -480,6 +482,7 @@ async def query_profiles(names: list[str], db: AsyncSession = Depends(get_db)):
 
 # ====== services lookup ======
 @router.get("/api/minecraft/profile/lookup/name/{playerName}")
+@router.get("/minecraft/profile/lookup/name/{playerName}")
 async def lookup_profile_by_name(playerName: str, db: AsyncSession = Depends(get_db)):
     """Minecraft Services Profile Lookup"""
     player = (await db.execute(select(Player).where(Player.name == playerName))).scalar_one_or_none()
