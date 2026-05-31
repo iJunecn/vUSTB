@@ -74,21 +74,47 @@ export default function HomePage() {
           {/* 加入交流群 */}
           <div className="home-card-block" style={{ borderLeftColor: '#a855f7' }}>
             <h2 className="home-card-h2">加入像素北科交流群</h2>
-            <p className="home-card-p">
+            <p className="home-card-p" style={{ marginBottom: 12 }}>
+              扫描下方二维码加入 QQ 群，或点击直接跳转。
+            </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
               <a
                 target="_blank"
                 href="https://qm.qq.com/cgi-bin/qm/qr?k=ija7cOnwjqzqwbep-3gmS-lQQtuYvjyv&jump_from=webapi&authKey=ZLoJ8z4ZFe2SdSeKluF/x6HW+R5+LFp/8PAvJud5dc2nCYtUx59saphFZx8LUW4w"
                 rel="noreferrer"
+                title="像素北科交流群"
+                style={{ display: 'inline-block', lineHeight: 0 }}
               >
                 <img
                   src="/img/qq.webp"
                   alt="像素北科交流群"
-                  title="像素北科交流群"
-                  style={{ verticalAlign: 'middle', marginRight: 6, borderRadius: 6, height: 24 }}
+                  style={{
+                    width: 180,
+                    height: 180,
+                    borderRadius: 10,
+                    background: '#fff',
+                    padding: 8,
+                    border: '1px solid var(--color-border)',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+                    display: 'block',
+                  }}
                 />
-                像素北科交流群
               </a>
-            </p>
+              <div style={{ fontSize: 13, color: 'var(--color-text-light)', lineHeight: 1.6 }}>
+                <p style={{ margin: 0, fontWeight: 600, color: 'var(--color-heading)' }}>像素北科交流群</p>
+                <p style={{ margin: '4px 0 0' }}>
+                  使用 QQ App 扫码即可加入，或
+                  <a
+                    target="_blank"
+                    href="https://qm.qq.com/cgi-bin/qm/qr?k=ija7cOnwjqzqwbep-3gmS-lQQtuYvjyv&jump_from=webapi&authKey=ZLoJ8z4ZFe2SdSeKluF/x6HW+R5+LFp/8PAvJud5dc2nCYtUx59saphFZx8LUW4w"
+                    rel="noreferrer"
+                    style={{ color: 'var(--color-primary)', textDecoration: 'underline', textUnderlineOffset: 2, marginLeft: 4 }}
+                  >
+                    点此一键加群
+                  </a>
+                </p>
+              </div>
+            </div>
           </div>
 
           {/* 查看更多 */}

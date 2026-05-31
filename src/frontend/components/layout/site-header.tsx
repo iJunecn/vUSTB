@@ -143,7 +143,7 @@ export function SiteHeader() {
                   alt=""
                   className="w-7 h-7 rounded-md object-cover bg-gray-300 dark:bg-gray-600"
                   onError={(e) => {
-                    (e.target as HTMLImageElement).src = '/img/steve.svg';
+                    (e.target as HTMLImageElement).src = '/img/steve.png';
                   }}
                 />
                 <span className="text-sm font-medium">{user.username}</span>
@@ -157,7 +157,7 @@ export function SiteHeader() {
                       alt=""
                       className="w-12 h-12 rounded-md object-cover bg-gray-300 dark:bg-gray-600"
                       onError={(e) => {
-                        (e.target as HTMLImageElement).src = '/img/steve.svg';
+                        (e.target as HTMLImageElement).src = '/img/steve.png';
                       }}
                     />
                     <div>
