@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useUserStore } from '@/stores/user';
 import {
   LayoutDashboard, Users, KeySquare, Settings, Mail,
-  Shield, Image as ImageIcon, Monitor, LogOut, Loader2, Menu, X,
+  Shield, Monitor, LogOut, Loader2, Menu, X,
 } from 'lucide-react';
 import { SkinAvatar } from '@/components/skin/SkinAvatar';
 
@@ -17,7 +17,6 @@ const NAV = [
   { href: '/admin/settings', label: '站点设置', icon: Settings },
   { href: '/admin/email', label: '邮件服务', icon: Mail },
   { href: '/admin/oauth-apps', label: 'OAuth 应用', icon: Shield },
-  { href: '/admin/carousel', label: '轮播图', icon: ImageIcon },
   { href: '/admin/mojang', label: 'Mojang Fallback', icon: Monitor },
 ];
 

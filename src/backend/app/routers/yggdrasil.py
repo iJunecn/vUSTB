@@ -71,7 +71,8 @@ async def _build_profile_json(
             select(Texture).where(Texture.id == player.cape_texture_id)
         )).scalar_one_or_none()
 
-    base_url = settings.site_url.rstrip("/") + "/static/textures/"
+    site_url = await _get_site_url(db)
+    base_url = (site_url or "").rstrip("/") + "/static/textures/"
     textures = {}
     if skin_tex:
         item = {"url": base_url + skin_tex.hash + ".png"}
@@ -113,13 +114,26 @@ def _yggdrasil_error(error: str, message: str, status_code: int = 403):
 
 # ====== 收集 skinDomains ======
 
-async def _collect_skin_domains(db: AsyncSession) -> list[str]:
+async def _get_site_url(db: AsyncSession) -> str:
+    """读取站点对外 URL：优先取站点设置 `public_url`，否则取 settings.site_url。"""
+    row = (await db.execute(
+        select(SiteSetting).where(SiteSetting.key == "public_url")
+    )).scalar_one_or_none()
+    if row and row.value:
+        return str(row.value).rstrip("/")
+    return (settings.site_url or "").rstrip("/")
+
+
+async def _collect_skin_domains(db: AsyncSession, site_url: str | None = None) -> list[str]:
     """从配置和 fallback 端点中收集所有 skinDomains"""
     domains = []
-    site_host = settings.site_url.replace("https://", "").replace("http://", "").split("/")[0].rstrip("/")
+    base = site_url if site_url is not None else await _get_site_url(db)
+    site_host = base.replace("https://", "").replace("http://", "").split("/")[0].rstrip("/")
     if site_host:
         domains.append(site_host)
-        domains.append("." + site_host.split(":")[0])
+        host_only = site_host.split(":")[0]
+        if host_only:
+            domains.append("." + host_only)
 
     from app.models import FallbackEndpoint
     rows = (await db.execute(select(FallbackEndpoint))).scalars().all()
@@ -135,13 +149,13 @@ async def _collect_skin_domains(db: AsyncSession) -> list[str]:
 # ====== Meta 端点（authlib-injector 必需） ======
 @router.get("/")
 async def yggdrasil_meta(db: AsyncSession = Depends(get_db)):
-    site_host = settings.site_url.replace("https://", "").replace("http://", "").rstrip("/")
+    site_url = await _get_site_url(db)
     site_name_row = (await db.execute(
         select(SiteSetting).where(SiteSetting.key == "site_name")
     )).scalar_one_or_none()
     site_name = site_name_row.value if site_name_row else settings.site_name
 
-    skin_domains = await _collect_skin_domains(db)
+    skin_domains = await _collect_skin_domains(db, site_url)
 
     meta = {
         "meta": {
@@ -149,8 +163,8 @@ async def yggdrasil_meta(db: AsyncSession = Depends(get_db)):
             "implementationName": "vUSTB",
             "implementationVersion": "0.1.0",
             "links": {
-                "homepage": settings.site_url,
-                "register": settings.site_url + "/register",
+                "homepage": site_url or settings.site_url,
+                "register": (site_url or settings.site_url).rstrip("/") + "/register",
             },
             "feature.non_email_login": True,
             "feature.legacy_skin_api": False,
@@ -164,7 +178,7 @@ async def yggdrasil_meta(db: AsyncSession = Depends(get_db)):
     }
 
     # OpenID 配置链接
-    api_url = settings.api_url.rstrip("/") or settings.site_url.rstrip("/")
+    api_url = settings.api_url.rstrip("/") or (site_url or "").rstrip("/")
     if api_url:
         meta["meta"]["feature.openid_configuration_url"] = f"{api_url}/.well-known/openid-configuration"
 
@@ -183,13 +197,29 @@ async def authserver_authenticate(req: AuthRequest, request: Request, db: AsyncS
     if not username or not password:
         raise _yggdrasil_error("ForbiddenOperationException", "Invalid credentials. Invalid username or password.")
 
-    # 支持邮箱或角色名登录
-    user = (await db.execute(select(User).where(User.email == username))).scalar_one_or_none()
-    if not user:
-        # 尝试用角色名查找
-        player = (await db.execute(select(Player).where(Player.name == username))).scalar_one_or_none()
-        if player:
-            user = (await db.execute(select(User).where(User.id == player.owner_id))).scalar_one_or_none()
+    # 支持邮箱、用户名、手机号或角色名登录
+    user = None
+    if username:
+        user = (await db.execute(
+            select(User).where(User.email == username)
+        )).scalar_one_or_none()
+        if not user:
+            user = (await db.execute(
+                select(User).where(User.username == username)
+            )).scalar_one_or_none()
+        if not user:
+            user = (await db.execute(
+                select(User).where(User.phone == username)
+            )).scalar_one_or_none()
+        if not user:
+            # 尝试用角色名查找
+            player = (await db.execute(
+                select(Player).where(Player.name == username)
+            )).scalar_one_or_none()
+            if player:
+                user = (await db.execute(
+                    select(User).where(User.id == player.owner_id)
+                )).scalar_one_or_none()
 
     if not user or not verify_password(password, user.password_hash):
         raise _yggdrasil_error("ForbiddenOperationException", "Invalid credentials. Invalid username or password.")
@@ -327,6 +357,10 @@ async def authserver_signout(req: dict, request: Request, db: AsyncSession = Dep
     if not username or not password:
         raise _yggdrasil_error("ForbiddenOperationException", "Invalid credentials. Invalid username or password.")
     user = (await db.execute(select(User).where(User.email == username))).scalar_one_or_none()
+    if not user:
+        user = (await db.execute(select(User).where(User.username == username))).scalar_one_or_none()
+    if not user:
+        user = (await db.execute(select(User).where(User.phone == username))).scalar_one_or_none()
     if not user or not verify_password(password, user.password_hash):
         raise _yggdrasil_error("ForbiddenOperationException", "Invalid credentials. Invalid username or password.")
     for k in list(_SESSION_TOKENS.keys()):

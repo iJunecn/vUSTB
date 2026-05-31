@@ -57,21 +57,12 @@ class AdminBackend:
                 item.strip() for item in str(raw_suffixes or "").replace("\n", ",").split(",") if item.strip()
             ]
         return {
-            "site_name": s.get("site_name", "皮肤站"),
-            "site_title": s.get("site_title", s.get("site_name", "皮肤站")),
-            "site_logo": s.get("site_logo", ""),
-            "site_subtitle": s.get("site_subtitle", "简洁、高效、现代的 Minecraft 皮肤管理站"),
-            "home_image_urls": s.get("home_image_urls", ""),
+            "public_url": s.get("public_url", ""),
             "require_invite": s.get("require_invite", "false") == "true",
             "allow_register": s.get("allow_register", "true") == "true",
             "register_email_suffixes": register_email_suffixes,
             "enable_skin_library": s.get("enable_skin_library", "true") == "true",
             "max_texture_size": int(s.get("max_texture_size", "1024")),
-            "footer_text": s.get("footer_text", ""),
-            "filing_icp": s.get("filing_icp", ""),
-            "filing_icp_link": s.get("filing_icp_link", ""),
-            "filing_mps": s.get("filing_mps", ""),
-            "filing_mps_link": s.get("filing_mps_link", ""),
         }
 
     async def get_security_settings(self, db: AsyncSession):
@@ -99,9 +90,9 @@ class AdminBackend:
     async def save_settings_group(self, db: AsyncSession, group: str, body: dict):
         allowed_keys = {
             "site": [
-                "site_name", "site_title", "site_logo", "site_subtitle", "home_image_urls",
+                "public_url",
                 "require_invite", "allow_register", "register_email_suffixes", "enable_skin_library",
-                "max_texture_size", "footer_text", "filing_icp", "filing_icp_link", "filing_mps", "filing_mps_link",
+                "max_texture_size",
             ],
             "security": ["rate_limit_enabled", "rate_limit_auth_attempts", "rate_limit_auth_window", "enable_strong_password_check"],
             "email": ["email_verify_enabled", "email_verify_ttl", "smtp_host", "smtp_port", "smtp_user", "smtp_password", "smtp_ssl", "smtp_sender", "email_template_html"],
@@ -115,17 +106,14 @@ class AdminBackend:
                 val = body[key]
                 if key == "smtp_password" and not val:
                     continue
-                if key == "home_image_urls":
-                    if isinstance(val, list):
-                        val = "\n".join(str(item).strip() for item in val if str(item).strip())
-                    else:
-                        val = "\n".join(line.strip() for line in str(val or "").splitlines() if line.strip())
                 if key == "register_email_suffixes":
                     if isinstance(val, list):
                         parts = [str(item).strip() for item in val if str(item).strip()]
                     else:
                         parts = [item.strip() for item in str(val or "").replace("\n", ",").split(",") if item.strip()]
                     val = ",".join(parts)
+                if key == "public_url":
+                    val = str(val or "").strip().rstrip("/")
                 value = "true" if isinstance(val, bool) and val else ("false" if isinstance(val, bool) else str(val))
                 await self._set_setting(db, key, value)
         await db.commit()

@@ -22,7 +22,7 @@ export default function SkinHome() {
         </h1>
         <p style={{ fontSize: 16, color: 'var(--color-text-light)', maxWidth: 600, lineHeight: 1.6 }}>
           上传你的皮肤，绑定到 Minecraft 角色，通过 authlib-injector 在客户端中无缝使用，
-          也可以浏览社区公共皮肤库。
+          也可以浏览社区公开皮肤与你的私有材质。
         </p>
       </div>
 
