@@ -21,6 +21,9 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     username: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
     display_name: Mapped[str] = mapped_column(String(64), nullable=False, server_default="", index=True)
+    phone: Mapped[str | None] = mapped_column(String(32), unique=True, nullable=True, index=True)
+    real_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    student_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     user_group: Mapped[UserGroup] = mapped_column(
         Enum(UserGroup, name="user_group"), default=UserGroup.USER, nullable=False
@@ -43,6 +46,9 @@ class User(Base):
             "email": self.email,
             "username": self.username,
             "display_name": self.display_name,
+            "phone": self.phone,
+            "real_name": self.real_name,
+            "student_id": self.student_id,
             "user_group": self.user_group.value,
             "avatar_hash": self.avatar_hash,
             "email_verified": self.email_verified,

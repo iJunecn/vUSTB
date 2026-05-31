@@ -6,6 +6,9 @@ export type User = {
   email: string;
   username: string;
   display_name: string;
+  phone: string | null;
+  real_name: string | null;
+  student_id: string | null;
   user_group: 'super_admin' | 'admin' | 'teacher' | 'user';
   avatar_hash: string | null;
   email_verified: boolean;

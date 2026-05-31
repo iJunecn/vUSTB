@@ -12,7 +12,7 @@ function LoginInner() {
   const searchParams = useSearchParams();
   const next = searchParams.get('next') || '/dashboard';
   const setToken = useUserStore((s) => s.setToken);
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -23,7 +23,7 @@ function LoginInner() {
     setLoading(true);
     try {
       const r = await api.post<{ access_token: string }>('/auth/login', {
-        email,
+        identifier,
         password,
       });
       setToken(r.data.access_token);
@@ -49,15 +49,15 @@ function LoginInner() {
 
         <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <span style={{ fontSize: '14px', fontWeight: 500 }}>邮箱</span>
+            <span style={{ fontSize: '14px', fontWeight: 500 }}>用户名 / 邮箱 / 手机号</span>
             <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              type="text"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
               required
               className="input"
-              autoComplete="email"
-              placeholder="your@email.com"
+              autoComplete="username"
+              placeholder="输入用户名、邮箱或手机号"
             />
           </label>
 

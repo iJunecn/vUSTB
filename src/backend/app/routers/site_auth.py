@@ -1,10 +1,11 @@
+import re
 import secrets
 import string
 import time
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -18,6 +19,10 @@ from app.utils.schemas import (
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
+USERNAME_RE = re.compile(r"^[A-Za-z0-9]+$")
+PHONE_RE = re.compile(r"^[0-9+\-\s]{5,32}$")
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
 
 def _generate_code(length: int = 6) -> str:
     return "".join(secrets.choice(string.digits) for _ in range(length))
@@ -29,11 +34,26 @@ def _now_ms() -> int:
 
 @router.post("/register", response_model=LoginResponse)
 async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
+    if not USERNAME_RE.match(req.username):
+        raise HTTPException(status_code=400, detail="用户名仅支持英文字母和数字")
+    if not PHONE_RE.match(req.phone):
+        raise HTTPException(status_code=400, detail="手机号格式不正确")
+
     existing = (await db.execute(
-        select(User).where((User.email == req.email) | (User.username == req.username))
+        select(User).where(or_(
+            User.email == req.email,
+            User.username == req.username,
+            User.phone == req.phone,
+        ))
     )).scalar_one_or_none()
     if existing:
-        raise HTTPException(status_code=400, detail="邮箱或用户名已被占用")
+        if existing.email == req.email:
+            raise HTTPException(status_code=400, detail="邮箱已被占用")
+        if existing.username == req.username:
+            raise HTTPException(status_code=400, detail="用户名已被占用")
+        if existing.phone == req.phone:
+            raise HTTPException(status_code=400, detail="手机号已被占用")
+        raise HTTPException(status_code=400, detail="账号信息已被占用")
 
     # 邀请码校验（若提供）
     invite = None
@@ -54,6 +74,7 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
         email=req.email,
         username=req.username,
         display_name=req.username,
+        phone=req.phone,
         password_hash=hash_password(req.password),
         user_group=group,
         is_admin=1 if group == UserGroup.SUPER_ADMIN else 0,
@@ -76,9 +97,19 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
 
 @router.post("/login", response_model=LoginResponse)
 async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
-    user = (await db.execute(select(User).where(User.email == req.email))).scalar_one_or_none()
+    identifier = (req.identifier or req.email or "").strip()
+    if not identifier:
+        raise HTTPException(status_code=400, detail="请输入用户名 / 邮箱 / 手机号")
+
+    user = (await db.execute(
+        select(User).where(or_(
+            User.username == identifier,
+            User.email == identifier,
+            User.phone == identifier,
+        ))
+    )).scalar_one_or_none()
     if not user or not verify_password(req.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="邮箱或密码错误")
+        raise HTTPException(status_code=401, detail="账号或密码错误")
     if user.is_banned:
         raise HTTPException(status_code=403, detail="账号已被封禁")
     token = create_jwt(user.id, {"group": user.user_group.value})
