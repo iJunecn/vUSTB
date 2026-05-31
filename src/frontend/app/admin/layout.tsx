@@ -6,13 +6,14 @@ import Link from 'next/link';
 import { useUserStore } from '@/stores/user';
 import {
   LayoutDashboard, Users, KeySquare, Settings, Mail,
-  Shield, Monitor, LogOut, Loader2, Menu, X,
+  Shield, Monitor, LogOut, Loader2, Menu, X, Printer,
 } from 'lucide-react';
 import { SkinAvatar } from '@/components/skin/SkinAvatar';
 
 const NAV = [
   { href: '/admin', label: '概览', icon: LayoutDashboard, exact: true },
   { href: '/admin/users', label: '用户管理', icon: Users },
+  { href: '/admin/print', label: '打印预约管理', icon: Printer },
   { href: '/admin/invites', label: '邀请码', icon: KeySquare },
   { href: '/admin/settings', label: '站点设置', icon: Settings },
   { href: '/admin/email', label: '邮件服务', icon: Mail },
@@ -33,17 +34,25 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   useEffect(() => {
     if (loaded) {
       if (!user) router.replace('/login');
-      else if (user.user_group !== 'admin' && user.user_group !== 'super_admin') {
+      else if (user.user_group === 'teacher') {
+        // teacher can only access /admin/print
+        if (!pathname.startsWith('/admin/print')) {
+          router.replace('/admin/print');
+        }
+      } else if (user.user_group !== 'admin' && user.user_group !== 'super_admin') {
         router.replace('/');
       }
     }
-  }, [loaded, user, router]);
+  }, [loaded, user, router, pathname]);
 
   useEffect(() => {
     setSidebarOpen(false);
   }, [pathname]);
 
-  if (!loaded || !user || (user.user_group !== 'admin' && user.user_group !== 'super_admin')) {
+  const canAccessAdmin = user && (user.user_group === 'admin' || user.user_group === 'super_admin');
+  const isTeacher = user?.user_group === 'teacher';
+
+  if (!loaded || !user || (!canAccessAdmin && !isTeacher)) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', padding: '80px 0' }}>
         <Loader2 className="w-6 h-6 animate-spin" style={{ color: 'var(--color-text-light)' }} />
@@ -153,7 +162,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
         {/* Nav items */}
         <nav style={{ flex: 1, padding: '0 12px', display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {NAV.map((item) => {
+          {NAV.filter((item) => {
+            if (isTeacher) return item.href === '/admin/print';
+            return true;
+          }).map((item) => {
             const active = item.exact ? pathname === item.href : pathname.startsWith(item.href);
             const Icon = item.icon;
             return (
