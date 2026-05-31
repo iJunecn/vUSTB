@@ -13,6 +13,7 @@ const SECTIONS = [
     icon: Globe,
     fields: [
       { key: 'public_url', label: '对外访问地址（域名或 IP，含协议）', type: 'text' as const, placeholder: 'https://skin.example.com' },
+      { key: 'texture_base_url', label: '材质 URL 基地址（含 /skinapi 前缀，留空则用 api_url）', type: 'text' as const, placeholder: 'https://skin.example.com/skinapi' },
       { key: 'allow_register', label: '允许注册', type: 'bool' as const },
       { key: 'require_invite', label: '注册需要邀请码', type: 'bool' as const },
       { key: 'enable_skin_library', label: '启用皮肤库', type: 'bool' as const },
