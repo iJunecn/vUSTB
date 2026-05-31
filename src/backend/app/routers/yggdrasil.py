@@ -20,9 +20,10 @@ import base64
 import json
 import time
 import uuid as uuid_lib
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Header, Request, UploadFile
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -71,8 +72,7 @@ async def _build_profile_json(
             select(Texture).where(Texture.id == player.cape_texture_id)
         )).scalar_one_or_none()
 
-    site_url = await _get_site_url(db)
-    base_url = (site_url or "").rstrip("/") + "/static/textures/"
+    base_url = (await _get_texture_base_url(db)).rstrip("/") + "/static/textures/"
     textures = {}
     if skin_tex:
         item = {"url": base_url + skin_tex.hash + ".png"}
@@ -124,16 +124,43 @@ async def _get_site_url(db: AsyncSession) -> str:
     return (settings.site_url or "").rstrip("/")
 
 
+async def _get_texture_base_url(db: AsyncSession) -> str:
+    """材质 URL 的基地址。
+
+    优先用站点设置 `texture_base_url`，否则用 `api_url`（含 /skinapi 前缀，
+    与启动器实际访问 API 的地址同源同前缀），最后回退到 public_url/site_url。
+    这样 nginx 把整个后端反向代理到 /skinapi/ 时，材质 URL 仍可访问。
+    """
+    row = (await db.execute(
+        select(SiteSetting).where(SiteSetting.key == "texture_base_url")
+    )).scalar_one_or_none()
+    if row and row.value:
+        return str(row.value).rstrip("/")
+    if settings.api_url:
+        return settings.api_url.rstrip("/")
+    return await _get_site_url(db)
+
+
+def _host_from_url(url: str) -> str:
+    if not url:
+        return ""
+    return url.replace("https://", "").replace("http://", "").split("/")[0].rstrip("/")
+
+
 async def _collect_skin_domains(db: AsyncSession, site_url: str | None = None) -> list[str]:
     """从配置和 fallback 端点中收集所有 skinDomains"""
-    domains = []
+    domains: list[str] = []
     base = site_url if site_url is not None else await _get_site_url(db)
-    site_host = base.replace("https://", "").replace("http://", "").split("/")[0].rstrip("/")
-    if site_host:
-        domains.append(site_host)
-        host_only = site_host.split(":")[0]
-        if host_only:
-            domains.append("." + host_only)
+
+    # 站点对外域名
+    for u in (base, settings.api_url, await _get_texture_base_url(db)):
+        host = _host_from_url(u)
+        if host and host not in domains:
+            domains.append(host)
+            host_only = host.split(":")[0]
+            wildcard = "." + host_only
+            if host_only and wildcard not in domains:
+                domains.append(wildcard)
 
     from app.models import FallbackEndpoint
     rows = (await db.execute(select(FallbackEndpoint))).scalars().all()
@@ -184,6 +211,17 @@ async def yggdrasil_meta(db: AsyncSession = Depends(get_db)):
         meta["meta"]["feature.openid_configuration_url"] = f"{api_url}/.well-known/openid-configuration"
 
     return JSONResponse(meta)
+
+
+# ====== 材质静态文件（挂载在 /skinapi/static/textures/ 下，供启动器直接下载） ======
+@router.get("/static/textures/{filename}")
+async def serve_skin_texture(filename: str):
+    if "/" in filename or ".." in filename:
+        raise HTTPException(status_code=400, detail="bad name")
+    path = Path(settings.textures_directory) / filename
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="not found")
+    return FileResponse(path, media_type="image/png")
 
 
 # ====== authserver ======
