@@ -503,9 +503,7 @@ async def update_mojang_fallback(
 
 _SETTING_GROUPS: dict[str, list[str]] = {
     "site": [
-        "site_name", "site_title", "site_logo", "site_subtitle",
-        "footer_text", "filing_icp", "filing_icp_link",
-        "filing_mps", "filing_mps_link", "home_image_urls",
+        "public_url",
     ],
     "security": [
         "allow_register", "require_invite", "register_email_suffixes",

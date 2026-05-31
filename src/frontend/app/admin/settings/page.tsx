@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
-import { Loader2, Save, Globe, Image as ImageIcon, Lock, Key } from 'lucide-react';
+import { Loader2, Save, Globe, Lock, Key } from 'lucide-react';
 
 type Setting = { key: string; value: any };
 
@@ -12,28 +12,11 @@ const SECTIONS = [
     label: '站点配置',
     icon: Globe,
     fields: [
-      { key: 'site_name', label: '站点名称', type: 'text' as const },
-      { key: 'site_title', label: '站点标题', type: 'text' as const },
-      { key: 'site_subtitle', label: '站点副标题', type: 'text' as const },
-      { key: 'site_logo', label: '站点 Logo URL', type: 'text' as const },
+      { key: 'public_url', label: '对外访问地址（域名或 IP，含协议）', type: 'text' as const, placeholder: 'https://skin.example.com' },
       { key: 'allow_register', label: '允许注册', type: 'bool' as const },
       { key: 'require_invite', label: '注册需要邀请码', type: 'bool' as const },
       { key: 'enable_skin_library', label: '启用皮肤库', type: 'bool' as const },
-      { key: 'register_email_suffixes', label: '注册邮箱后缀（逗号分隔）', type: 'text' as const },
-      { key: 'footer_text', label: '页脚文字', type: 'text' as const },
-      { key: 'filing_icp', label: 'ICP 备案号', type: 'text' as const },
-      { key: 'filing_icp_link', label: 'ICP 备案链接', type: 'text' as const },
-      { key: 'filing_mps', label: '公安备案号', type: 'text' as const },
-      { key: 'filing_mps_link', label: '公安备案链接', type: 'text' as const },
-    ],
-  },
-  {
-    id: 'images',
-    label: '首页图片',
-    icon: ImageIcon,
-    fields: [
-      { key: 'home_hero_image', label: '首页主图 URL', type: 'text' as const },
-      { key: 'home_background_color', label: '背景色', type: 'text' as const },
+      { key: 'register_email_suffixes', label: '注册邮箱后缀（逗号分隔，留空允许全部）', type: 'text' as const },
     ],
   },
   {
@@ -162,6 +145,7 @@ export default function AdminSettingsPage() {
                     <input
                       value={settings[field.key] ?? ''}
                       onChange={(e) => setSettings((s) => ({ ...s, [field.key]: e.target.value }))}
+                      placeholder={(field as any).placeholder}
                       className="input"
                     />
                   )}

@@ -557,6 +557,7 @@ async def get_public_settings(db: AsyncSession = Depends(get_db)):
         "site_title": s.get("site_title", site_name),
         "site_logo": s.get("site_logo", ""),
         "site_subtitle": s.get("site_subtitle", "简洁、高效、现代的 Minecraft 皮肤管理站"),
+        "public_url": s.get("public_url", ""),
         "allow_register": s.get("allow_register", "true") == "true",
         "register_email_suffixes": normalized_suffixes,
         "enable_skin_library": s.get("enable_skin_library", "true") == "true",
