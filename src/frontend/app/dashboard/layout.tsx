@@ -44,7 +44,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   const displayName = user.username || user.display_name || user.email || '';
-  const initial = (displayName.charAt(0) || '?').toUpperCase();
+  const avatarUrl = user.avatar_hash
+    ? `/static/textures/${user.avatar_hash}.png`
+    : '/img/steve.png';
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
@@ -107,22 +109,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           >
             {user.avatar_hash ? (
               <SkinAvatar
-                skinUrl={`/static/textures/${user.avatar_hash}.png`}
+                skinUrl={avatarUrl}
                 size={40}
                 style={{ borderRadius: 6, flexShrink: 0 }}
               />
             ) : (
-              <div
-                style={{
-                  width: 40, height: 40, borderRadius: 6,
-                  background: 'var(--color-primary)',
-                  color: '#fff', display: 'flex', alignItems: 'center',
-                  justifyContent: 'center', fontWeight: 700, fontSize: 16,
-                  flexShrink: 0,
-                }}
-              >
-                {initial}
-              </div>
+              <SkinAvatar
+                skinUrl="/img/steve.png"
+                size={40}
+                style={{ borderRadius: 6, flexShrink: 0 }}
+              />
             )}
             <div style={{ minWidth: 0 }}>
               <p style={{ fontWeight: 600, fontSize: 14, color: 'var(--color-heading)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

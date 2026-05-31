@@ -93,29 +93,35 @@ export default function ServersPage() {
           {/* Header */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
             <div>
-              <p className="section-kicker" style={{ marginBottom: 4, color: 'rgba(255,255,255,0.7)' }}>SERVER STATUS</p>
-              <h1 style={{ fontSize: 24, fontWeight: 700, color: '#fff', margin: 0 }}>
+              <p className="section-kicker" style={{ marginBottom: 4 }}>SERVER STATUS</p>
+              <h1 style={{ fontSize: 26, fontWeight: 800, color: 'var(--color-heading)', margin: 0, letterSpacing: '-0.3px' }}>
                 服务器列表
               </h1>
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <span style={{ padding: '4px 10px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.85)' }}>
+              <span
+                style={{
+                  padding: '4px 10px', borderRadius: 999, fontSize: 12, fontWeight: 600,
+                  background: 'color-mix(in srgb, var(--color-primary) 10%, transparent)',
+                  color: 'var(--color-primary)',
+                }}
+              >
                 {onlineCount}/{totalCount} 在线
               </span>
               {lastUpdated && (
-                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>
+                <span style={{ fontSize: 11, color: 'var(--color-text-light)' }}>
                   {formatRelativeTime(lastUpdated)}
                 </span>
               )}
             </div>
           </div>
 
-          <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', marginBottom: 4 }}>
+          <p style={{ fontSize: 13, color: 'var(--color-text-light)', marginBottom: 4 }}>
             <a
               href="https://github.com/LYOfficial/USTBL/releases"
               target="_blank"
               rel="noreferrer"
-              style={{ color: 'rgba(255,255,255,0.85)', textDecoration: 'underline', textUnderlineOffset: 2 }}
+              style={{ color: 'var(--color-primary)', textDecoration: 'underline', textUnderlineOffset: 2 }}
             >
               下载 USTBL 启动器
             </a>
@@ -124,7 +130,15 @@ export default function ServersPage() {
           {/* Server cards */}
           {loading ? (
             <div style={{ display: 'flex', justifyContent: 'center', padding: '32px 0' }}>
-              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              <div
+                style={{
+                  width: 20, height: 20,
+                  border: '2px solid var(--color-border)',
+                  borderTopColor: 'var(--color-primary)',
+                  borderRadius: '50%',
+                  animation: 'spin 0.8s linear infinite',
+                }}
+              />
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
@@ -134,23 +148,40 @@ export default function ServersPage() {
                 const iconSrc = normalizeIconSrc(mainStatus?.icon);
 
                 return (
-                  <div key={group.address} style={{ padding: 14, borderRadius: 10, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                  <div
+                    key={group.address}
+                    style={{
+                      padding: 14, borderRadius: 10,
+                      background: 'var(--color-background-soft)',
+                      border: '1px solid var(--color-border)',
+                    }}
+                  >
                     {/* Main server row */}
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                         {iconSrc ? (
-                          <img src={iconSrc} alt="" style={{ width: 28, height: 28, borderRadius: '50%', border: '1.5px solid rgba(255,255,255,0.2)', objectFit: 'cover', flexShrink: 0 }} />
+                          <img src={iconSrc} alt="" style={{ width: 28, height: 28, borderRadius: '50%', border: '1.5px solid var(--color-border)', objectFit: 'cover', flexShrink: 0 }} />
                         ) : (
-                          <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'rgba(255,255,255,0.5)', flexShrink: 0 }}>MC</div>
+                          <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--color-background-mute)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-light)', flexShrink: 0 }}>MC</div>
                         )}
                         <div style={{ minWidth: 0 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <span style={{ fontSize: 14, fontWeight: 600, color: '#fff' }}>{group.label}</span>
-                            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace' }}>{group.address}{group.port ? `:${group.port}` : ''}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-heading)' }}>{group.label}</span>
+                            <span style={{ fontSize: 11, color: 'var(--color-text-light)', fontFamily: 'monospace' }}>{group.address}{group.port ? `:${group.port}` : ''}</span>
                           </div>
                         </div>
                       </div>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 600, background: isOnline ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)', color: isOnline ? '#4ade80' : '#f87171', flexShrink: 0 }}>
+                      <span
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 4,
+                          padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 600,
+                          background: isOnline
+                            ? 'color-mix(in srgb, #22c55e 15%, transparent)'
+                            : 'color-mix(in srgb, #ef4444 15%, transparent)',
+                          color: isOnline ? '#16a34a' : '#dc2626',
+                          flexShrink: 0,
+                        }}
+                      >
                         {isOnline ? <><Wifi style={{ width: 10, height: 10 }} /> 在线</> : <><WifiOff style={{ width: 10, height: 10 }} /> 离线</>}
                       </span>
                     </div>
@@ -159,14 +190,14 @@ export default function ServersPage() {
                       <div style={{ marginTop: 8 }}>
                         {/* MOTD */}
                         {mainStatus.motdSegments && mainStatus.motdSegments.length > 0 && (
-                          <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', margin: '0 0 4px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          <p style={{ fontSize: 11, color: 'var(--color-text)', margin: '0 0 4px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {mainStatus.motdSegments.map((seg, i) => (
                               <span key={i} style={getMotdSegmentStyle(seg)}>{seg.text}</span>
                             ))}
                           </p>
                         )}
                         {/* Metrics row */}
-                        <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>
+                        <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--color-text-light)', flexWrap: 'wrap' }}>
                           <span>玩家 {mainStatus.players_online ?? '—'}/{mainStatus.players_max ?? '—'}</span>
                           <span>延迟 {mainStatus.connect_ms ?? '—'}ms</span>
                           {group.versionOverride && <span>{group.versionOverride}</span>}
@@ -180,7 +211,7 @@ export default function ServersPage() {
 
                     {/* Version/theme when offline */}
                     {!(mainStatus && isOnline) && (
-                      <div style={{ marginTop: 6, fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
+                      <div style={{ marginTop: 6, fontSize: 11, color: 'var(--color-text-light)' }}>
                         {group.versionOverride && <span>{group.versionOverride}</span>}
                         {group.themeOverride && <span>主题：{group.themeOverride}</span>}
                       </div>
@@ -194,9 +225,16 @@ export default function ServersPage() {
                           const subStatus = subStatuses.get(key);
                           const subOnline = subStatus?.server_status === 'online';
                           return (
-                            <div key={key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 8px', borderRadius: 6, background: 'rgba(255,255,255,0.04)' }}>
-                              <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)' }}>{sub.name}</span>
-                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10, fontWeight: 600, color: subOnline ? '#4ade80' : '#f87171' }}>
+                            <div
+                              key={key}
+                              style={{
+                                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                padding: '4px 8px', borderRadius: 6,
+                                background: 'var(--color-background-mute)',
+                              }}
+                            >
+                              <span style={{ fontSize: 12, color: 'var(--color-text)' }}>{sub.name}</span>
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10, fontWeight: 600, color: subOnline ? '#16a34a' : '#dc2626' }}>
                                 {subOnline ? <><Wifi style={{ width: 9, height: 9 }} /> 在线</> : <><WifiOff style={{ width: 9, height: 9 }} /> 离线</>}
                               </span>
                             </div>

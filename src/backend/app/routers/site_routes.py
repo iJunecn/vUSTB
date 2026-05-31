@@ -238,7 +238,7 @@ async def list_my_textures(user_id: int = Depends(_get_jwt_user_id), db: AsyncSe
         select(Texture).join(Wardrobe, Wardrobe.texture_id == Texture.id)
         .where(Wardrobe.user_id == user_id).order_by(Wardrobe.created_at.desc())
     )).scalars().all()
-    base_url = settings.site_url.rstrip("/") + "/static/textures/"
+    base_url = "/static/textures/"
     return [
         {
             "id": r.id,
@@ -272,7 +272,7 @@ async def get_my_texture_detail(
     if not wardrobe and tex.uploader_id != user_id:
         raise HTTPException(status_code=404, detail="Texture not found")
 
-    base_url = settings.site_url.rstrip("/") + "/static/textures/"
+    base_url = "/static/textures/"
     return {
         "id": tex.id,
         "hash": tex.hash,
@@ -310,7 +310,7 @@ async def update_my_texture(
         tex.is_public = bool(body["is_public"])
 
     await db.commit()
-    base_url = settings.site_url.rstrip("/") + "/static/textures/"
+    base_url = "/static/textures/"
     return {
         "ok": True,
         "id": tex.id,
@@ -501,7 +501,7 @@ async def get_skin_library(
         users = (await db.execute(select(User).where(User.id.in_(uploader_ids)))).scalars().all()
         uploader_names = {u.id: u.display_name for u in users}
 
-    base_url = settings.site_url.rstrip("/") + "/static/textures/"
+    base_url = "/static/textures/"
     return {
         "total": total,
         "items": [

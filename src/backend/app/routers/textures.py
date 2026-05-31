@@ -31,7 +31,7 @@ class TextureOut(BaseModel):
 
     @classmethod
     def of(cls, t: Texture) -> "TextureOut":
-        base = settings.site_url.rstrip("/") + "/static/textures/"
+        base = "/static/textures/"
         return cls(
             id=t.id, hash=t.hash, type=t.type, model=t.model, name=t.name,
             is_public=t.is_public, uploader_id=t.uploader_id, created_at=t.created_at,
@@ -164,7 +164,7 @@ class PlayerBind(BaseModel):
 
 
 async def _player_out(p: Player, db: AsyncSession) -> PlayerOut:
-    base = settings.site_url.rstrip("/") + "/static/textures/"
+    base = "/static/textures/"
     skin_url = None
     cape_url = None
     if p.skin_texture_id:
