@@ -21,7 +21,7 @@ type State = {
   loading: boolean;
   loaded: boolean;
   hydrate: () => Promise<void>;
-  setToken: (token: string) => void;
+  setToken: (token: string) => Promise<void>;
   logout: () => void;
 };
 
@@ -34,7 +34,7 @@ export const useUserStore = create<State>((set, get) => ({
     if (typeof window === 'undefined') return;
     const token = localStorage.getItem('vustb_token');
     if (!token) {
-      set({ loaded: true });
+      set({ user: null, loading: false, loaded: true });
       return;
     }
     set({ loading: true });
@@ -46,9 +46,11 @@ export const useUserStore = create<State>((set, get) => ({
       set({ user: null, loading: false, loaded: true });
     }
   },
-  setToken: (token: string) => {
+  setToken: async (token: string) => {
     if (typeof window !== 'undefined') localStorage.setItem('vustb_token', token);
-    get().hydrate();
+    // Force fresh fetch even if a previous hydrate is in-flight by resetting flags.
+    set({ user: null, loaded: false, loading: false });
+    await get().hydrate();
   },
   logout: () => {
     if (typeof window !== 'undefined') localStorage.removeItem('vustb_token');

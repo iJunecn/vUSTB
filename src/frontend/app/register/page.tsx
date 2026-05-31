@@ -63,8 +63,8 @@ export default function RegisterPage() {
         verification_code: verificationCode || undefined,
         invite_code: inviteCode || undefined,
       });
-      setToken(r.data.access_token);
-      router.push('/dashboard');
+      await setToken(r.data.access_token);
+      router.replace('/dashboard');
     } catch (err: any) {
       setError(err?.response?.data?.detail || '注册失败');
     } finally {

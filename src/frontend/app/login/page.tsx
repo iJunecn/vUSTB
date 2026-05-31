@@ -26,8 +26,8 @@ function LoginInner() {
         identifier,
         password,
       });
-      setToken(r.data.access_token);
-      router.push(next);
+      await setToken(r.data.access_token);
+      router.replace(next);
     } catch (err: any) {
       setError(err?.response?.data?.detail || '登录失败');
     } finally {
