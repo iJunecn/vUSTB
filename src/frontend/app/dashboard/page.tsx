@@ -32,17 +32,13 @@ export default function DashboardHome() {
     // Load public settings
     rawApi.get<PublicSettings>('/api/public/settings').then((r) => {
       const data = r.data;
-      if (data.site_url) {
-        const url = data.site_url.endsWith('/') ? data.site_url.slice(0, -1) : data.site_url;
-        setApiUrl(url);
-      } else {
-        setApiUrl(window.location.origin);
-      }
+      const base = (data.site_url || window.location.origin).replace(/\/$/, '');
+      setApiUrl(`${base}/skinapi`);
       if (data.mojang_status_urls) {
         setMojangUrls(data.mojang_status_urls);
       }
     }).catch(() => {
-      setApiUrl(window.location.origin);
+      setApiUrl(`${window.location.origin}/skinapi`);
     });
 
     // Load personal stats
