@@ -11,7 +11,7 @@ def register_routers(app: FastAPI) -> None:
 
     app.include_router(site_auth.router)
     app.include_router(users.router)
-    app.include_router(yggdrasil.router, prefix="/skinapi")
+    app.include_router(yggdrasil.router, prefix="/api/yggdrasil")
     app.include_router(oauth_provider.router)
     app.include_router(static_files.router)
     app.include_router(mc_servers.router)

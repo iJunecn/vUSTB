@@ -25,7 +25,7 @@ api.interceptors.response.use(
 );
 
 export const skinApi = axios.create({
-  baseURL: '/skinapi',
+  baseURL: '/api/yggdrasil',
   timeout: 15000,
 });
 

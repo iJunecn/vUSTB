@@ -2,7 +2,7 @@
 
 端点：
 - GET  /.well-known/openid-configuration
-- GET  /skinapi/.well-known/openid-configuration   (兼容路径)
+- GET  /api/yggdrasil/.well-known/openid-configuration   (兼容路径)
 - GET  /oauth/jwks
 - GET  /oauth/authorize       (前端跳转入口；实际"批准"通过 /oauth/api/approve)
 - POST /oauth/api/approve     (前端用户登录后调用以发放 code)
@@ -65,8 +65,8 @@ async def openid_config():
     return _well_known()
 
 
-@router.get("/skinapi/.well-known/openid-configuration")
-async def openid_config_skinapi(db: AsyncSession = Depends(get_db)):
+@router.get("/api/yggdrasil/.well-known/openid-configuration")
+async def openid_config_yggdrasil(db: AsyncSession = Depends(get_db)):
     data = _well_known()
     # 设备授权流：共享 client_id
     shared = (await db.execute(

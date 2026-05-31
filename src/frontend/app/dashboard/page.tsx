@@ -33,12 +33,12 @@ export default function DashboardHome() {
     rawApi.get<PublicSettings>('/api/public/settings').then((r) => {
       const data = r.data;
       const base = (data.site_url || window.location.origin).replace(/\/$/, '');
-      setApiUrl(`${base}/skinapi`);
+      setApiUrl(`${base}/api/yggdrasil`);
       if (data.mojang_status_urls) {
         setMojangUrls(data.mojang_status_urls);
       }
     }).catch(() => {
-      setApiUrl(`${window.location.origin}/skinapi`);
+      setApiUrl(`${window.location.origin}/api/yggdrasil`);
     });
 
     // Load personal stats

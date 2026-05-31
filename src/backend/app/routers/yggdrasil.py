@@ -1,20 +1,20 @@
 """Yggdrasil 协议路由（authlib-injector 兼容）
 
-实现端点：
-- GET  /skinapi/                                Yggdrasil meta（含 signaturePublickey、skinDomains）
-- POST /skinapi/authserver/authenticate
-- POST /skinapi/authserver/refresh
-- POST /skinapi/authserver/validate
-- POST /skinapi/authserver/invalidate
-- POST /skinapi/authserver/signout
-- POST /skinapi/sessionserver/session/minecraft/join
-- GET  /skinapi/sessionserver/session/minecraft/hasJoined
-- GET  /skinapi/sessionserver/session/minecraft/profile/{uuid}
-- GET  /skinapi/api/users/profiles/minecraft/{playerName}
-- POST /skinapi/api/profiles/minecraft
-- GET  /skinapi/api/minecraft/profile/lookup/name/{playerName}
-- PUT  /skinapi/api/user/profile/{uuid}/{textureType}  (上传材质，需要 access_token)
-- DELETE /skinapi/api/user/profile/{uuid}/{textureType}
+实现端点（挂载前缀 /api/yggdrasil）：
+- GET  /api/yggdrasil/                          Yggdrasil meta（含 signaturePublickey、skinDomains）
+- POST /api/yggdrasil/authserver/authenticate
+- POST /api/yggdrasil/authserver/refresh
+- POST /api/yggdrasil/authserver/validate
+- POST /api/yggdrasil/authserver/invalidate
+- POST /api/yggdrasil/authserver/signout
+- POST /api/yggdrasil/sessionserver/session/minecraft/join
+- GET  /api/yggdrasil/sessionserver/session/minecraft/hasJoined
+- GET  /api/yggdrasil/sessionserver/session/minecraft/profile/{uuid}
+- GET  /api/yggdrasil/api/users/profiles/minecraft/{playerName}
+- POST /api/yggdrasil/api/profiles/minecraft
+- GET  /api/yggdrasil/api/minecraft/profile/lookup/name/{playerName}
+- PUT  /api/yggdrasil/api/user/profile/{uuid}/{textureType}  (上传材质，需要 access_token)
+- DELETE /api/yggdrasil/api/user/profile/{uuid}/{textureType}
 """
 import base64
 import json
@@ -127,9 +127,9 @@ async def _get_site_url(db: AsyncSession) -> str:
 async def _get_texture_base_url(db: AsyncSession) -> str:
     """材质 URL 的基地址。
 
-    优先用站点设置 `texture_base_url`，否则用 `api_url`（含 /skinapi 前缀，
+    优先用站点设置 `texture_base_url`，否则用 `api_url`（含 /api/yggdrasil 前缀，
     与启动器实际访问 API 的地址同源同前缀），最后回退到 public_url/site_url。
-    这样 nginx 把整个后端反向代理到 /skinapi/ 时，材质 URL 仍可访问。
+    这样 nginx 把整个后端反向代理到 /api/yggdrasil/ 时，材质 URL 仍可访问。
     """
     row = (await db.execute(
         select(SiteSetting).where(SiteSetting.key == "texture_base_url")
@@ -213,7 +213,7 @@ async def yggdrasil_meta(db: AsyncSession = Depends(get_db)):
     return JSONResponse(meta)
 
 
-# ====== 材质静态文件（挂载在 /skinapi/static/textures/ 下，供启动器直接下载） ======
+# ====== 材质静态文件（挂载在 /api/yggdrasil/static/textures/ 下，供启动器直接下载） ======
 @router.get("/static/textures/{filename}")
 async def serve_skin_texture(filename: str):
     if "/" in filename or ".." in filename:

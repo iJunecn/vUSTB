@@ -8,13 +8,8 @@
 :80 {
     encode zstd gzip
 
-    # 后端 API（Web 业务）
+    # 后端 API（Web 业务 + Yggdrasil 协议 /api/yggdrasil/*）
     handle /api/* {
-        reverse_proxy backend:8000
-    }
-
-    # Yggdrasil 协议 + OAuth Provider（路径名固定，不能改）
-    handle /skinapi/* {
         reverse_proxy backend:8000
     }
 
