@@ -6,7 +6,8 @@ import { useUserStore } from '@/stores/user';
 import { rawApi } from '@/lib/api';
 import {
   Printer, CalendarCheck, CheckCircle2, XCircle, Clock, Play,
-  FileDown, Trash2, PauseCircle, PlayCircle, Loader2, Plus, Settings2,
+  FileDown, Trash2, PauseCircle, PlayCircle, Loader2, Plus, Users,
+  BarChart3, RefreshCw,
 } from 'lucide-react';
 
 type Booking = {
@@ -44,6 +45,26 @@ type Stats = {
   printers: number;
 };
 
+type AdminUser = {
+  id: number;
+  email: string;
+  username: string;
+  user_group: string;
+  real_name: string | null;
+  student_id: string | null;
+  email_verified: boolean;
+  is_banned: boolean;
+  created_at: string;
+};
+
+type WeeklyReport = {
+  id: number;
+  start_date: string;
+  end_date: string;
+  file_path: string | null;
+  created_at: string | null;
+};
+
 const SLOT_LABELS: Record<string, string> = { AM: '上午', PM: '下午' };
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   pending: { label: '待审批', color: '#f59e0b' },
@@ -54,14 +75,25 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   rejected: { label: '已拒绝', color: '#ef4444' },
 };
 
+const USER_GROUP_LABELS: Record<string, { label: string; color: string }> = {
+  super_admin: { label: '最高管理员', color: '#1f2937' },
+  admin: { label: '管理员', color: '#2f78ba' },
+  teacher: { label: '教师', color: '#7c3aed' },
+  user: { label: '用户', color: '#6b7280' },
+};
+
+type TabKey = 'overview' | 'printers' | 'approvals' | 'all' | 'users' | 'reports';
+
 export default function AdminPrintPage() {
   const router = useRouter();
   const { user, loaded, hydrate } = useUserStore();
-  const [tab, setTab] = useState<'overview' | 'printers' | 'approvals' | 'all'>('overview');
+  const [tab, setTab] = useState<TabKey>('overview');
   const [stats, setStats] = useState<Stats | null>(null);
   const [printers, setPrinters] = useState<PrinterInfo[]>([]);
   const [approvals, setApprovals] = useState<Booking[]>([]);
   const [allBookings, setAllBookings] = useState<Booking[]>([]);
+  const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
+  const [weeklyReports, setWeeklyReports] = useState<WeeklyReport[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Printer form
@@ -85,16 +117,20 @@ export default function AdminPrintPage() {
     if (!['super_admin', 'admin', 'teacher'].includes(user.user_group)) return;
     setLoading(true);
     try {
-      const [statsRes, printersRes, approvalsRes, bookingsRes] = await Promise.all([
+      const [statsRes, printersRes, approvalsRes, bookingsRes, usersRes, reportsRes] = await Promise.all([
         rawApi.get('/api/print/admin/stats'),
         rawApi.get('/api/print/printers'),
         rawApi.get('/api/print/admin/approvals'),
         rawApi.get('/api/print/bookings'),
+        rawApi.get('/api/admin/users').catch(() => ({ data: [] })),
+        rawApi.get('/api/print/admin/reports').catch(() => ({ data: [] })),
       ]);
       setStats(statsRes.data);
       setPrinters(printersRes.data);
       setApprovals(approvalsRes.data);
       setAllBookings(bookingsRes.data);
+      setAdminUsers(usersRes.data);
+      setWeeklyReports(reportsRes.data);
     } catch { /* ignore */ }
     setLoading(false);
   }, [loaded, user]);
@@ -166,6 +202,34 @@ export default function AdminPrintPage() {
     }
   };
 
+  const handleSetUserGroup = async (userId: number, newGroup: string) => {
+    try {
+      await rawApi.post(`/api/admin/users/${userId}/set-group`, { user_group: newGroup });
+      loadData();
+    } catch (err: any) {
+      alert(err?.response?.data?.detail || '操作失败');
+    }
+  };
+
+  const handleGenerateReport = async () => {
+    try {
+      await rawApi.post('/api/print/admin/reports/generate');
+      loadData();
+    } catch (err: any) {
+      alert(err?.response?.data?.detail || '生成失败');
+    }
+  };
+
+  const handleDeleteReport = async (id: number) => {
+    if (!confirm('确认删除此周报记录？')) return;
+    try {
+      await rawApi.delete(`/api/print/admin/reports/${id}`);
+      loadData();
+    } catch (err: any) {
+      alert(err?.response?.data?.detail || '删除失败');
+    }
+  };
+
   if (!loaded || !user || !['super_admin', 'admin', 'teacher'].includes(user.user_group)) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', padding: '80px 0' }}>
@@ -174,11 +238,13 @@ export default function AdminPrintPage() {
     );
   }
 
-  const tabs = [
-    { key: 'overview' as const, label: '概览' },
-    { key: 'printers' as const, label: '打印机管理' },
-    { key: 'approvals' as const, label: '审批队列' },
-    { key: 'all' as const, label: '全部预约' },
+  const tabs: { key: TabKey; label: string }[] = [
+    { key: 'overview', label: '概览' },
+    { key: 'printers', label: '打印机管理' },
+    { key: 'approvals', label: '审批队列' },
+    { key: 'all', label: '全部预约' },
+    { key: 'users', label: '用户管理' },
+    { key: 'reports', label: '周报管理' },
   ];
 
   return (
@@ -190,7 +256,7 @@ export default function AdminPrintPage() {
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--color-border)', paddingBottom: 8 }}>
+      <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--color-border)', paddingBottom: 8, flexWrap: 'wrap' }}>
         {tabs.map((t) => (
           <button
             key={t.key}
@@ -410,6 +476,185 @@ export default function AdminPrintPage() {
               })}
             </div>
           )}
+
+          {/* Users management */}
+          {tab === 'users' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--color-heading)', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Users style={{ width: 16, height: 16 }} /> 用户列表
+              </h3>
+
+              {adminUsers.length === 0 ? (
+                <div className="surface-card" style={{ padding: 24, textAlign: 'center', color: 'var(--color-text-light)' }}>
+                  暂无用户数据
+                </div>
+              ) : (
+                <div className="surface-card" style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                    <thead>
+                      <tr style={{ background: 'var(--color-background-soft)' }}>
+                        <th style={thStyle}>ID</th>
+                        <th style={thStyle}>用户名</th>
+                        <th style={thStyle}>姓名</th>
+                        <th style={thStyle}>学号</th>
+                        <th style={thStyle}>邮箱</th>
+                        <th style={thStyle}>角色</th>
+                        <th style={thStyle}>操作</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {adminUsers.map((u) => {
+                        const grp = USER_GROUP_LABELS[u.user_group] || USER_GROUP_LABELS.user;
+                        return (
+                          <tr key={u.id}>
+                            <td style={tdStyle}>{u.id}</td>
+                            <td style={tdStyle}><strong>{u.username}</strong></td>
+                            <td style={tdStyle}>{u.real_name || '-'}</td>
+                            <td style={tdStyle}>{u.student_id || '-'}</td>
+                            <td style={tdStyle}>{u.email}</td>
+                            <td style={tdStyle}>
+                              <span style={{
+                                padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600,
+                                background: `color-mix(in srgb, ${grp.color} 15%, transparent)`,
+                                color: grp.color,
+                              }}>
+                                {grp.label}
+                              </span>
+                            </td>
+                            <td style={tdStyle}>
+                              {user.user_group === 'super_admin' && u.user_group !== 'super_admin' && (
+                                <button
+                                  onClick={() => {
+                                    const newGroup = u.user_group === 'user' ? 'admin' : 'user';
+                                    if (confirm(`确认将 ${u.username} 设为 ${USER_GROUP_LABELS[newGroup]?.label || newGroup}？`)) {
+                                      handleSetUserGroup(u.id, newGroup);
+                                    }
+                                  }}
+                                  style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, border: '1px solid var(--color-primary)', background: 'transparent', color: 'var(--color-primary)', cursor: 'pointer' }}
+                                >
+                                  {u.user_group === 'user' ? '设为管理' : '降为用户'}
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Reports management */}
+          {tab === 'reports' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {/* Real-time export */}
+              <div className="surface-card" style={{ padding: 20 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+                  <div>
+                    <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--color-heading)', margin: '0 0 4px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <BarChart3 style={{ width: 16, height: 16 }} /> 实时操作
+                    </h3>
+                    <p style={{ fontSize: 13, color: 'var(--color-text-light)', margin: 0 }}>选择日期范围，生成并导出预约数据 Excel。</p>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <input type="date" value={reportFrom} onChange={(e) => setReportFrom(e.target.value)} style={inputStyle} />
+                    <span style={{ color: 'var(--color-text-light)' }}>~</span>
+                    <input type="date" value={reportTo} onChange={(e) => setReportTo(e.target.value)} style={inputStyle} />
+                    <button onClick={handleExport} className="btn-primary" style={{ fontSize: 13, padding: '6px 14px', display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <FileDown style={{ width: 14, height: 14 }} /> 导出 Excel
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Generate weekly report */}
+              <div className="surface-card" style={{ padding: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--color-heading)', margin: '0 0 4px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <RefreshCw style={{ width: 16, height: 16 }} /> 生成本周周报
+                  </h3>
+                  <p style={{ fontSize: 13, color: 'var(--color-text-light)', margin: 0 }}>手动生成本周周报记录。</p>
+                </div>
+                <button onClick={handleGenerateReport} className="btn-ghost" style={{ fontSize: 13, padding: '6px 14px', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <RefreshCw style={{ width: 14, height: 14 }} /> 生成本周周报
+                </button>
+              </div>
+
+              {/* Historical reports */}
+              <div className="surface-card" style={{ overflowX: 'auto' }}>
+                <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--color-border)', fontWeight: 600, color: 'var(--color-heading)', fontSize: 14 }}>
+                  历史周报记录
+                </div>
+                {weeklyReports.length === 0 ? (
+                  <div style={{ padding: 24, textAlign: 'center', color: 'var(--color-text-light)' }}>
+                    暂无历史周报
+                  </div>
+                ) : (
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                    <thead>
+                      <tr style={{ background: 'var(--color-background-soft)' }}>
+                        <th style={thStyle}>ID</th>
+                        <th style={thStyle}>统计周期</th>
+                        <th style={thStyle}>生成时间</th>
+                        <th style={thStyle}>操作</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {weeklyReports.map((r) => (
+                        <tr key={r.id}>
+                          <td style={tdStyle}>{r.id}</td>
+                          <td style={tdStyle}>
+                            <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 11, background: 'color-mix(in srgb, #3b82f6 10%, transparent)', color: '#3b82f6', fontWeight: 600 }}>
+                              {r.start_date}
+                            </span>
+                            <span style={{ color: 'var(--color-text-light)', margin: '0 6px' }}>→</span>
+                            <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 11, background: 'color-mix(in srgb, #3b82f6 10%, transparent)', color: '#3b82f6', fontWeight: 600 }}>
+                              {r.end_date}
+                            </span>
+                          </td>
+                          <td style={tdStyle}>{r.created_at ? new Date(r.created_at).toLocaleString() : '-'}</td>
+                          <td style={tdStyle}>
+                            <button
+                              onClick={() => {
+                                handleExport;
+                                // Quick export for this report's date range
+                                setReportFrom(r.start_date);
+                                setReportTo(r.end_date);
+                                rawApi.get('/api/print/admin/reports/export', {
+                                  params: { date_from: r.start_date, date_to: r.end_date },
+                                  responseType: 'blob',
+                                }).then((res) => {
+                                  const url = URL.createObjectURL(res.data);
+                                  const a = document.createElement('a');
+                                  a.href = url;
+                                  a.download = `print_report_${r.start_date}_to_${r.end_date}.xlsx`;
+                                  a.click();
+                                  URL.revokeObjectURL(url);
+                                }).catch(() => alert('导出失败'));
+                              }}
+                              style={{ fontSize: 11, padding: '3px 8px', borderRadius: 4, border: '1px solid #22c55e', background: 'transparent', color: '#22c55e', cursor: 'pointer', marginRight: 4 }}
+                            >
+                              下载
+                            </button>
+                            {user.user_group === 'super_admin' && (
+                              <button
+                                onClick={() => handleDeleteReport(r.id)}
+                                style={{ fontSize: 11, padding: '3px 8px', borderRadius: 4, border: '1px solid #ef4444', background: 'transparent', color: '#ef4444', cursor: 'pointer' }}
+                              >
+                                删除
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>
@@ -438,6 +683,15 @@ const inputStyle: React.CSSProperties = {
   padding: '8px 12px', borderRadius: 8, fontSize: 14,
   border: '1px solid var(--color-border)', background: 'var(--color-card-background)',
   color: 'var(--color-text)',
+};
+
+const thStyle: React.CSSProperties = {
+  padding: '10px 12px', textAlign: 'left', borderBottom: '1px solid var(--color-border)',
+  color: 'var(--color-text-light)', fontWeight: 600, fontSize: 12,
+};
+
+const tdStyle: React.CSSProperties = {
+  padding: '10px 12px', borderBottom: '1px solid var(--color-border)', color: 'var(--color-text)',
 };
 
 function smallBtnStyle(color: string): React.CSSProperties {

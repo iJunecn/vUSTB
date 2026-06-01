@@ -2,9 +2,10 @@
 
 import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Image from 'next/image';
 import { useUserStore } from '@/stores/user';
 import { rawApi } from '@/lib/api';
-import { Loader2, CalendarCheck } from 'lucide-react';
+import { Loader2, CalendarCheck, QrCode, X } from 'lucide-react';
 
 export default function PrintBookingPageWrapper() {
   return (
@@ -47,6 +48,7 @@ function PrintBookingPage() {
   const [cost, setCost] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [showPayQR, setShowPayQR] = useState(false);
 
   useEffect(() => { hydrate(); }, [hydrate]);
 
@@ -126,11 +128,7 @@ function PrintBookingPage() {
               value={form.printer_id}
               onChange={(e) => setForm({ ...form, printer_id: e.target.value })}
               required
-              style={{
-                padding: '8px 12px', borderRadius: 8, fontSize: 14,
-                border: '1px solid var(--color-border)', background: 'var(--color-card-background)',
-                color: 'var(--color-text)',
-              }}
+              className="input"
             >
               <option value="">请选择打印机</option>
               {printers.map((p) => (
@@ -151,11 +149,7 @@ function PrintBookingPage() {
             onChange={(e) => setForm({ ...form, date: e.target.value })}
             required
             min={new Date().toISOString().slice(0, 10)}
-            style={{
-              padding: '8px 12px', borderRadius: 8, fontSize: 14,
-              border: '1px solid var(--color-border)', background: 'var(--color-card-background)',
-              color: 'var(--color-text)',
-            }}
+            className="input"
           />
         </label>
 
@@ -166,11 +160,7 @@ function PrintBookingPage() {
             value={form.slot_type}
             onChange={(e) => setForm({ ...form, slot_type: e.target.value as 'AM' | 'PM' })}
             required
-            style={{
-              padding: '8px 12px', borderRadius: 8, fontSize: 14,
-              border: '1px solid var(--color-border)', background: 'var(--color-card-background)',
-              color: 'var(--color-text)',
-            }}
+            className="input"
           >
             <option value="">请选择时段</option>
             <option value="AM">上午 (08:00-11:30)</option>
@@ -186,11 +176,7 @@ function PrintBookingPage() {
             value={form.file_name}
             onChange={(e) => setForm({ ...form, file_name: e.target.value })}
             placeholder="打印的文件名称"
-            style={{
-              padding: '8px 12px', borderRadius: 8, fontSize: 14,
-              border: '1px solid var(--color-border)', background: 'var(--color-card-background)',
-              color: 'var(--color-text)',
-            }}
+            className="input"
           />
         </label>
 
@@ -202,99 +188,194 @@ function PrintBookingPage() {
             onChange={(e) => setForm({ ...form, purpose: e.target.value })}
             placeholder="打印用途说明"
             rows={3}
-            style={{
-              padding: '8px 12px', borderRadius: 8, fontSize: 14, resize: 'vertical',
-              border: '1px solid var(--color-border)', background: 'var(--color-card-background)',
-              color: 'var(--color-text)',
-            }}
+            className="input"
+            style={{ resize: 'vertical' }}
           />
         </label>
 
         {/* Filament */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <input
-            type="checkbox"
-            id="own_filament"
-            checked={form.own_filament}
-            onChange={(e) => setForm({ ...form, own_filament: e.target.checked })}
-          />
-          <label htmlFor="own_filament" style={{ fontSize: 14, color: 'var(--color-text)', cursor: 'pointer' }}>自带耗材</label>
+        <div style={{ padding: 16, borderRadius: 12, background: 'var(--color-background-soft)' }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-heading)', display: 'block', marginBottom: 8 }}>是否使用个人耗材？</span>
+          <div style={{ display: 'flex', gap: 16 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
+              <input
+                type="radio"
+                name="own_filament"
+                checked={form.own_filament}
+                onChange={() => setForm({ ...form, own_filament: true })}
+              />
+              <strong>是</strong> - 使用个人耗材 <span style={{ color: '#22c55e' }}>(免费使用机器)</span>
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
+              <input
+                type="radio"
+                name="own_filament"
+                checked={!form.own_filament}
+                onChange={() => setForm({ ...form, own_filament: false })}
+              />
+              <strong>否</strong> - 使用社团耗材 <span style={{ color: 'var(--color-text-light)' }}>(需支付材料费)</span>
+            </label>
+          </div>
         </div>
 
         {/* Print type & weight */}
         {!form.own_filament && (
           <>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-heading)' }}>打印类型</span>
-              <select
-                value={form.print_type}
-                onChange={(e) => setForm({ ...form, print_type: e.target.value as 'single' | 'multi' })}
-                style={{
-                  padding: '8px 12px', borderRadius: 8, fontSize: 14,
-                  border: '1px solid var(--color-border)', background: 'var(--color-card-background)',
-                  color: 'var(--color-text)',
-                }}
-              >
-                <option value="single">单色 (¥0.10/g)</option>
-                <option value="multi">多色 (¥0.15/g)</option>
-              </select>
-            </label>
+            <div style={{ padding: 16, borderRadius: 12, background: 'var(--color-background-soft)' }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-heading)', display: 'block', marginBottom: 8 }}>打印类型</span>
+              <div style={{ display: 'flex', gap: 16 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
+                  <input
+                    type="radio"
+                    name="print_type"
+                    checked={form.print_type === 'single'}
+                    onChange={() => setForm({ ...form, print_type: 'single' })}
+                  />
+                  <strong>单色打印</strong> <span style={{ color: 'var(--color-primary)' }}>(¥0.10/g)</span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
+                  <input
+                    type="radio"
+                    name="print_type"
+                    checked={form.print_type === 'multi'}
+                    onChange={() => setForm({ ...form, print_type: 'multi' })}
+                  />
+                  <strong>多色打印</strong> <span style={{ color: 'var(--color-primary)' }}>(¥0.15/g)</span>
+                </label>
+              </div>
+            </div>
 
             <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-heading)' }}>预估重量 (g)</span>
               <input
                 type="number"
-                value={form.weight}
+                value={form.weight || ''}
                 onChange={(e) => setForm({ ...form, weight: parseFloat(e.target.value) || 0 })}
                 min={0}
                 step={0.1}
                 required
-                style={{
-                  padding: '8px 12px', borderRadius: 8, fontSize: 14,
-                  border: '1px solid var(--color-border)', background: 'var(--color-card-background)',
-                  color: 'var(--color-text)',
-                }}
+                className="input"
+                placeholder="请在Bambu Lab切片软件查看后填写"
               />
+              <p style={{ fontSize: 11, color: 'var(--color-text-light)', margin: '2px 0 0' }}>请务必如实填写，管理员将会核对。</p>
             </label>
           </>
         )}
 
-        {/* Paid */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <input
-            type="checkbox"
-            id="is_paid"
-            checked={form.is_paid}
-            onChange={(e) => setForm({ ...form, is_paid: e.target.checked })}
-          />
-          <label htmlFor="is_paid" style={{ fontSize: 14, color: 'var(--color-text)', cursor: 'pointer' }}>已支付</label>
-        </div>
-
         {/* Cost preview */}
-        <div style={{ padding: '12px 16px', borderRadius: 8, background: 'var(--color-background-soft)', border: '1px solid var(--color-border)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 13, color: 'var(--color-text-light)' }}>预估费用</span>
-            <span style={{ fontSize: 20, fontWeight: 700, color: 'var(--color-primary)' }}>
-              {cost > 0 ? `¥${cost}` : '免费'}
+        <div style={{ padding: '16px 20px', borderRadius: 12, background: 'var(--color-background-soft)', border: '2px solid var(--color-primary)', textAlign: 'center' }}>
+          <div style={{ color: 'var(--color-text-light)', fontSize: 13, marginBottom: 4 }}>预估费用</div>
+          <div>
+            <span style={{ fontSize: 36, fontWeight: 700, color: 'var(--color-primary)' }}>
+              {cost > 0 ? cost.toFixed(2) : '0.00'}
             </span>
+            <span style={{ fontSize: 18, color: 'var(--color-primary)', fontWeight: 600 }}> 元</span>
           </div>
-          {!form.own_filament && (
+          {!form.own_filament && form.weight > 0 && (
             <p style={{ fontSize: 11, color: 'var(--color-text-light)', margin: '4px 0 0' }}>
               {form.print_type === 'multi' ? '多色' : '单色'} ¥{form.print_type === 'multi' ? '0.15' : '0.10'}/g × {form.weight}g
             </p>
           )}
         </div>
 
-        <button
-          type="submit"
-          disabled={submitting || !form.date || !form.slot_type}
-          className="btn-primary"
-          style={{ padding: '10px 20px', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
-        >
-          {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CalendarCheck style={{ width: 16, height: 16 }} />}
-          提交预约
-        </button>
+        {/* Payment section - show when using club filament and cost > 0 */}
+        {!form.own_filament && cost > 0 && (
+          <div style={{ padding: '12px 16px', borderRadius: 10, background: 'var(--color-background-soft)', border: '1px solid var(--color-border)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-heading)' }}>支付状态确认</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => setShowPayQR(true)}
+                  style={{ fontSize: 12, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--color-primary)', background: 'transparent', color: 'var(--color-primary)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
+                >
+                  <QrCode style={{ width: 14, height: 14 }} /> 扫码支付
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, is_paid: !form.is_paid })}
+                  style={{
+                    padding: '4px 12px', borderRadius: 6, fontSize: 12, cursor: 'pointer', border: '1px solid',
+                    borderColor: form.is_paid ? '#22c55e' : '#ef4444',
+                    background: form.is_paid ? 'color-mix(in srgb, #22c55e 10%, transparent)' : 'color-mix(in srgb, #ef4444 10%, transparent)',
+                    color: form.is_paid ? '#22c55e' : '#ef4444', fontWeight: 600,
+                  }}
+                >
+                  {form.is_paid ? '已支付' : '未支付'}
+                </button>
+              </div>
+            </div>
+            <p style={{ fontSize: 11, color: 'var(--color-text-light)', margin: '4px 0 0' }}>请在支付完成后切换为"已支付"</p>
+            <input type="hidden" name="is_paid" value={form.is_paid ? '1' : '0'} />
+          </div>
+        )}
+
+        {/* Paid checkbox (when using own filament or cost = 0) */}
+        {(form.own_filament || cost === 0) && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <input
+              type="checkbox"
+              id="is_paid"
+              checked={form.is_paid}
+              onChange={(e) => setForm({ ...form, is_paid: e.target.checked })}
+            />
+            <label htmlFor="is_paid" style={{ fontSize: 14, color: 'var(--color-text)', cursor: 'pointer' }}>已支付</label>
+          </div>
+        )}
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {!form.own_filament && cost > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowPayQR(true)}
+              className="btn-ghost"
+              style={{ padding: '12px 20px', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, borderColor: '#f59e0b', color: '#f59e0b' }}
+            >
+              <QrCode style={{ width: 16, height: 16 }} /> 支付材料费用
+            </button>
+          )}
+          <button
+            type="submit"
+            disabled={submitting || !form.date || !form.slot_type}
+            className="btn-primary"
+            style={{ padding: '12px 20px', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+          >
+            {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CalendarCheck style={{ width: 16, height: 16 }} />}
+            确认预约
+          </button>
+        </div>
       </form>
+
+      {/* Payment QR Code Modal */}
+      {showPayQR && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 110, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+          onClick={(e) => { if (e.target === e.currentTarget) setShowPayQR(false); }}
+        >
+          <div style={{ background: 'var(--color-card-background)', borderRadius: 16, maxWidth: 320, width: '100%', boxShadow: '0 16px 48px rgba(0,0,0,0.2)', animation: 'slideUp 0.3s ease-out', textAlign: 'center', padding: 24 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: 'var(--color-heading)' }}>
+                <QrCode style={{ width: 16, height: 16, display: 'inline', marginRight: 6 }} /> 扫码支付
+              </h3>
+              <button onClick={() => setShowPayQR(false)} style={{ background: 'none', border: 'none', color: 'var(--color-text-light)', cursor: 'pointer' }}>
+                <X style={{ width: 18, height: 18 }} />
+              </button>
+            </div>
+            <Image
+              src="/images/pay.jpg"
+              alt="支付二维码"
+              width={200}
+              height={200}
+              style={{ width: 200, height: 'auto', borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.1)', display: 'inline-block' }}
+            />
+            <p style={{ marginTop: 16, color: 'var(--color-text-light)', fontSize: 13, marginBottom: 0 }}>
+              请使用微信扫描二维码支付材料费
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

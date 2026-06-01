@@ -578,6 +578,82 @@ async def print_stats(
     }
 
 
+# ──────────────── 周报管理 ────────────────
+
+class WeeklyReportOut(BaseModel):
+    id: int
+    start_date: str
+    end_date: str
+    file_path: str | None
+    created_at: str | None
+
+
+@router.get("/admin/reports", response_model=list[WeeklyReportOut])
+async def list_weekly_reports(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    if not _can_manage_printer(user):
+        raise HTTPException(status_code=403, detail="需要管理员或教师权限")
+    rows = (
+        await db.execute(select(WeeklyReport).order_by(WeeklyReport.created_at.desc()))
+    ).scalars().all()
+    return [
+        WeeklyReportOut(
+            id=r.id,
+            start_date=r.start_date,
+            end_date=r.end_date,
+            file_path=r.file_path,
+            created_at=r.created_at.isoformat() if r.created_at else None,
+        )
+        for r in rows
+    ]
+
+
+@router.post("/admin/reports/generate")
+async def generate_weekly_report(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """手动生成本周周报并保存到数据库。"""
+    if not _can_manage_printer(user):
+        raise HTTPException(status_code=403, detail="需要管理员或教师权限")
+
+    from datetime import timedelta
+    now = datetime.now(timezone(timedelta(hours=8)))
+    # 本周一到本周日
+    monday = now - timedelta(days=now.weekday())
+    start_date = monday.strftime("%Y-%m-%d")
+    end_date = (monday + timedelta(days=6)).strftime("%Y-%m-%d")
+
+    report = WeeklyReport(start_date=start_date, end_date=end_date)
+    db.add(report)
+    await db.commit()
+    await db.refresh(report)
+    return {
+        "id": report.id,
+        "start_date": report.start_date,
+        "end_date": report.end_date,
+        "ok": True,
+    }
+
+
+@router.delete("/admin/reports/{report_id}")
+async def delete_weekly_report(
+    report_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    if not _can_manage_printer(user):
+        raise HTTPException(status_code=403, detail="需要管理员或教师权限")
+    r = (await db.execute(select(WeeklyReport).where(WeeklyReport.id == report_id))).scalar_one_or_none()
+    if not r:
+        raise HTTPException(status_code=404, detail="周报不存在")
+    await db.delete(r)
+    await db.commit()
+    return {"ok": True}
+
+
 # ──────────────── 周时间表 ────────────────
 
 @router.get("/schedule")
