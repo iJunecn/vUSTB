@@ -73,11 +73,9 @@ async def health():
 
 
 # ====== 挂载静态文件 ======
-# textures 目录
-if os.path.exists(settings.textures_directory):
-    app.mount("/static/textures", StaticFiles(directory=settings.textures_directory), name="textures")
-
-# carousel 目录
+# 注：textures 目录由 app.routers.static_files 提供路由（支持 Cache-Control 等头），
+# 不再使用 StaticFiles 挂载，否则路由优先级问题会导致自定义头丢失。
+# carousel 目录仍使用 StaticFiles 挂载。
 if os.path.exists(settings.carousel_directory):
     app.mount("/static/carousel", StaticFiles(directory=settings.carousel_directory), name="carousel")
 

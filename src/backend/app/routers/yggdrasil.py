@@ -10,6 +10,8 @@
 - POST /api/yggdrasil/sessionserver/session/minecraft/join
 - GET  /api/yggdrasil/sessionserver/session/minecraft/hasJoined
 - GET  /api/yggdrasil/sessionserver/session/minecraft/profile/{uuid}
+- POST /api/yggdrasil/minecraftservices/publickeys              (1.20+ 公钥查询)
+- GET  /api/yggdrasil/minecraftservices/publickeys/{uuid}       (1.20+ 单键查询)
 - GET  /api/yggdrasil/api/users/profiles/minecraft/{playerName}
 - POST /api/yggdrasil/api/profiles/minecraft
 - GET  /api/yggdrasil/api/minecraft/profile/lookup/name/{playerName}
@@ -87,8 +89,11 @@ async def _build_profile_json(
         "profileName": player.name,
         "textures": textures,
     }
+    if sign:
+        textures_payload["signatureRequired"] = True
+
     textures_b64 = base64.b64encode(
-        json.dumps(textures_payload).encode("utf-8")
+        json.dumps(textures_payload, separators=(',', ':')).encode("utf-8")
     ).decode("utf-8")
 
     prop = {"name": "textures", "value": textures_b64}
@@ -540,6 +545,62 @@ async def lookup_profile_by_name(playerName: str, db: AsyncSession = Depends(get
         return fallback_resp
 
     return Response(status_code=204)
+
+
+# ====== minecraftservices/publickeys (Minecraft 1.20+ 兼容) ======
+@router.post("/minecraftservices/publickeys")
+async def minecraftservices_publickeys(body: dict):
+    """Minecraft 1.20+ authlib 会向此端点请求公钥以验证材质签名。
+
+    请求体: {"profileIds": ["<uuid1>", "<uuid2>", ...]}
+    响应体: {"keys": [{"publicKey": "<base64 DER>", "publicKeySignature": "...", "publicKeySignatureV2": "..."}]}
+
+    authlib-injector 1.2.5+ 已会自动从 Yggdrasil 元数据的 signaturePublickey
+    回退，但提供此端点可确保更广泛的兼容性。
+    """
+    from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+
+    profile_ids = body.get("profileIds", [])
+    if not profile_ids:
+        return {"keys": []}
+
+    # 返回与 Yggdrasil meta 中 signaturePublickey 一致的 DER 编码公钥
+    crypto._load()
+    pub_der_b64 = base64.b64encode(
+        crypto._public_key.public_bytes(
+            encoding=Encoding.DER,
+            format=PublicFormat.SubjectPublicKeyInfo,
+        )
+    ).decode("ascii")
+
+    keys = []
+    for pid in profile_ids:
+        keys.append({
+            "publicKey": pub_der_b64,
+            "publicKeySignature": "",
+            "publicKeySignatureV2": "",
+        })
+    return {"keys": keys}
+
+
+@router.get("/minecraftservices/publickeys/{uuid}")
+async def minecraftservices_publickeys_by_uuid(uuid: str):
+    """单个玩家公钥查询（Minecraft 1.20.2+ 可能使用 GET 方式）。"""
+    from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+
+    crypto._load()
+    pub_der_b64 = base64.b64encode(
+        crypto._public_key.public_bytes(
+            encoding=Encoding.DER,
+            format=PublicFormat.SubjectPublicKeyInfo,
+        )
+    ).decode("ascii")
+
+    return {
+        "publicKey": pub_der_b64,
+        "publicKeySignature": "",
+        "publicKeySignatureV2": "",
+    }
 
 
 # ====== 材质上传/删除 ======
