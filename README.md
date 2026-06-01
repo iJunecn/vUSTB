@@ -86,6 +86,49 @@ BACKEND_INTERNAL_URL=http://localhost:8000 npm run dev
 - `/about` — 关于我们
 - `/campus` — 3D 校园
 
+### 动态发布系统
+> 由原 kuno-main 项目整合而来，提供博客式的动态发布功能。
+
+| 路由 | 功能 |
+|------|------|
+| `/dynamics` | 动态列表 — 分类筛选、关键词搜索、置顶展示 |
+| `/dynamics/[id]` | 文章详情 — Markdown 渲染、浏览量统计 |
+| `/admin/dynamics` | 动态管理 — 文章列表、置顶/删除、分类 CRUD |
+| `/admin/dynamics/new` | 创建文章 — Markdown 编辑器、实时预览、图片上传、SEO 设置 |
+| `/admin/dynamics/[id]` | 编辑文章 — 同创建页，支持修改已有文章 |
+
+**核心功能：**
+
+- **文章发布**：Markdown 编辑器，支持实时预览、图片上传、GFM 语法（表格、任务列表、删除线等）
+- **分类管理**：创建/删除分类，文章按分类筛选
+- **置顶功能**：最多 2 篇文章可置顶，按排序展示
+- **SEO 优化**：每篇文章可设置 SEO 标题、描述、关键词和 URL slug
+- **封面图**：支持设置封面图 URL 和替代文本
+- **权限控制**：仅超级管理员和管理员可编辑和发表动态
+- **浏览统计**：自动记录文章浏览量
+
+**后端 API：**
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/api/articles` | GET | 文章列表（公开，不含正文） |
+| `/api/articles/search` | GET | 搜索文章（公开） |
+| `/api/articles/categories` | GET | 分类列表（公开） |
+| `/api/articles/count` | GET | 文章总数（公开） |
+| `/api/articles/{id}` | GET | 文章详情（公开，含正文，自增浏览量） |
+| `/api/admin/articles` | GET | 文章列表（管理员，含定时发布） |
+| `/api/admin/articles` | POST | 创建文章（管理员） |
+| `/api/admin/articles/{id}` | GET | 获取文章（管理员） |
+| `/api/admin/articles/{id}` | PUT | 更新文章（管理员） |
+| `/api/admin/articles/{id}` | DELETE | 删除文章（管理员） |
+| `/api/admin/article-categories` | GET | 分类列表（管理员） |
+| `/api/admin/article-categories` | POST | 创建分类（管理员） |
+| `/api/admin/article-categories/{id}` | PUT | 更新分类（管理员） |
+| `/api/admin/article-categories/{id}` | DELETE | 删除分类（管理员） |
+| `/api/admin/article-media/upload` | POST | 上传媒体文件（管理员） |
+| `/api/admin/article-media` | GET | 媒体文件列表（管理员） |
+| `/api/admin/article-media/{id}` | DELETE | 删除媒体文件（管理员） |
+
 ### 皮肤站
 - `/skin` — 皮肤站首页
 - `/skin/library` — 皮肤库
@@ -187,5 +230,6 @@ https://mc.ustb.edu.cn/skinapi/.well-known/openid-configuration
 - [USTB-Official-Website](https://github.com/USTB-SkyCode/USTB-Official-Website) 与 [USTB-Official-Backend](https://github.com/USTB-SkyCode/USTB-Official-Backend) 原官网代码与设计灵感
 - [vSkin](https://github.com/LYOfficial/vSkin) — 皮肤站协议实现
 - [vLab-main](https://github.com/LYOfficial/vLab-main) — 3D 打印预约系统原始实现（Express + SQLite）
+- [kuno-main](https://github.com/xuemian168/kuno) — 动态发布系统原始实现（Go + Next.js）
 - [Blessing Skin Server](https://github.com/bs-community/blessing-skin-server)
 - [mc.sjtu.cn](https://mc.sjtu.cn/) — UI 设计灵感

@@ -967,3 +967,179 @@
     overflow-y: visible;
   }
 }
+
+/* ===== Dynamics / Article pages ===== */
+
+/* Category pill badge */
+.dynamics-cat-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  color: var(--color-primary);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent);
+}
+
+/* Category filter button */
+.dynamics-cat-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+/* Article card hover effect */
+.dynamics-article-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.dynamics-article-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 30px rgba(66, 82, 105, 0.13);
+}
+
+/* ===== Markdown / Article content ===== */
+.article-content.prose-markdown {
+  color: var(--color-text);
+  line-height: 1.8;
+  font-size: 15px;
+}
+
+.article-content.prose-markdown h1 {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--color-heading);
+  margin: 32px 0 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.article-content.prose-markdown h2 {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--color-heading);
+  margin: 28px 0 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 50%, transparent);
+}
+
+.article-content.prose-markdown h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-heading);
+  margin: 24px 0 8px;
+}
+
+.article-content.prose-markdown h4 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-heading);
+  margin: 20px 0 8px;
+}
+
+.article-content.prose-markdown p {
+  margin: 0 0 16px;
+}
+
+.article-content.prose-markdown a {
+  color: var(--color-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.article-content.prose-markdown a:hover {
+  color: var(--color-primary-dark);
+}
+
+.article-content.prose-markdown img {
+  max-width: 100%;
+  border-radius: 10px;
+  margin: 16px 0;
+  box-shadow: var(--theme-shadow-soft);
+}
+
+.article-content.prose-markdown blockquote {
+  margin: 16px 0;
+  padding: 12px 20px;
+  border-left: 4px solid var(--color-primary);
+  background: var(--color-background-soft);
+  border-radius: 0 10px 10px 0;
+  color: var(--color-text-light);
+}
+
+.article-content.prose-markdown blockquote p:last-child {
+  margin-bottom: 0;
+}
+
+.article-content.prose-markdown code {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.9em;
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: var(--color-background-mute);
+  border: 1px solid var(--color-border);
+}
+
+.article-content.prose-markdown pre {
+  margin: 16px 0;
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--color-background-soft);
+  border: 1px solid var(--color-border);
+  overflow-x: auto;
+  line-height: 1.6;
+}
+
+.article-content.prose-markdown pre code {
+  padding: 0;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+}
+
+.article-content.prose-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+  font-size: 14px;
+}
+
+.article-content.prose-markdown th,
+.article-content.prose-markdown td {
+  padding: 10px 14px;
+  border: 1px solid var(--color-border);
+  text-align: left;
+}
+
+.article-content.prose-markdown th {
+  background: var(--color-background-soft);
+  font-weight: 600;
+  color: var(--color-heading);
+}
+
+.article-content.prose-markdown ul,
+.article-content.prose-markdown ol {
+  padding-left: 24px;
+  margin: 0 0 16px;
+}
+
+.article-content.prose-markdown li {
+  margin: 4px 0;
+}
+
+.article-content.prose-markdown hr {
+  border: none;
+  border-top: 1px solid var(--color-border);
+  margin: 24px 0;
+}
+
+.article-content.prose-markdown input[type="checkbox"] {
+  margin-right: 6px;
+}

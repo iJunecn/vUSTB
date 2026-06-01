@@ -6,13 +6,14 @@ import Link from 'next/link';
 import { useUserStore } from '@/stores/user';
 import {
   LayoutDashboard, Users, KeySquare, Settings, Mail,
-  Shield, Monitor, LogOut, Loader2, Menu, X, Printer,
+  Shield, Monitor, LogOut, Loader2, Menu, X, Printer, Newspaper,
 } from 'lucide-react';
 import { SkinAvatar } from '@/components/skin/SkinAvatar';
 
 const NAV = [
   { href: '/admin', label: '概览', icon: LayoutDashboard, exact: true },
   { href: '/admin/users', label: '用户管理', icon: Users },
+  { href: '/admin/dynamics', label: '动态管理', icon: Newspaper },
   { href: '/admin/print', label: '打印预约管理', icon: Printer },
   { href: '/admin/invites', label: '邀请码', icon: KeySquare },
   { href: '/admin/settings', label: '站点设置', icon: Settings },

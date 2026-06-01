@@ -8,6 +8,7 @@ from app.models.managed_file import ManagedFile
 from app.models.scene_camera_preset import SceneCameraPreset
 from app.models.fallback import FallbackEndpoint
 from app.models.print_booking import Printer3D, Booking, BookingStatus, SlotType, PrintType, WeeklyReport
+from app.models.article import Article, ArticleCategory, ArticleMedia
 
 __all__ = [
     "User", "UserGroup",
@@ -20,4 +21,5 @@ __all__ = [
     "SceneCameraPreset",
     "FallbackEndpoint",
     "Printer3D", "Booking", "BookingStatus", "SlotType", "PrintType", "WeeklyReport",
+    "Article", "ArticleCategory", "ArticleMedia",
 ]
