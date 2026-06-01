@@ -4,6 +4,10 @@
 重复请求的 Cache-Control 头。
 
 同时提供用户头像接口。
+
+Yggdrasil 规范要求：
+- 材质 URL 响应头中的 Content-Type 必须为 image/png
+- 客户端会缓存材质，Cache-Control 可减少重复请求
 """
 import os
 from pathlib import Path
@@ -29,6 +33,8 @@ async def serve_texture(filename: str):
 
     MC 客户端会反复请求同一材质 URL，设置长缓存可大幅减少带宽和延迟。
     Cache-Control: public, max-age=604800（7 天）——材质哈希不变则内容不变。
+
+    规范要求 Content-Type 必须为 image/png（防止 MIME Sniffing Attack）。
     """
     if "/" in filename or ".." in filename:
         raise HTTPException(status_code=400, detail="bad name")
@@ -38,7 +44,14 @@ async def serve_texture(filename: str):
     return FileResponse(
         path,
         media_type="image/png",
-        headers={"Cache-Control": "public, max-age=604800"},
+        headers={
+            "Cache-Control": "public, max-age=604800",
+            # CORS 头：MC 客户端本身不检查 CORS，但浏览器端启动器
+            # （如 Web 启动器）和3D 皮肤预览组件需要跨域访问材质
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, HEAD",
+            "Access-Control-Max-Age": "86400",
+        },
     )
 
 

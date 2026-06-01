@@ -27,6 +27,15 @@ const nextConfig = {
           { key: 'Cross-Origin-Resource-Policy', value: 'cross-origin' },
         ],
       },
+      {
+        // Yggdrasil API 地址指示（ALI）—— authlib-injector 规范
+        // 启动器访问站点首页时，通过此头自动发现 Yggdrasil API 地址
+        // 用户只需输入站点域名，启动器即可自动找到 /skinapi/ 端点
+        source: '/:path*',
+        headers: [
+          { key: 'X-Authlib-Injector-API-Location', value: '/skinapi/' },
+        ],
+      },
     ];
   },
   async rewrites() {

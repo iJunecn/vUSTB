@@ -50,6 +50,7 @@ async def _yggdrasil_exception_handler(_request: Request, exc: YggdrasilError):
     return JSONResponse(
         status_code=exc.status_code,
         content={"error": exc.error, "errorMessage": exc.errorMessage},
+        media_type="application/json; charset=utf-8",
     )
 
 
@@ -62,6 +63,7 @@ async def _validation_exception_handler(request: Request, exc: RequestValidation
                 "error": "IllegalArgumentException",
                 "errorMessage": "Invalid request payload.",
             },
+            media_type="application/json; charset=utf-8",
         )
     # 非 Yggdrasil 路径走 FastAPI 默认格式
     return JSONResponse(status_code=422, content={"detail": exc.errors()})

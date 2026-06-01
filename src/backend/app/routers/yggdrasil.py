@@ -20,10 +20,11 @@
 """
 import base64
 import json
+import logging
 import time
 import uuid as uuid_lib
 
-from fastapi import APIRouter, Depends, File, Form, Header, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Header, Query, Request, UploadFile
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,7 +40,17 @@ from app.utils.schemas import AuthRequest, RefreshRequest, JoinRequest, Validati
 from app.utils.rate_limiter import rate_limiter
 from app.utils.user_groups import resolve_user_group, is_admin_group
 
+logger = logging.getLogger("vustb.yggdrasil")
+
 router = APIRouter(tags=["yggdrasil"])
+
+# Yggdrasil 规范要求 Content-Type 为 application/json; charset=utf-8
+YGG_CONTENT_TYPE = "application/json; charset=utf-8"
+
+
+def _json_response(data: dict, status_code: int = 200) -> JSONResponse:
+    """返回符合 Yggdrasil 规范的 JSON 响应（Content-Type 含 charset=utf-8）。"""
+    return JSONResponse(data, status_code=status_code, media_type=YGG_CONTENT_TYPE)
 
 
 # ====== 会话 token（Yggdrasil 使用自定义 accessToken/clientToken 而非 JWT） ======
@@ -61,7 +72,10 @@ def _now_ms() -> int:
 async def _build_profile_json(
     db: AsyncSession, player: Player, sign: bool = False
 ) -> dict:
-    """构建 Yggdrasil profile JSON，包含 textures 与可选签名"""
+    """构建 Yggdrasil profile JSON，包含 textures 与可选签名。
+
+    严格遵循 Yggdrasil 服务端技术规范 §角色信息的序列化。
+    """
     skin_tex = None
     cape_tex = None
     if player.skin_texture_id:
@@ -76,12 +90,16 @@ async def _build_profile_json(
     base_url = (await _get_texture_base_url(db)).rstrip("/") + "/static/textures/"
     textures = {}
     if skin_tex:
-        item = {"url": base_url + skin_tex.hash + ".png"}
+        skin_url = base_url + skin_tex.hash + ".png"
+        item = {"url": skin_url}
         if skin_tex.model == "slim":
             item["metadata"] = {"model": "slim"}
         textures["SKIN"] = item
+        logger.debug(f"Built SKIN texture URL: {skin_url} (model={skin_tex.model})")
     if cape_tex:
-        textures["CAPE"] = {"url": base_url + cape_tex.hash + ".png"}
+        cape_url = base_url + cape_tex.hash + ".png"
+        textures["CAPE"] = {"url": cape_url}
+        logger.debug(f"Built CAPE texture URL: {cape_url}")
 
     textures_payload = {
         "timestamp": _now_ms(),
@@ -89,15 +107,18 @@ async def _build_profile_json(
         "profileName": player.name,
         "textures": textures,
     }
+    # 签名模式（hasJoined 或 unsigned=false）需包含 signatureRequired
     if sign:
         textures_payload["signatureRequired"] = True
 
+    # 规范要求紧凑 JSON（去除空格），减小 base64 编码体积
     textures_b64 = base64.b64encode(
         json.dumps(textures_payload, separators=(',', ':')).encode("utf-8")
     ).decode("utf-8")
 
     prop = {"name": "textures", "value": textures_b64}
     if sign:
+        # SHA1withRSA 签名（规范 §角色信息的序列化）
         prop["signature"] = crypto.sign_data(textures_b64)
 
     profile_data = {
@@ -125,7 +146,6 @@ class YggdrasilError(Exception):
 
 def _yggdrasil_error(error: str, message: str, status_code: int = 403) -> YggdrasilError:
     """返回一个可 raise 的 YggdrasilError。
-
     用法保留为 `raise _yggdrasil_error(...)`，由统一 handler 序列化。
     """
     return YggdrasilError(error, message, status_code)
@@ -221,17 +241,16 @@ async def yggdrasil_meta(db: AsyncSession = Depends(get_db)):
     }
 
     # OpenID 配置链接：固定走站点根的 /.well-known/openid-configuration
-    # （Caddy 已为该路径反代到后端，与 /skinapi 重写无关）
     if site_url:
         meta["meta"]["feature.openid_configuration_url"] = (
             site_url.rstrip("/") + "/.well-known/openid-configuration"
         )
 
-    return JSONResponse(meta)
+    return _json_response(meta)
 
 
 # ====== 材质静态文件 ======
-# 注意：不在此挂载 /static/textures —— 该路径已由 app.main 静态挂载，
+# 注意：不在此挂载 /static/textures —— 该路径由 app.routers.static_files 提供，
 # Caddy 直接反代 /static/*。在 Yggdrasil 路由内重复挂载会导致 URL 漂移到
 # /api/yggdrasil/static/textures/，破坏 skinDomains 白名单匹配。
 
@@ -317,7 +336,7 @@ async def authserver_authenticate(req: AuthRequest, request: Request, db: AsyncS
         resp["selectedProfile"] = {"id": selected.uuid.replace("-", ""), "name": selected.name}
     if req.requestUser:
         resp["user"] = {"id": str(user.id), "properties": []}
-    return resp
+    return _json_response(resp)
 
 
 @router.post("/authserver/refresh")
@@ -375,7 +394,7 @@ async def authserver_refresh(req: RefreshRequest, db: AsyncSession = Depends(get
         if user:
             resp["user"] = {"id": str(user.id), "properties": []}
 
-    return resp
+    return _json_response(resp)
 
 
 @router.post("/authserver/validate")
@@ -468,11 +487,24 @@ async def session_has_joined(
         if banned_until and banned_until > int(time.time() * 1000):
             raise _yggdrasil_error("ForbiddenOperationException", "Account is banned.")
 
-    return await _build_profile_json(db, player, sign=True)
+    # hasJoined 必须返回带签名的完整 profile（规范 §服务端验证客户端）
+    profile = await _build_profile_json(db, player, sign=True)
+    return _json_response(profile)
 
 
 @router.get("/sessionserver/session/minecraft/profile/{uuid}")
-async def session_profile(uuid: str, unsigned: bool = True, db: AsyncSession = Depends(get_db)):
+async def session_profile(
+    uuid: str,
+    unsigned: bool = Query(default=True, description="是否不包含数字签名，默认 true"),
+    db: AsyncSession = Depends(get_db),
+):
+    """查询角色属性（§角色部分 - 查询角色属性）。
+
+    规范要求：
+    - unsigned 默认为 true（不包含签名）
+    - unsigned=false 时包含签名和 signatureRequired
+    - 找不到角色返回 204
+    """
     normalized = uuid.replace("-", "")
     player = None
 
@@ -489,7 +521,8 @@ async def session_profile(uuid: str, unsigned: bool = True, db: AsyncSession = D
             return fallback_resp
         return Response(status_code=204)
 
-    return await _build_profile_json(db, player, sign=(not unsigned))
+    profile = await _build_profile_json(db, player, sign=(not unsigned))
+    return _json_response(profile)
 
 
 # ====== profiles by name / bulk ======
@@ -500,7 +533,7 @@ async def get_profile_by_name(playerName: str, db: AsyncSession = Depends(get_db
     """单个玩家名转 UUID"""
     player = (await db.execute(select(Player).where(Player.name == playerName))).scalar_one_or_none()
     if player:
-        return {"id": player.uuid.replace("-", ""), "name": player.name}
+        return _json_response({"id": player.uuid.replace("-", ""), "name": player.name})
 
     # Fallback to configured services
     fallback_resp = await fallback_backend.get_profile_by_name(db, playerName)
@@ -513,7 +546,7 @@ async def get_profile_by_name(playerName: str, db: AsyncSession = Depends(get_db
 @router.post("/api/profiles/minecraft")
 async def query_profiles(names: list[str], db: AsyncSession = Depends(get_db)):
     if not names:
-        return []
+        return _json_response([])
 
     # 1. 查询本地
     players = (await db.execute(select(Player).where(Player.name.in_(names[:100])))).scalars().all()
@@ -527,7 +560,7 @@ async def query_profiles(names: list[str], db: AsyncSession = Depends(get_db)):
         if isinstance(mojang_profiles, list):
             local_profiles.extend(mojang_profiles)
 
-    return local_profiles
+    return _json_response(local_profiles)
 
 
 # ====== services lookup ======
@@ -537,7 +570,7 @@ async def lookup_profile_by_name(playerName: str, db: AsyncSession = Depends(get
     """Minecraft Services Profile Lookup"""
     player = (await db.execute(select(Player).where(Player.name == playerName))).scalar_one_or_none()
     if player:
-        return {"id": player.uuid.replace("-", ""), "name": player.name}
+        return _json_response({"id": player.uuid.replace("-", ""), "name": player.name})
 
     # Fallback
     fallback_resp = await fallback_backend.services_lookup(db, playerName)
@@ -562,7 +595,7 @@ async def minecraftservices_publickeys(body: dict):
 
     profile_ids = body.get("profileIds", [])
     if not profile_ids:
-        return {"keys": []}
+        return _json_response({"keys": []})
 
     # 返回与 Yggdrasil meta 中 signaturePublickey 一致的 DER 编码公钥
     crypto._load()
@@ -580,7 +613,7 @@ async def minecraftservices_publickeys(body: dict):
             "publicKeySignature": "",
             "publicKeySignatureV2": "",
         })
-    return {"keys": keys}
+    return _json_response({"keys": keys})
 
 
 @router.get("/minecraftservices/publickeys/{uuid}")
@@ -596,11 +629,11 @@ async def minecraftservices_publickeys_by_uuid(uuid: str):
         )
     ).decode("ascii")
 
-    return {
+    return _json_response({
         "publicKey": pub_der_b64,
         "publicKeySignature": "",
         "publicKeySignatureV2": "",
-    }
+    })
 
 
 # ====== 材质上传/删除 ======
