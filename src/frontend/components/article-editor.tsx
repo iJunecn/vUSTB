@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { ArrowLeft, Save, Eye, Loader2, ImagePlus } from 'lucide-react';
@@ -37,6 +37,53 @@ export function ArticleEditor({ articleId }: { articleId: number | null }) {
   const [loading, setLoading] = useState(articleId !== null);
   const [showPreview, setShowPreview] = useState(false);
 
+  // Textarea ref + cursor tracking for image insertion at cursor position
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const cursorPosRef = useRef(0);
+
+  const handleContentChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setContent(e.target.value);
+    cursorPosRef.current = e.target.selectionStart;
+  }, []);
+
+  const handleContentSelect = useCallback((e: React.SyntheticEvent<HTMLTextAreaElement>) => {
+    const ta = e.currentTarget;
+    cursorPosRef.current = ta.selectionStart;
+  }, []);
+
+  const handleContentClick = useCallback((e: React.MouseEvent<HTMLTextAreaElement>) => {
+    cursorPosRef.current = e.currentTarget.selectionStart;
+  }, []);
+
+  const handleContentKeyUp = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    cursorPosRef.current = e.currentTarget.selectionStart;
+  }, []);
+
+  /** Insert text at the current cursor position in the textarea */
+  const insertAtCursor = useCallback((insertText: string) => {
+    const ta = textareaRef.current;
+    if (!ta) {
+      // fallback: append at end
+      setContent((prev) => prev + insertText);
+      return;
+    }
+
+    const pos = cursorPosRef.current;
+    const before = content.slice(0, pos);
+    const after = content.slice(pos);
+
+    const newContent = before + insertText + after;
+    setContent(newContent);
+
+    // Set cursor after inserted text on next frame
+    const newPos = pos + insertText.length;
+    requestAnimationFrame(() => {
+      ta.focus();
+      ta.setSelectionRange(newPos, newPos);
+      cursorPosRef.current = newPos;
+    });
+  }, [content]);
+
   useEffect(() => {
     api.get<Category[]>('/articles/categories')
       .then((r) => setCategories(r.data))
@@ -64,6 +111,8 @@ export function ArticleEditor({ articleId }: { articleId: number | null }) {
           setSeoDescription(d.seo_description || '');
           setSeoKeywords(d.seo_keywords || '');
           setSeoSlug(d.seo_slug || '');
+          // Initialize cursor at end
+          cursorPosRef.current = d.content.length;
         })
         .catch(() => toast.error('加载文章失败'))
         .finally(() => setLoading(false));
@@ -123,11 +172,13 @@ export function ArticleEditor({ articleId }: { articleId: number | null }) {
       });
       const url = res.data.url;
       const imgMd = `![${file.name}](${url})`;
-      setContent((prev) => prev + '\n' + imgMd);
-      toast.success('图片已上传');
+      insertAtCursor(imgMd);
+      toast.success('图片已上传并插入');
     } catch {
       toast.error('图片上传失败');
     }
+    // Reset the file input so the same file can be re-selected
+    e.target.value = '';
   };
 
   if (loading) {
@@ -218,9 +269,13 @@ export function ArticleEditor({ articleId }: { articleId: number | null }) {
               </label>
             </div>
             <textarea
+              ref={textareaRef}
               className="input"
               value={content}
-              onChange={(e) => setContent(e.target.value)}
+              onChange={handleContentChange}
+              onSelect={handleContentSelect}
+              onClick={handleContentClick}
+              onKeyUp={handleContentKeyUp}
               placeholder="Markdown 内容..."
               style={{
                 minHeight: 400,
