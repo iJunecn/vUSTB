@@ -97,7 +97,7 @@ async def _query_afdian_order(out_trade_no: str) -> tuple[dict | None, str]:
 
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.post(
-            "https://afdian.net/api/open/query-order",
+            "https://ifdian.net/api/open/query-order",
             json=payload,
         )
         data = resp.json()
@@ -118,13 +118,57 @@ async def _query_afdian_order(out_trade_no: str) -> tuple[dict | None, str]:
     return None, "爱发电返回的订单列表中未匹配到该订单号"
 
 
+# 爱发电售卖方案 product_type → 每次购买获得的贝壳积分
+# 型号1=1积分, 型号2=6积分, 型号3=10积分, 型号4=20积分, 型号5=50积分, 型号6=100积分
+_PRODUCT_TYPE_POINTS: dict[int, int] = {
+    1: 1,
+    2: 6,
+    3: 10,
+    4: 20,
+    5: 50,
+    6: 100,
+}
+
+
+def _calc_recharge_amount(order: dict) -> int:
+    """根据爱发电订单计算应充值的贝壳积分。
+
+    优先从 sku_detail 计算（每个 sku 的 price × count 之和 = 总积分），
+    兜底用 product_type 映射 × total_amount / 单价。
+    """
+    # 方式1：从 sku_detail 计算（最准确）
+    sku_detail = order.get("sku_detail") or []
+    if sku_detail:
+        total = 0
+        for sku in sku_detail:
+            price = float(sku.get("price", "0"))
+            count = int(sku.get("count", 1))
+            total += price * count
+        result = int(total)
+        if result > 0:
+            return result
+
+    # 方式2：product_type 映射 + 购买次数
+    product_type = order.get("product_type")
+    points_per_unit = _PRODUCT_TYPE_POINTS.get(product_type, 0)
+    if points_per_unit > 0:
+        total_amount = float(order.get("total_amount", "0"))
+        # total_amount 是付款总金额，购买次数 = total_amount / 单价
+        count = int(total_amount / points_per_unit)
+        result = points_per_unit * count
+        if result > 0:
+            return result
+
+    # 方式3：兜底 — 1 元 = 1 积分（仅对 product_type=1 正确）
+    return int(float(order.get("total_amount", "0")))
+
+
 async def _process_afdian_order(
     db: AsyncSession, order: dict, user_id: int
 ) -> dict:
     """处理爱发电订单：充值贝壳积分。"""
     out_trade_no = order.get("out_trade_no", "")
     status = order.get("status")
-    total_amount = order.get("total_amount", "0")
 
     if status != 2:
         raise HTTPException(status_code=400, detail="订单未完成支付")
@@ -141,8 +185,8 @@ async def _process_afdian_order(
     if existing_tx:
         raise HTTPException(status_code=409, detail="该订单已处理过")
 
-    # 计算充值数量：1 元 = 1 贝壳积分
-    recharge_amount = int(float(total_amount))
+    # 计算充值数量
+    recharge_amount = _calc_recharge_amount(order)
     if recharge_amount <= 0:
         raise HTTPException(status_code=400, detail="订单金额无效")
 
