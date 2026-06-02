@@ -129,7 +129,7 @@ export default function HomePage() {
       </div>
 
       {/* Footer on homepage */}
-      <div style={{
+      <div className="home-footer--mobile-relative" style={{
         position: 'absolute',
         bottom: 0,
         left: 0,

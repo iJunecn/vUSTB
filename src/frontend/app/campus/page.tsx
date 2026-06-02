@@ -105,20 +105,9 @@ export default function CampusPage() {
   }
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      display: 'flex',
-      position: 'relative',
-      background: 'var(--color-background)',
-    }}>
+    <div className="campus-layout">
       {/* HUD Panel - Left Side */}
-      <div style={{
-        position: 'relative',
-        zIndex: 10,
-        width: 'min(420px, calc(100vw - 48px))',
-        padding: '24px',
-        flexShrink: 0,
-      }}>
+      <div className="campus-panel">
         <div className="glass-card" style={{
           padding: '22px',
           borderRadius: '24px',
@@ -249,11 +238,7 @@ export default function CampusPage() {
       </div>
 
       {/* Right Side - 3D Engine Canvas */}
-      <div style={{
-        flex: 1,
-        position: 'relative',
-        overflow: 'hidden',
-      }}>
+      <div className="campus-canvas">
         <Suspense
           fallback={
             <div style={{

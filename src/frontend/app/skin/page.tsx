@@ -5,7 +5,7 @@ import { Library, Settings, Upload } from 'lucide-react';
 
 export default function SkinHome() {
   return (
-    <div style={{ maxWidth: 960, margin: '0 auto', padding: '64px 24px', display: 'flex', flexDirection: 'column', gap: 48 }}>
+    <div className="page-container flex-col-gap-lg">
       {/* Header */}
       <div>
         <span
@@ -17,17 +17,17 @@ export default function SkinHome() {
         >
           基于 Yggdrasil 协议 · authlib-injector 兼容
         </span>
-        <h1 style={{ fontSize: 40, fontWeight: 800, color: 'var(--color-heading)', margin: '0 0 12px 0', letterSpacing: '-0.5px' }}>
+        <h1 className="page-hero-title">
           像素北科 皮肤站
         </h1>
-        <p style={{ fontSize: 16, color: 'var(--color-text-light)', maxWidth: 600, lineHeight: 1.6 }}>
+        <p className="page-hero-subtitle">
           上传你的皮肤，绑定到 Minecraft 角色，通过 authlib-injector 在客户端中无缝使用，
           也可以浏览社区公开皮肤与你的私有材质。
         </p>
       </div>
 
       {/* Entry cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 20 }}>
+      <div className="grid-entry-cards">
         <EntryCard
           href="/skin/library"
           icon={<Library style={{ width: 24, height: 24 }} />}
@@ -65,11 +65,7 @@ function EntryCard({
   return (
     <Link
       href={href}
-      className="surface-card hoverable"
-      style={{
-        padding: 28, textDecoration: 'none',
-        display: 'flex', flexDirection: 'column', gap: 16,
-      }}
+      className="surface-card hoverable entry-card"
     >
       <div
         style={{

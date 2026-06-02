@@ -65,7 +65,7 @@ export default function PrintHomePage() {
   };
 
   return (
-    <div style={{ maxWidth: 960, margin: '0 auto', padding: '64px 24px', display: 'flex', flexDirection: 'column', gap: 48 }}>
+    <div className="page-container flex-col-gap-lg">
       {/* Hero Section */}
       <div style={{ textAlign: 'center' }}>
         <div style={{ marginBottom: 24, borderRadius: 16, overflow: 'hidden', boxShadow: '0 8px 24px rgba(66,82,105,0.12)' }}>
@@ -78,7 +78,7 @@ export default function PrintHomePage() {
             priority
           />
         </div>
-        <h1 style={{ fontSize: 36, fontWeight: 800, color: 'var(--color-heading)', margin: '0 0 8px', letterSpacing: '-0.5px' }}>
+        <h1 className="page-hero-title" style={{ letterSpacing: '-0.5px' }}>
           智能学院天码智能社<br />3D打印预约系统
         </h1>
       </div>
@@ -131,26 +131,26 @@ export default function PrintHomePage() {
       </div>
 
       {/* Feature cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
-        <div className="surface-card" style={{ padding: 24, textAlign: 'center' }}>
-          <CalendarCheck style={{ width: 32, height: 32, color: 'var(--color-primary)', marginBottom: 8 }} />
-          <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--color-heading)', margin: '0 0 4px' }}>在线预约</h3>
-          <p style={{ fontSize: 13, color: 'var(--color-text-light)', margin: 0 }}>实时查看预约时间表，快速预定打印时段</p>
+      <div className="grid-feature-3">
+        <div className="surface-card feature-card">
+          <CalendarCheck className="feature-card-icon" style={{ color: 'var(--color-primary)' }} />
+          <h3 className="feature-card-title">在线预约</h3>
+          <p className="feature-card-desc">实时查看预约时间表，快速预定打印时段</p>
         </div>
-        <div className="surface-card" style={{ padding: 24, textAlign: 'center' }}>
-          <Clock style={{ width: 32, height: 32, color: '#22c55e', marginBottom: 8 }} />
-          <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--color-heading)', margin: '0 0 4px' }}>灵活管理</h3>
-          <p style={{ fontSize: 13, color: 'var(--color-text-light)', margin: 0 }}>随时查看和取消您的预约，合理安排时间</p>
+        <div className="surface-card feature-card">
+          <Clock className="feature-card-icon" style={{ color: '#22c55e' }} />
+          <h3 className="feature-card-title">灵活管理</h3>
+          <p className="feature-card-desc">随时查看和取消您的预约，合理安排时间</p>
         </div>
-        <div className="surface-card" style={{ padding: 24, textAlign: 'center' }}>
-          <ShieldCheck style={{ width: 32, height: 32, color: '#ef4444', marginBottom: 8 }} />
-          <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--color-heading)', margin: '0 0 4px' }}>安全可靠</h3>
-          <p style={{ fontSize: 13, color: 'var(--color-text-light)', margin: 0 }}>团队设备，及时维护，安全有保障</p>
+        <div className="surface-card feature-card">
+          <ShieldCheck className="feature-card-icon" style={{ color: '#ef4444' }} />
+          <h3 className="feature-card-title">安全可靠</h3>
+          <p className="feature-card-desc">团队设备，及时维护，安全有保障</p>
         </div>
       </div>
 
       {/* Entry cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 20 }}>
+      <div className="grid-entry-cards">
         <EntryCard
           href="/print/dashboard"
           icon={<ClipboardList style={{ width: 24, height: 24 }} />}
@@ -283,8 +283,7 @@ function EntryCard({
   return (
     <Link
       href={target}
-      className="surface-card hoverable"
-      style={{ padding: 28, textDecoration: 'none', display: 'flex', flexDirection: 'column', gap: 16 }}
+      className="surface-card hoverable entry-card"
     >
       <div
         style={{

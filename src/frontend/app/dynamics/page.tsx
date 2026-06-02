@@ -67,7 +67,7 @@ export default function DynamicsPage() {
 
   return (
     <div style={{ minHeight: '100vh', paddingTop: 56 }}>
-      <div style={{ maxWidth: 960, margin: '0 auto', padding: '40px 24px' }}>
+      <div className="page-container" style={{ paddingTop: '40px', paddingBottom: '40px' }}>
         {/* Header */}
         <div style={{ marginBottom: 32 }}>
           <p className="section-kicker" style={{ marginBottom: 8 }}>DYNAMICS</p>
@@ -157,7 +157,7 @@ export default function DynamicsPage() {
               <Pin style={{ width: 16, height: 16, color: 'var(--color-primary)' }} />
               <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-heading)' }}>置顶</span>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(400px, 1fr))', gap: 16 }}>
+            <div className="grid-articles">
               {pinnedArticles.map((article) => (
                 <ArticleCard key={article.id} article={article} formatDate={formatDate} />
               ))}
@@ -167,7 +167,7 @@ export default function DynamicsPage() {
 
         {/* Normal Articles */}
         {!loading && normalArticles.length > 0 && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(400px, 1fr))', gap: 16 }}>
+          <div className="grid-articles">
             {normalArticles.map((article) => (
               <ArticleCard key={article.id} article={article} formatDate={formatDate} />
             ))}

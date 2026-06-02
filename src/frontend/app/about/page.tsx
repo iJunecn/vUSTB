@@ -109,9 +109,9 @@ export default function AboutPage() {
   const [letterOpen, setLetterOpen] = useState(false);
 
   return (
-    <div style={{ maxWidth: '1120px', margin: '0 auto', padding: '40px 24px 60px' }}>
+    <div className="page-container" style={{ maxWidth: '1120px', paddingBottom: 60 }}>
       {/* Hero Section */}
-      <section style={{ marginBottom: '48px' }}>
+      <section className="section-gap-lg">
         <p className="section-kicker" style={{ margin: '0 0 10px' }}>
           「像素北科」项目发起方
         </p>
@@ -126,7 +126,7 @@ export default function AboutPage() {
           天码智能社
         </h1>
         <p style={{
-          fontSize: '18px',
+          fontSize: 'clamp(15px, 2.4vw, 18px)',
           color: 'var(--color-text)',
           margin: '0 0 20px',
           lineHeight: 1.5,
@@ -142,45 +142,42 @@ export default function AboutPage() {
           天码智能社挂靠于北京科技大学人工智能学院，秉承"智融实践，码筑未来"的宗旨，紧密围绕人工智能领域的前沿技术，以赛促学，以学促创，积极营造浓厚的学术氛围，打造了一系列精品活动，为培养具有创新精神、实践能力和社会责任感的智能科技人才贡献力量。
         </p>
 
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-          gap: '14px',
+        <div className="grid-hero-cards" style={{
           marginTop: '28px',
         }}>
-          <div className="surface-card" style={{ padding: '18px' }}>
+          <div className="surface-card surface-card--compact-mobile" style={{ padding: '18px' }}>
             <span className="section-kicker" style={{ display: 'block', marginBottom: '10px' }}>核心部门</span>
-            <strong style={{ display: 'block', fontSize: '20px', color: 'var(--color-heading)', lineHeight: 1.24, marginBottom: '8px' }}>
+            <strong className="hero-card-title">
               元宇宙体素工作坊
             </strong>
-            <p style={{ margin: 0, color: 'var(--color-text-light)', fontSize: '14px', lineHeight: 1.68 }}>
+            <p className="hero-card-text">
               以"像素北科"为代表，连接数字孪生、体素建模与多智能体交互，是社团最具辨识度的项目型部门。
             </p>
           </div>
-          <div className="surface-card" style={{ padding: '18px' }}>
+          <div className="surface-card surface-card--compact-mobile" style={{ padding: '18px' }}>
             <span className="section-kicker" style={{ display: 'block', marginBottom: '10px' }}>社团定位</span>
-            <strong style={{ display: 'block', fontSize: '20px', color: 'var(--color-heading)', lineHeight: 1.24, marginBottom: '8px' }}>
+            <strong className="hero-card-title">
               学术科技类社团
             </strong>
-            <p style={{ margin: 0, color: 'var(--color-text-light)', fontSize: '14px', lineHeight: 1.68 }}>
+            <p className="hero-card-text">
               围绕智能技术培训、项目协作和成果展示构建持续运转的学习社区。
             </p>
           </div>
-          <div className="surface-card" style={{ padding: '18px' }}>
+          <div className="surface-card surface-card--compact-mobile" style={{ padding: '18px' }}>
             <span className="section-kicker" style={{ display: 'block', marginBottom: '10px' }}>代表活动</span>
-            <strong style={{ display: 'block', fontSize: '20px', color: 'var(--color-heading)', lineHeight: 1.24, marginBottom: '8px' }}>
+            <strong className="hero-card-title">
               天码智能秋令营
             </strong>
-            <p style={{ margin: 0, color: 'var(--color-text-light)', fontSize: '14px', lineHeight: 1.68 }}>
+            <p className="hero-card-text">
               社团招牌活动，以<strong>科普</strong>和<strong>实践</strong>带学员走进<strong>AI生成与应用</strong>领域的大门。
             </p>
           </div>
-          <div className="surface-card" style={{ padding: '18px', background: 'var(--theme-accent-soft)', cursor: 'pointer' }} onClick={() => setLetterOpen(true)}>
+          <div className="surface-card surface-card--compact-mobile" style={{ padding: '18px', background: 'var(--theme-accent-soft)', cursor: 'pointer' }} onClick={() => setLetterOpen(true)}>
             <span className="section-kicker" style={{ display: 'block', marginBottom: '10px' }}>代表活动</span>
-            <strong style={{ display: 'block', fontSize: '20px', color: 'var(--color-primary)', lineHeight: 1.24, marginBottom: '8px', textDecoration: 'underline', textUnderlineOffset: 3 }}>
+            <strong className="hero-card-title" style={{ color: 'var(--color-primary)', textDecoration: 'underline', textUnderlineOffset: 3 }}>
               像素北科
             </strong>
-            <p style={{ margin: 0, color: 'var(--color-text-light)', fontSize: '14px', lineHeight: 1.68 }}>
+            <p className="hero-card-text">
               社团特色活动，以<strong>体素</strong>为<strong>砖</strong>，以<strong>创意</strong>为<strong>图</strong>，在Minecraft中构建体素校园。
             </p>
           </div>
@@ -188,7 +185,7 @@ export default function AboutPage() {
       </section>
 
       {/* Department Structure */}
-      <section style={{ marginBottom: '48px' }}>
+      <section className="section-gap-lg">
         <p className="section-kicker" style={{ margin: '0 0 8px' }}>部门结构</p>
         <h2 style={{
           fontSize: 'clamp(24px, 3.5vw, 34px)',
@@ -199,11 +196,7 @@ export default function AboutPage() {
         }}>
           四个方向共同构成社团
         </h2>
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
-          gap: '16px',
-        }}>
+        <div className="grid-dept-4">
           {DEPARTMENTS.map((dept) => (
             <div
               key={dept.title}
@@ -215,31 +208,13 @@ export default function AboutPage() {
                   : undefined,
               }}
             >
-              <span style={{
-                display: 'inline-flex',
-                marginBottom: '12px',
-                padding: '5px 9px',
-                border: '1px solid var(--theme-border-strong)',
-                borderRadius: '999px',
-                background: 'var(--theme-accent-soft)',
-                color: 'var(--theme-accent)',
-                fontSize: '11px',
-                fontWeight: 700,
-                letterSpacing: '0.08em',
-                textTransform: 'uppercase',
-              }}>
+              <span className="dept-badge">
                 {dept.kind}
               </span>
-              <h3 style={{
-                margin: '0 0 8px',
-                fontSize: '16px',
-                fontWeight: 600,
-                color: 'var(--color-heading)',
-                lineHeight: 1.24,
-              }}>
+              <h3 className="dept-title">
                 {dept.title}
               </h3>
-              <p style={{ margin: 0, color: 'var(--color-text-light)', fontSize: '13px', lineHeight: 1.68 }}>
+              <p className="dept-desc">
                 {dept.description}
               </p>
             </div>
@@ -248,7 +223,7 @@ export default function AboutPage() {
       </section>
 
       {/* Core Department Detail */}
-      <section style={{ marginBottom: '48px' }}>
+      <section className="section-gap-lg">
         <p className="section-kicker" style={{ margin: '0 0 8px' }}>核心部门</p>
         <h2 style={{
           fontSize: 'clamp(24px, 3.5vw, 34px)',
@@ -267,12 +242,7 @@ export default function AboutPage() {
         }}>
           USTB Metaverse Voxel Workshop
         </p>
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: '1.16fr 0.84fr',
-          gap: '18px',
-          alignItems: 'start',
-        }}>
+        <div className="grid-core-2">
           <div className="surface-card" style={{ padding: '22px' }}>
             <h3 style={{
               fontSize: '18px',
@@ -371,7 +341,7 @@ export default function AboutPage() {
       </section>
 
       {/* Development Timeline */}
-      <section style={{ marginBottom: '48px' }}>
+      <section className="section-gap-lg">
         <p className="section-kicker" style={{ margin: '0 0 8px' }}>发展时间线</p>
         <h2 style={{
           fontSize: 'clamp(24px, 3.5vw, 34px)',
@@ -401,24 +371,9 @@ export default function AboutPage() {
           {TIMELINE.map((item, idx) => (
             <article
               key={idx}
-              className="surface-card"
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '12px 1fr',
-                gap: '14px',
-                padding: '18px',
-                alignItems: 'start',
-              }}
+              className="surface-card timeline-card"
             >
-              <div style={{
-                width: '12px',
-                height: '12px',
-                borderRadius: '50%',
-                background: 'var(--color-primary)',
-                border: '2px solid var(--color-card-background)',
-                boxShadow: '0 0 0 2px var(--color-primary)',
-                marginTop: '4px',
-              }} />
+              <div className="timeline-dot" />
               <div>
                 <div style={{
                   display: 'flex',
@@ -435,16 +390,10 @@ export default function AboutPage() {
                     {item.date}
                   </span>
                 </div>
-                <h3 style={{
-                  fontSize: '18px',
-                  fontWeight: 600,
-                  margin: '0 0 6px',
-                  color: 'var(--color-heading)',
-                  lineHeight: 1.24,
-                }}>
+                <h3 className="timeline-title">
                   {item.text}
                 </h3>
-                <p style={{ margin: 0, color: 'var(--color-text-light)', lineHeight: 1.74 }}>
+                <p className="timeline-detail">
                   {item.detail}
                 </p>
               </div>
@@ -486,24 +435,9 @@ export default function AboutPage() {
           {ARCHIVE_ITEMS.map((item) => (
             <article
               key={item.title}
-              className="surface-card"
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '12px 1fr',
-                gap: '14px',
-                padding: '18px',
-                alignItems: 'start',
-              }}
+              className="surface-card timeline-card"
             >
-              <div style={{
-                width: '12px',
-                height: '12px',
-                borderRadius: '50%',
-                background: 'var(--color-primary)',
-                border: '2px solid var(--color-card-background)',
-                boxShadow: '0 0 0 2px var(--color-primary)',
-                marginTop: '4px',
-              }} />
+              <div className="timeline-dot" />
               <div>
                 <div style={{
                   display: 'flex',
@@ -512,18 +446,7 @@ export default function AboutPage() {
                   flexWrap: 'wrap',
                   marginBottom: '6px',
                 }}>
-                  <span style={{
-                    display: 'inline-flex',
-                    padding: '4px 9px',
-                    border: '1px solid var(--theme-border-strong)',
-                    borderRadius: '999px',
-                    background: 'var(--theme-accent-soft)',
-                    color: 'var(--theme-accent)',
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    letterSpacing: '0.08em',
-                    textTransform: 'uppercase',
-                  }}>
+                  <span className="dept-badge">
                     {item.type}
                   </span>
                   <span style={{
@@ -533,16 +456,10 @@ export default function AboutPage() {
                     {item.date}
                   </span>
                 </div>
-                <h3 style={{
-                  fontSize: '20px',
-                  fontWeight: 600,
-                  margin: '0 0 6px',
-                  color: 'var(--color-heading)',
-                  lineHeight: 1.24,
-                }}>
+                <h3 className="timeline-title" style={{ fontSize: '20px' }}>
                   {item.title}
                 </h3>
-                <p style={{ margin: 0, color: 'var(--color-text-light)', lineHeight: 1.74 }}>
+                <p className="timeline-detail">
                   {item.description}
                 </p>
               </div>
@@ -554,20 +471,11 @@ export default function AboutPage() {
       {/* ====== Letter Modal: 方块里的北科 ====== */}
       {letterOpen && (
         <div
-          style={{
-            position: 'fixed', inset: 0, zIndex: 100,
-            background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
-          }}
+          className="modal-overlay"
           onClick={(e) => { if (e.target === e.currentTarget) setLetterOpen(false); }}
         >
           <div
-            style={{
-              background: 'var(--color-card-background)', borderRadius: 16, maxWidth: 640, width: '100%',
-              maxHeight: '85vh', overflowY: 'auto',
-              boxShadow: '0 16px 48px rgba(0,0,0,0.2)',
-              animation: 'slideUp 0.3s ease-out',
-            }}
+            className="modal-content"
           >
             {/* Header */}
             <div style={{
@@ -586,8 +494,8 @@ export default function AboutPage() {
             </div>
 
             {/* Body */}
-            <div style={{ padding: '24px 28px', fontSize: 15, color: 'var(--color-text)', lineHeight: 1.85 }}>
-              <h3 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 20px', color: 'var(--color-heading)' }}>
+            <div className="letter-body">
+              <h3 className="letter-heading">
                 方块里的北科——一个名为像素北科的故事
               </h3>
 
