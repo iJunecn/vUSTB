@@ -34,6 +34,13 @@
         reverse_proxy backend:8000
     }
 
+    # CustomSkinAPI（CustomSkinLoader Mod 用）
+    # 根地址示例: https://mc.ustb.edu.cn/csl/
+    handle /csl/* {
+        rewrite * /api/csl{uri}
+        reverse_proxy backend:8000
+    }
+
     # 其余全部交给 Next.js 前端
     handle {
         reverse_proxy frontend:3000

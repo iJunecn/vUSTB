@@ -12,14 +12,16 @@
 ┌────────────────────────────────────────────┐
 │           Caddy 网关（80/443）              │
 ├────────────────────────────────────────────┤
-│  /         → Next.js (frontend)            │
-│  /api/*    → FastAPI (backend) Web API     │
-│  /skinapi/*→ FastAPI Yggdrasil + OAuth     │
-│  /oauth/*  → FastAPI OAuth Provider        │
-│  /static/* → FastAPI 材质静态文件           │
+│  /           → Next.js (frontend)          │
+│  /api/*      → FastAPI (backend) Web API   │
+│  /skinapi/*  → FastAPI Yggdrasil + OAuth   │
+│  /csl/*      → FastAPI CustomSkinAPI      │
+│  /oauth/*    → FastAPI OAuth Provider      │
+│  /.well-known→ FastAPI OpenID Discovery    │
+│  /static/*   → FastAPI 材质静态文件         │
 └────────────────────────────────────────────┘
             ↓                  ↓
-       PostgreSQL          Redis
+       PostgreSQL            Redis
 ```
 
 技术栈：
@@ -28,7 +30,7 @@
 - **数据库**: PostgreSQL 16
 - **缓存/队列**: Redis 7 + Celery
 - **网关**: Caddy 2
-- **皮肤协议**: Yggdrasil（兼容 authlib-injector） + OAuth 2.0 Authorization Code + Device Flow
+- **皮肤协议**: Yggdrasil（兼容 authlib-injector）+ CustomSkinAPI（兼容 CustomSkinLoader）+ OAuth 2.0 Authorization Code + Device Flow
 
 ## 目录
 
@@ -55,6 +57,7 @@ docker compose up -d --build
 - 站点首页：http://localhost
 - API 健康检查：http://localhost/api/health
 - Yggdrasil 元数据：http://localhost/skinapi/
+- CustomSkinAPI 根地址：http://localhost/csl/
 
 ## 本地开发
 
@@ -78,15 +81,19 @@ BACKEND_INTERNAL_URL=http://localhost:8000 npm run dev
 # 浏览器访问 http://localhost:3000
 ```
 
+---
+
 ## 子模块
 
 ### 官网主体
+
 - `/` — 首页
 - `/servers` — MC 服务器列表
 - `/about` — 关于我们
 - `/campus` — 3D 校园
 
 ### 动态发布系统
+
 > 由原 kuno-main 项目整合而来，提供博客式的动态发布功能。
 
 | 路由 | 功能 |
@@ -132,12 +139,23 @@ BACKEND_INTERNAL_URL=http://localhost:8000 npm run dev
 | `/api/admin/article-media/{id}` | DELETE | 删除媒体文件（管理员） |
 
 ### 皮肤站
+
 - `/skin` — 皮肤站首页
 - `/skin/library` — 皮肤库
 - `/skin/settings` — 皮肤设置
 - `/skin/upload` — 皮肤上传
 
+**皮肤协议支持：**
+
+本项目同时实现两套 Minecraft 皮肤加载协议，覆盖主流启动器与游戏内 Mod：
+
+| 协议 | 适用场景 | 接入方式 |
+|------|---------|---------|
+| **Yggdrasil**（authlib-injector） | HMCL / PCL2 / BakaXL 等第三方启动器 | 配置 API 根地址 |
+| **CustomSkinAPI** R2 | CustomSkinLoader Mod（游戏内直接加载皮肤） | ExtraList 或手动添加加载源 |
+
 ### 用户中心
+
 - `/dashboard` — 用户面板
 - `/dashboard/profile` — 个人资料
 - `/dashboard/roles` — 角色管理
@@ -145,6 +163,7 @@ BACKEND_INTERNAL_URL=http://localhost:8000 npm run dev
 - `/dashboard/wardrobe` — 皮肤衣柜
 
 ### 管理员后台
+
 - `/admin` — 管理首页
 - `/admin/users` — 用户管理
 - `/admin/invites` — 邀请码管理
@@ -156,10 +175,12 @@ BACKEND_INTERNAL_URL=http://localhost:8000 npm run dev
 - `/admin/print` — 打印预约管理
 
 ### OAuth Provider
+
 - `/oauth/authorize` — 授权页面
 - `/oauth/device` — 设备流页面
 
 ### 3D 打印预约系统
+
 > 由原 vLab-main 项目整合而来，为智能学院天码智能社提供 Bambu H2D 3D 打印机在线预约服务。
 
 | 路由 | 功能 |
@@ -208,7 +229,11 @@ BACKEND_INTERNAL_URL=http://localhost:8000 npm run dev
 | `/api/print/admin/reports/{id}` | DELETE | 删除周报记录（管理员） |
 | `/api/print/admin/reports/export` | GET | 导出 Excel 报表（管理员） |
 
-## Yggdrasil 接入
+---
+
+## 皮肤加载协议
+
+### Yggdrasil（authlib-injector）
 
 MC 客户端使用 authlib-injector 时，将 API 根地址配置为：
 
@@ -224,6 +249,134 @@ https://mc.ustb.edu.cn/skinapi/
 https://mc.ustb.edu.cn/skinapi/.well-known/openid-configuration
 ```
 
+**实现的端点（`/api/yggdrasil/*`）：**
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/` | GET | Yggdrasil 元数据（signaturePublickey、skinDomains） |
+| `/authserver/authenticate` | POST | 登录认证 |
+| `/authserver/refresh` | POST | 刷新令牌 |
+| `/authserver/validate` | POST | 验证令牌 |
+| `/authserver/invalidate` | POST | 使令牌失效 |
+| `/authserver/signout` | POST | 登出 |
+| `/sessionserver/session/minecraft/join` | POST | 加入服务器 |
+| `/sessionserver/session/minecraft/hasJoined` | GET | 服务端验证客户端 |
+| `/sessionserver/session/minecraft/profile/{uuid}` | GET | 查询角色属性（含材质签名） |
+| `/minecraftservices/publickeys` | POST | 公钥批量查询（MC 1.20+） |
+| `/minecraftservices/publickeys/{uuid}` | GET | 单键查询（MC 1.20+） |
+| `/api/users/profiles/minecraft/{name}` | GET | 玩家名 → UUID |
+| `/api/profiles/minecraft` | POST | 批量玩家名查询 |
+| `/api/user/profile/{uuid}/{type}` | PUT | 上传材质 |
+| `/api/user/profile/{uuid}/{type}` | DELETE | 删除材质绑定 |
+
+**规范合规性：**
+
+- ✅ Content-Type: `application/json; charset=utf-8`（规范要求）
+- ✅ RSA SHA1withRSA 材质签名 + `signatureRequired`（MC 1.20+）
+- ✅ `skinDomains` 白名单 + Fallback 服务
+- ✅ `X-Authlib-Injector-API-Location` ALI 自动发现头
+- ✅ `unsigned` 查询参数（签名/无签名切换）
+- ✅ 材质 URL 格式：`{base_url}/static/textures/{hash}.png`
+- ✅ 材质 Content-Type: `image/png`（防 MIME Sniffing）
+- ✅ 材质 Cache-Control: `public, max-age=604800`（7 天缓存）
+
+### CustomSkinAPI（CustomSkinLoader）
+
+使用 CustomSkinLoader Mod 的玩家，将本站添加为加载源即可在游戏内加载皮肤。
+
+**CustomSkinAPI 根地址：**
+
+```
+https://mc.ustb.edu.cn/csl/
+```
+
+> Caddy 会自动将 `/csl/*` 重写到内部 `/api/csl/*`。
+
+**实现的端点（`/api/csl/*`）：**
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/{username}.json` | GET | 获取玩家信息（大小写不敏感） |
+| `/textures/{hash}` | GET | 获取材质 PNG 文件 |
+| `/textures/{hash}` | HEAD | 材质文件 HEAD 请求 |
+| `/ExtraList/vUSTB.json` | GET | ExtraList 入口文件（方便用户下载添加） |
+
+**玩家信息 JSON 格式（CustomSkinAPI R2）：**
+
+```json
+{
+    "username": "TestPlayer",
+    "textures": {
+        "default": "552a4e8cfa803698ee4dff3fbd6b9499...",
+        "slim": "b2c4ef891f01c5a8e2dc8a832bc3a89c...",
+        "cape": "aed8c3fc67aae4906b72fa74c27e1586..."
+    }
+}
+```
+
+**用户接入方式（二选一）：**
+
+1. **自动（推荐）**：浏览器下载 `https://mc.ustb.edu.cn/csl/ExtraList/vUSTB.json`，放入 `.minecraft/CustomSkinLoader/ExtraList/` 目录
+2. **手动**：编辑 `CustomSkinLoader.json`，在 `loadlist` 中添加：
+   ```json
+   {
+       "name": "像素北科 vUSTB",
+       "type": "CustomSkinAPI",
+       "root": "https://mc.ustb.edu.cn/csl/"
+   }
+   ```
+
+**CustomSkinAPI 特性：**
+
+- ✅ 按**玩家名**查询（非 UUID），大小写不敏感
+- ✅ 支持 `If-Modified-Since` / `304 Not Modified` 缓存协商
+- ✅ 返回 `Last-Modified`、`Content-Length`、`Cache-Control` 头
+- ✅ 材质文件缓存 7 天，玩家信息缓存 60 秒
+- ✅ CORS 头支持浏览器跨域访问
+- ✅ 同时支持 `default` / `slim` 皮肤模型和 `cape` 披风
+
+### OAuth 2.0 Provider
+
+本项目实现完整的 OAuth 2.0 Provider，支持第三方应用接入：
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/.well-known/openid-configuration` | GET | OpenID Connect 发现 |
+| `/oauth/jwks` | GET | JSON Web Key Set |
+| `/oauth/authorize` | GET | 授权页面（Authorization Code） |
+| `/oauth/api/approve` | POST | 用户批准授权 |
+| `/oauth/token` | POST | 令牌端点（code / device_code → access_token） |
+| `/oauth/userinfo` | GET | 用户信息 |
+| `/oauth/device/code` | POST | 设备授权码 |
+| `/oauth/device/approve` | POST | 设备流用户批准 |
+| `/oauth/profile` | GET | 角色信息 |
+| `/oauth/avatar` | GET | 角色头像 |
+| `/oauth/skin` | GET | 角色皮肤 |
+
+### 微软正版验证
+
+支持通过微软 OAuth 绑定正版 Minecraft 账号，导入正版皮肤和披风：
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/api/microsoft/auth-url` | GET | 获取微软 OAuth 授权链接 |
+| `/api/microsoft/callback` | POST | 微软 OAuth 回调，获取 MC 角色并导入 |
+
+### 材质管理 API
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/api/textures` | GET | 材质列表 |
+| `/api/textures/upload` | POST | 上传材质 |
+| `/api/textures/{id}` | DELETE | 删除材质 |
+| `/api/textures/wardrobe` | GET | 衣柜列表 |
+| `/api/textures/wardrobe` | POST | 添加到衣柜 |
+| `/api/textures/wardrobe/{id}` | DELETE | 从衣柜移除 |
+| `/api/textures/public-library` | GET | 公共皮肤库 |
+| `/api/users/{id}/avatar` | GET | 用户头像 |
+
+---
+
 ## License
 
 [GPL-3.0](LICENSE)
@@ -235,3 +388,5 @@ https://mc.ustb.edu.cn/skinapi/.well-known/openid-configuration
 - [kuno-main](https://github.com/xuemian168/kuno) — 动态发布系统原始实现（Go + Next.js）
 - [Blessing Skin Server](https://github.com/bs-community/blessing-skin-server)
 - [mc.sjtu.cn](https://mc.sjtu.cn/) — UI 设计灵感
+- [CustomSkinLoaderAPI](https://github.com/xfl03/CustomSkinLoaderAPI) — CustomSkinAPI 规范
+- [authlib-injector](https://github.com/yushijinhun/authlib-injector) — Yggdrasil 协议规范

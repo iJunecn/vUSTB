@@ -45,6 +45,8 @@ const nextConfig = {
       { source: '/oauth/:path*', destination: `${backend}/oauth/:path*` },
       { source: '/.well-known/:path*', destination: `${backend}/.well-known/:path*` },
       { source: '/static/:path*', destination: `${backend}/static/:path*` },
+      // CustomSkinAPI（CustomSkinLoader Mod 用）
+      { source: '/csl/:path*', destination: `${backend}/api/csl/:path*` },
       // MCA world data files served by Caddy directly (backend manages /resource/mca/)
       { source: '/resource/:path*', destination: `${backend}/resource/:path*` },
       // Compiled resource packs (frontend static assets)

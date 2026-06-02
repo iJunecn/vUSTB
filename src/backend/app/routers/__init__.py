@@ -11,11 +11,13 @@ def register_routers(app: FastAPI) -> None:
         mc_servers, files, textures, admin,
         public, camera_presets, oauth_login,
         site_routes, microsoft, print_booking, article,
+        csl,
     )
 
     app.include_router(site_auth.router)
     app.include_router(users.router)
     app.include_router(yggdrasil.router, prefix="/api/yggdrasil")
+    app.include_router(csl.router, prefix="/api/csl")
     app.include_router(oauth_provider.router)
     app.include_router(static_files.router)
     app.include_router(mc_servers.router)
