@@ -26,6 +26,7 @@ from app.database import get_db
 from app.deps import get_current_user
 from app.models import (
     OAuthApp, AuthorizationCode, AccessToken, DeviceCode, User, Player, Texture,
+    SiteSetting,
 )
 from app.services.crypto import crypto
 
@@ -36,8 +37,52 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _well_known() -> dict:
-    base = settings.site_url.rstrip("/")
+_DEFAULT_SITE_URL = "http://localhost"
+
+
+async def _resolve_base_url(request: Request | None = None, db: AsyncSession | None = None) -> str:
+    """解析站点对外 URL，优先使用数据库/配置值，其次请求头推断。
+
+    优先级：
+    1. 数据库 public_url（管理员后台可覆盖，非默认值）
+    2. settings.site_url（环境变量，非默认值）
+    3. 从请求头 X-Forwarded-Proto + Host 推断
+    4. 兜底 http://localhost
+    """
+    # 1. 数据库站点设置
+    if db:
+        row = (await db.execute(
+            select(SiteSetting).where(SiteSetting.key == "public_url")
+        )).scalar_one_or_none()
+        if row and row.value:
+            url = str(row.value).rstrip("/")
+            if url and url != _DEFAULT_SITE_URL:
+                return url
+
+    # 2. 环境变量（非默认值）
+    configured = (settings.site_url or "").rstrip("/")
+    if configured and configured != _DEFAULT_SITE_URL:
+        return configured
+
+    # 3. 从请求头推断（Caddy 默认保留 Host 并添加 X-Forwarded-Proto）
+    if request:
+        proto = (request.headers.get("x-forwarded-proto") or
+                 request.headers.get("x-forwarded-scheme") or
+                 request.url.scheme)
+        host = (request.headers.get("x-forwarded-host") or
+                request.headers.get("host"))
+        if not host and request.url.hostname:
+            host = request.url.hostname
+            if request.url.port and request.url.port not in (80, 443):
+                host = f"{host}:{request.url.port}"
+        if host:
+            return f"{proto}://{host}"
+
+    return _DEFAULT_SITE_URL
+
+
+def _well_known(base: str) -> dict:
+    base = base.rstrip("/")
     return {
         "issuer": base,
         "authorization_endpoint": base + "/oauth/authorize",
@@ -61,13 +106,15 @@ def _well_known() -> dict:
 
 
 @router.get("/.well-known/openid-configuration")
-async def openid_config():
-    return _well_known()
+async def openid_config(request: Request, db: AsyncSession = Depends(get_db)):
+    base = await _resolve_base_url(request, db)
+    return _well_known(base)
 
 
 @router.get("/api/yggdrasil/.well-known/openid-configuration")
-async def openid_config_yggdrasil(db: AsyncSession = Depends(get_db)):
-    data = _well_known()
+async def openid_config_yggdrasil(request: Request, db: AsyncSession = Depends(get_db)):
+    base = await _resolve_base_url(request, db)
+    data = _well_known(base)
     # 设备授权流：共享 client_id
     shared = (await db.execute(
         select(OAuthApp).where(OAuthApp.is_device_shared == True)
@@ -118,6 +165,7 @@ async def approve_authorize(
 
 @router.post("/oauth/token")
 async def token_endpoint(
+    request: Request,
     grant_type: str = Form(...),
     code: str | None = Form(None),
     client_id: str | None = Form(None),
@@ -188,7 +236,7 @@ async def token_endpoint(
                 selected_profile = {"id": p.uuid.replace("-", ""), "name": p.name}
 
         id_token = crypto.sign_id_token({
-            "iss": settings.site_url,
+            "iss": _resolve_base_url(request),
             "aud": str(dc.client_id),
             "sub": str(dc.user_id),
             "selectedProfile": selected_profile,
@@ -204,6 +252,7 @@ async def token_endpoint(
 # ====== Device Flow ======
 @router.post("/oauth/device/code")
 async def device_code(
+    request: Request,
     client_id: str = Form(...),
     scope: str = Form(""),
     db: AsyncSession = Depends(get_db),
@@ -219,7 +268,7 @@ async def device_code(
         scopes=scope.split() if scope else [], expires_at=expires,
     ))
     await db.commit()
-    verify_url = settings.site_url.rstrip("/") + "/oauth/device"
+    verify_url = (await _resolve_base_url(request, db)).rstrip("/") + "/oauth/device"
     return {
         "device_code": dc_code,
         "user_code": user_code,
@@ -263,10 +312,11 @@ async def _get_token_user(authorization: str | None, db: AsyncSession) -> tuple[
 
 
 @router.get("/oauth/userinfo")
-async def userinfo(authorization: str | None = Header(default=None), db: AsyncSession = Depends(get_db)):
+async def userinfo(request: Request, authorization: str | None = Header(default=None), db: AsyncSession = Depends(get_db)):
     at, user = await _get_token_user(authorization, db)
     scopes = at.scopes or []
-    data = {"sub": str(user.id), "username": user.username, "avatar_url": f"{settings.site_url}/api/users/{user.id}/avatar"}
+    base = await _resolve_base_url(request, db)
+    data = {"sub": str(user.id), "username": user.username, "avatar_url": f"{base}/api/users/{user.id}/avatar"}
     if "email" in scopes:
         data["email"] = user.email
     if "permission" in scopes:
@@ -281,9 +331,10 @@ async def oauth_profile(authorization: str | None = Header(default=None), db: As
 
 
 @router.get("/oauth/avatar")
-async def oauth_avatar(authorization: str | None = Header(default=None), db: AsyncSession = Depends(get_db)):
+async def oauth_avatar(request: Request, authorization: str | None = Header(default=None), db: AsyncSession = Depends(get_db)):
     _, user = await _get_token_user(authorization, db)
-    return {"avatar_url": f"{settings.site_url}/api/users/{user.id}/avatar"}
+    base = await _resolve_base_url(request, db)
+    return {"avatar_url": f"{base}/api/users/{user.id}/avatar"}
 
 
 @router.get("/oauth/email")

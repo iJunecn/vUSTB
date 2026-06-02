@@ -80,9 +80,20 @@ docker-compose.yml
 ```bash
 cp .env.example .env
 # 修改 .env 中的密钥与域名
+# ⚠️ 生产环境必须设置 SITE_URL 为实际域名，例如：
+#     SITE_URL=https://www.ustb.world
+# 否则 Yggdrasil skinDomains、材质 URL、OpenID 发现等将无法正确解析
 
 docker compose up -d --build
 ```
+
+> **重要**：`SITE_URL` 影响以下关键功能：
+> - **skinDomains 白名单**：authlib-injector 据此校验材质 URL 来源，未匹配的域名会被拦截
+> - **材质 URL 生成**：Profile JSON 中的 textures URL 需指向公网可达地址
+> - **OpenID 发现**：`/.well-known/openid-configuration` 中的端点 URL
+> - **OAuth Device Flow**：`verification_uri` 等回调地址
+>
+> 若未配置 `SITE_URL`（仍为默认 `http://localhost`），后端会从 Caddy 传入的 `X-Forwarded-Proto` + `Host` 请求头自动推断公开 URL，但显式配置更可靠。也可在管理员后台"站点设置"中设置 `public_url` 覆盖。
 
 访问：
 - 站点首页：http://localhost
@@ -334,12 +345,13 @@ https://mc.ustb.edu.cn/skinapi/.well-known/openid-configuration
 
 - ✅ Content-Type: `application/json; charset=utf-8`（规范要求）
 - ✅ RSA SHA1withRSA 材质签名 + `signatureRequired`（MC 1.20+）
-- ✅ `skinDomains` 白名单 + Fallback 服务
-- ✅ `X-Authlib-Injector-API-Location` ALI 自动发现头
+- ✅ `skinDomains` 白名单 + Fallback 服务（自动包含请求 Host + `SITE_URL` + 管理员 `public_url`）
+- ✅ `X-Authlib-Injector-API-Location` ALI 自动发现头（中间件自动注入所有 Yggdrasil 响应）
 - ✅ `unsigned` 查询参数（签名/无签名切换）
 - ✅ 材质 URL 格式：`{base_url}/static/textures/{hash}.png`
 - ✅ 材质 Content-Type: `image/png`（防 MIME Sniffing）
 - ✅ 材质 Cache-Control: `public, max-age=604800`（7 天缓存）
+- ✅ 公开 URL 动态推断：`SITE_URL` 未配置时从 `X-Forwarded-Proto` + `Host` 自动推断
 
 ### CustomSkinAPI（CustomSkinLoader）
 

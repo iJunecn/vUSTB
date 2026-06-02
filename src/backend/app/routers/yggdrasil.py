@@ -70,7 +70,7 @@ def _now_ms() -> int:
 
 
 async def _build_profile_json(
-    db: AsyncSession, player: Player, sign: bool = False
+    db: AsyncSession, player: Player, sign: bool = False, request: Request | None = None
 ) -> dict:
     """构建 Yggdrasil profile JSON，包含 textures 与可选签名。
 
@@ -87,7 +87,7 @@ async def _build_profile_json(
             select(Texture).where(Texture.id == player.cape_texture_id)
         )).scalar_one_or_none()
 
-    base_url = (await _get_texture_base_url(db)).rstrip("/") + "/static/textures/"
+    base_url = (await _get_texture_base_url(db, request)).rstrip("/") + "/static/textures/"
     textures = {}
     if skin_tex:
         skin_url = base_url + skin_tex.hash + ".png"
@@ -153,8 +153,59 @@ def _yggdrasil_error(error: str, message: str, status_code: int = 403) -> Yggdra
 
 # ====== 收集 skinDomains ======
 
-async def _get_site_url(db: AsyncSession) -> str:
-    """读取站点对外 URL：优先取站点设置 `public_url`，否则取 settings.site_url。"""
+_DEFAULT_SITE_URL = "http://localhost"
+
+
+async def _resolve_public_url(request: Request, db: AsyncSession) -> str:
+    """解析站点对外公开 URL。
+
+    优先级：
+    1. 站点设置 public_url（数据库，非默认值）
+    2. settings.site_url（环境变量，非默认值）
+    3. 从请求头推断（X-Forwarded-Proto + Host）
+
+    当部署环境未正确配置 SITE_URL 时（仍为默认 http://localhost），
+    此函数从 Caddy 传入的 X-Forwarded-* 头中动态推断公开 URL，
+    确保 skinDomains、材质 URL、OpenID 配置等全部指向正确的对外域名。
+    """
+    # 1. 数据库站点设置（管理员可在后台覆盖）
+    row = (await db.execute(
+        select(SiteSetting).where(SiteSetting.key == "public_url")
+    )).scalar_one_or_none()
+    if row and row.value:
+        url = str(row.value).rstrip("/")
+        if url and url != _DEFAULT_SITE_URL:
+            return url
+
+    # 2. 环境变量（非默认值）
+    if settings.site_url and settings.site_url.rstrip("/") != _DEFAULT_SITE_URL:
+        return settings.site_url.rstrip("/")
+
+    # 3. 从请求头推断 —— Caddy 默认保留 Host 并添加 X-Forwarded-Proto
+    proto = (request.headers.get("x-forwarded-proto") or
+             request.headers.get("x-forwarded-scheme") or
+             request.url.scheme)
+    host = (request.headers.get("x-forwarded-host") or
+            request.headers.get("host"))
+    if not host and request.url.hostname:
+        host = request.url.hostname
+        if request.url.port and request.url.port not in (80, 443):
+            host = f"{host}:{request.url.port}"
+    if host:
+        return f"{proto}://{host}"
+
+    # 最终 fallback
+    return _DEFAULT_SITE_URL
+
+
+async def _get_site_url(db: AsyncSession, request: Request | None = None) -> str:
+    """读取站点对外 URL：优先取站点设置 `public_url`，否则取 settings.site_url。
+
+    当 request 可用时，委托给 _resolve_public_url 以支持动态推断。
+    """
+    if request:
+        return await _resolve_public_url(request, db)
+
     row = (await db.execute(
         select(SiteSetting).where(SiteSetting.key == "public_url")
     )).scalar_one_or_none()
@@ -163,7 +214,7 @@ async def _get_site_url(db: AsyncSession) -> str:
     return (settings.site_url or "").rstrip("/")
 
 
-async def _get_texture_base_url(db: AsyncSession) -> str:
+async def _get_texture_base_url(db: AsyncSession, request: Request | None = None) -> str:
     """材质 URL 的基地址。
 
     必须指向 Caddy 实际反代 `/static/*` 的对外域名（即 site_url），
@@ -177,7 +228,7 @@ async def _get_texture_base_url(db: AsyncSession) -> str:
     )).scalar_one_or_none()
     if row and row.value and str(row.value).startswith(("http://", "https://")):
         return str(row.value).rstrip("/")
-    return await _get_site_url(db)
+    return await _get_site_url(db, request)
 
 
 def _host_from_url(url: str) -> str:
@@ -186,13 +237,16 @@ def _host_from_url(url: str) -> str:
     return url.replace("https://", "").replace("http://", "").split("/")[0].rstrip("/")
 
 
-async def _collect_skin_domains(db: AsyncSession, site_url: str | None = None) -> list[str]:
-    """从配置和 fallback 端点中收集所有 skinDomains"""
+async def _collect_skin_domains(db: AsyncSession, request: Request | None = None, site_url: str | None = None) -> list[str]:
+    """从配置和 fallback 端点中收集所有 skinDomains。
+
+    始终包含当前请求的 Host（防止 SITE_URL 未配置时皮肤加载失败）。
+    """
     domains: list[str] = []
-    base = site_url if site_url is not None else await _get_site_url(db)
+    base = site_url if site_url is not None else await _get_site_url(db, request)
 
     # 站点对外域名
-    for u in (base, settings.api_url, await _get_texture_base_url(db)):
+    for u in (base, settings.api_url, await _get_texture_base_url(db, request)):
         host = _host_from_url(u)
         if host and host not in domains:
             domains.append(host)
@@ -200,6 +254,17 @@ async def _collect_skin_domains(db: AsyncSession, site_url: str | None = None) -
             wildcard = "." + host_only
             if host_only and wildcard not in domains:
                 domains.append(wildcard)
+
+    # 始终包含当前请求的 Host（防止配置遗漏导致 skinDomains 白名单拦截材质）
+    if request:
+        req_host = request.headers.get("host", "")
+        if req_host:
+            req_host_only = req_host.split(":")[0]
+            if req_host_only and req_host_only not in domains:
+                domains.append(req_host_only)
+                wildcard = "." + req_host_only
+                if wildcard not in domains:
+                    domains.append(wildcard)
 
     from app.models import FallbackEndpoint
     rows = (await db.execute(select(FallbackEndpoint))).scalars().all()
@@ -215,14 +280,14 @@ async def _collect_skin_domains(db: AsyncSession, site_url: str | None = None) -
 # ====== Meta 端点（authlib-injector 必需） ======
 @router.get("/")
 @router.get("")
-async def yggdrasil_meta(db: AsyncSession = Depends(get_db)):
-    site_url = await _get_site_url(db)
+async def yggdrasil_meta(request: Request, db: AsyncSession = Depends(get_db)):
+    site_url = await _resolve_public_url(request, db)
     site_name_row = (await db.execute(
         select(SiteSetting).where(SiteSetting.key == "site_name")
     )).scalar_one_or_none()
     site_name = site_name_row.value if site_name_row else settings.site_name
 
-    skin_domains = await _collect_skin_domains(db, site_url)
+    skin_domains = await _collect_skin_domains(db, request, site_url)
 
     meta = {
         "meta": {
@@ -230,8 +295,8 @@ async def yggdrasil_meta(db: AsyncSession = Depends(get_db)):
             "implementationName": "vUSTB",
             "implementationVersion": "0.1.0",
             "links": {
-                "homepage": site_url or settings.site_url,
-                "register": (site_url or settings.site_url).rstrip("/") + "/register",
+                "homepage": site_url,
+                "register": site_url.rstrip("/") + "/register",
             },
             # 规范允许：支持邮箱以外（角色名 / 手机号 / 用户名）登录
             "feature.non_email_login": True,
@@ -246,7 +311,11 @@ async def yggdrasil_meta(db: AsyncSession = Depends(get_db)):
             site_url.rstrip("/") + "/.well-known/openid-configuration"
         )
 
-    return _json_response(meta)
+    resp = _json_response(meta)
+    # 规范要求：每个响应包含 X-Authlib-Injector-API-Location 头
+    # 指向对外 API 根地址（/skinapi/ 是 Caddy 对外映射的规范前缀）
+    resp.headers["X-Authlib-Injector-API-Location"] = site_url.rstrip("/") + "/skinapi/"
+    return resp
 
 
 # ====== 材质静态文件 ======
@@ -463,6 +532,7 @@ async def session_join(req: JoinRequest, request: Request):
 
 @router.get("/sessionserver/session/minecraft/hasJoined")
 async def session_has_joined(
+    request: Request,
     username: str, serverId: str, ip: str | None = None,
     db: AsyncSession = Depends(get_db),
 ):
@@ -488,12 +558,13 @@ async def session_has_joined(
             raise _yggdrasil_error("ForbiddenOperationException", "Account is banned.")
 
     # hasJoined 必须返回带签名的完整 profile（规范 §服务端验证客户端）
-    profile = await _build_profile_json(db, player, sign=True)
+    profile = await _build_profile_json(db, player, sign=True, request=request)
     return _json_response(profile)
 
 
 @router.get("/sessionserver/session/minecraft/profile/{uuid}")
 async def session_profile(
+    request: Request,
     uuid: str,
     unsigned: bool = Query(default=True, description="是否不包含数字签名，默认 true"),
     db: AsyncSession = Depends(get_db),
@@ -521,7 +592,7 @@ async def session_profile(
             return fallback_resp
         return Response(status_code=204)
 
-    profile = await _build_profile_json(db, player, sign=(not unsigned))
+    profile = await _build_profile_json(db, player, sign=(not unsigned), request=request)
     return _json_response(profile)
 
 

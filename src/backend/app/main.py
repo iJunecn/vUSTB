@@ -25,6 +25,34 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
+# ====== Yggdrasil 中间件：为所有 /api/yggdrasil/* 响应添加 ALI 头 ======
+# 规范要求每个 Yggdrasil 响应都包含 X-Authlib-Injector-API-Location 头，
+# 值为对外 API 根地址。此中间件从请求头推断公开 URL 并添加 ALI 头。
+_DEFAULT_SITE_URL = "http://localhost"
+
+
+@app.middleware("http")
+async def yggdrasil_ali_middleware(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/api/yggdrasil"):
+        # 解析公开 URL：优先环境变量（非默认值），否则从请求头推断
+        configured = (settings.site_url or "").rstrip("/")
+        if configured and configured != _DEFAULT_SITE_URL:
+            base = configured
+        else:
+            proto = (request.headers.get("x-forwarded-proto") or
+                     request.headers.get("x-forwarded-scheme") or
+                     request.url.scheme)
+            host = (request.headers.get("x-forwarded-host") or
+                    request.headers.get("host"))
+            if host:
+                base = f"{proto}://{host}"
+            else:
+                base = _DEFAULT_SITE_URL
+        response.headers["X-Authlib-Injector-API-Location"] = base.rstrip("/") + "/skinapi/"
+    return response
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_allow_origins,

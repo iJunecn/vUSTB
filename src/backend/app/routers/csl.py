@@ -40,17 +40,43 @@ router = APIRouter(tags=["csl"])
 
 # ====== 辅助函数 ======
 
-async def _get_site_url(db: AsyncSession) -> str:
-    """读取站点对外 URL：优先取站点设置 `public_url`，否则取 settings.site_url。"""
+_DEFAULT_SITE_URL = "http://localhost"
+
+
+async def _get_site_url(db: AsyncSession, request: Request | None = None) -> str:
+    """读取站点对外 URL：优先取站点设置 `public_url`，否则取 settings.site_url。
+
+    当 request 可用时，在 SITE_URL 未配置（仍为默认 http://localhost）的情况下
+    从请求头推断公开 URL。
+    """
+    # 1. 数据库站点设置
     row = (await db.execute(
         select(SiteSetting).where(SiteSetting.key == "public_url")
     )).scalar_one_or_none()
     if row and row.value:
-        return str(row.value).rstrip("/")
-    return (settings.site_url or "http://localhost").rstrip("/")
+        url = str(row.value).rstrip("/")
+        if url and url != _DEFAULT_SITE_URL:
+            return url
+
+    # 2. 环境变量（非默认值）
+    configured = (settings.site_url or "").rstrip("/")
+    if configured and configured != _DEFAULT_SITE_URL:
+        return configured
+
+    # 3. 从请求头推断
+    if request:
+        proto = (request.headers.get("x-forwarded-proto") or
+                 request.headers.get("x-forwarded-scheme") or
+                 request.url.scheme)
+        host = (request.headers.get("x-forwarded-host") or
+                request.headers.get("host"))
+        if host:
+            return f"{proto}://{host}"
+
+    return _DEFAULT_SITE_URL
 
 
-async def _get_csl_base_url(db: AsyncSession) -> str:
+async def _get_csl_base_url(db: AsyncSession, request: Request | None = None) -> str:
     """CustomSkinAPI 根地址。
 
     规范要求根地址必须以 / 结尾。
@@ -61,7 +87,7 @@ async def _get_csl_base_url(db: AsyncSession) -> str:
     )).scalar_one_or_none()
     if row and row.value and str(row.value).startswith(("http://", "https://")):
         return str(row.value).rstrip("/") + "/"
-    site_url = await _get_site_url(db)
+    site_url = await _get_site_url(db, request)
     return site_url.rstrip("/") + "/csl/"
 
 
@@ -219,7 +245,7 @@ async def get_texture(
 # ====== ExtraList（可选） ======
 
 @router.get("/ExtraList/vUSTB.json")
-async def extralist_entry(db: AsyncSession = Depends(get_db)):
+async def extralist_entry(request: Request, db: AsyncSession = Depends(get_db)):
     """CustomSkinLoader ExtraList 入口文件。
 
     用户只需在浏览器中打开此 URL 并下载 JSON 文件，
@@ -232,7 +258,7 @@ async def extralist_entry(db: AsyncSession = Depends(get_db)):
         "root": "https://mc.ustb.edu.cn/csl/"
     }
     """
-    csl_root = await _get_csl_base_url(db)
+    csl_root = await _get_csl_base_url(db, request)
     site_name_row = (await db.execute(
         select(SiteSetting).where(SiteSetting.key == "site_name")
     )).scalar_one_or_none()
