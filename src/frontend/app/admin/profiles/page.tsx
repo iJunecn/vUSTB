@@ -28,7 +28,7 @@ export default function AdminProfilesPage() {
   const fetchProfiles = useCallback(async () => {
     setLoading(true);
     try {
-      const params: Record<string, string | number> = { limit: 30 };
+      const params: Record<string, string | number> = { limit: 200 };
       if (activeSearch) params.q = activeSearch;
       const r = await api.get<AdminProfile[]>('/admin/profiles', { params });
       setProfiles(r.data);

@@ -23,6 +23,7 @@ class PointReason(str, PyEnum):
     PRINT_REFUND = "print_refund"
     PRINT_CANCEL = "print_cancel"
     RECHARGE = "recharge"
+    ADMIN_ADJUST = "admin_adjust"
 
 
 class PointAccount(Base):

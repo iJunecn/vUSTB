@@ -32,7 +32,7 @@ export default function AdminTexturesPage() {
   const fetchTextures = useCallback(async () => {
     setLoading(true);
     try {
-      const params: Record<string, string | number> = { limit: 30 };
+      const params: Record<string, string | number> = { limit: 200 };
       if (activeSearch) params.q = activeSearch;
       if (typeFilter) params.type = typeFilter;
       const r = await api.get<AdminTexture[]>('/admin/textures', { params });

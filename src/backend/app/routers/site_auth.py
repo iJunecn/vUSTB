@@ -70,6 +70,13 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
     user_count = (await db.execute(select(func.count(User.id)))).scalar() or 0
     group = UserGroup.SUPER_ADMIN if user_count == 0 else UserGroup.USER
 
+    # 邀请码身份赋权：如果邀请码有 target_group 且不是首个用户，使用邀请码身份
+    if invite and invite.target_group and user_count > 0:
+        try:
+            group = UserGroup(invite.target_group)
+        except ValueError:
+            pass  # 无效 target_group，保持默认 user
+
     user = User(
         email=req.email,
         username=req.username,

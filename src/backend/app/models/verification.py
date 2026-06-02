@@ -24,4 +24,5 @@ class InviteCode(Base):
     used_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False, server_default="0")
     used_by: Mapped[str | None] = mapped_column(String(255), nullable=True, default=None)
     note: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    target_group: Mapped[str | None] = mapped_column(String(32), nullable=True, default=None)
     created_at: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False, server_default="0")

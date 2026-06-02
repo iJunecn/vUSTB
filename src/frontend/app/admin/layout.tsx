@@ -5,7 +5,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useUserStore } from '@/stores/user';
 import {
-  LayoutDashboard, Users, KeySquare, Settings, Mail,
+  LayoutDashboard, Users, KeySquare, Settings,
   Shield, Monitor, LogOut, Loader2, Menu, X, Printer, Newspaper, ImageIcon,
   Palette, UserCircle,
 } from 'lucide-react';
@@ -21,7 +21,6 @@ const NAV = [
   { href: '/admin/print', label: '打印预约管理', icon: Printer },
   { href: '/admin/invites', label: '邀请码', icon: KeySquare },
   { href: '/admin/settings', label: '站点设置', icon: Settings },
-  { href: '/admin/email', label: '邮件服务', icon: Mail },
   { href: '/admin/oauth-apps', label: 'OAuth 应用', icon: Shield },
   { href: '/admin/mojang', label: 'Mojang Fallback', icon: Monitor },
 ];
@@ -40,8 +39,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     if (loaded) {
       if (!user) router.replace('/login');
       else if (user.user_group === 'teacher') {
-        // teacher can only access /admin/print
-        if (!pathname.startsWith('/admin/print')) {
+        // teacher can only access /admin/print and /admin/invites
+        if (!pathname.startsWith('/admin/print') && !pathname.startsWith('/admin/invites')) {
           router.replace('/admin/print');
         }
       } else if (user.user_group !== 'admin' && user.user_group !== 'super_admin') {
@@ -168,7 +167,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {/* Nav items */}
         <nav style={{ flex: 1, padding: '0 12px', display: 'flex', flexDirection: 'column', gap: 2 }}>
           {NAV.filter((item) => {
-            if (isTeacher) return item.href === '/admin/print';
+            if (isTeacher) return item.href === '/admin/print' || item.href === '/admin/invites';
             return true;
           }).map((item) => {
             const active = item.exact ? pathname === item.href : pathname.startsWith(item.href);

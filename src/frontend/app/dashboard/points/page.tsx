@@ -32,6 +32,7 @@ const REASON_LABELS: Record<string, string> = {
   print_refund: '预约退回',
   print_cancel: '取消预约',
   recharge: '充值',
+  admin_adjust: '管理员调整',
 };
 
 const AFDIAN_SHOP_URL = 'https://ifdian.net/item/7e31e1f85db611f1a9ad52540025c377';
@@ -114,6 +115,18 @@ export default function PointsPage() {
     });
   }
 
+  // 判断今天（北京时间）是否已签到
+  function isCheckedInToday(lastCheckinStr: string | null): boolean {
+    if (!lastCheckinStr) return false;
+    const now = new Date();
+    const bjOffset = 8 * 60;
+    const nowBj = new Date(now.getTime() + (bjOffset + now.getTimezoneOffset()) * 60000);
+    const lastBj = new Date(new Date(lastCheckinStr).getTime() + (bjOffset + new Date(lastCheckinStr).getTimezoneOffset()) * 60000);
+    return nowBj.toDateString() === lastBj.toDateString();
+  }
+
+  const alreadyCheckedIn = isCheckedInToday(account?.last_checkin ?? null);
+
   if (loading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', padding: '80px 0' }}>
@@ -192,12 +205,15 @@ export default function PointsPage() {
         </div>
         <button
           onClick={handleCheckin}
-          disabled={checkinLoading}
-          className="btn-primary"
-          style={{ padding: '10px 24px', fontSize: 14, display: 'flex', alignItems: 'center', gap: 8 }}
+          disabled={checkinLoading || alreadyCheckedIn}
+          className={alreadyCheckedIn ? 'btn-ghost' : 'btn-primary'}
+          style={{
+            padding: '10px 24px', fontSize: 14, display: 'flex', alignItems: 'center', gap: 8,
+            opacity: alreadyCheckedIn ? 0.5 : 1,
+          }}
         >
-          {checkinLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CalendarCheck style={{ width: 18, height: 18 }} />}
-          签到
+          {checkinLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : alreadyCheckedIn ? <Check style={{ width: 18, height: 18 }} /> : <CalendarCheck style={{ width: 18, height: 18 }} />}
+          {alreadyCheckedIn ? '已签到' : '签到'}
         </button>
       </div>
 

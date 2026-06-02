@@ -24,6 +24,7 @@ export default function DashboardHome() {
   const [profileCount, setProfileCount] = useState(0);
   const [pixelPoints, setPixelPoints] = useState(0);
   const [shellPoints, setShellPoints] = useState(0);
+  const [lastCheckin, setLastCheckin] = useState<string | null>(null);
   const [checkinLoading, setCheckinLoading] = useState(false);
   const [checkinMessage, setCheckinMessage] = useState<string | null>(null);
   const [apiUrl, setApiUrl] = useState('');
@@ -62,9 +63,10 @@ export default function DashboardHome() {
       }).catch(() => {});
 
       // Load points
-      rawApi.get<{ pixel_points: number; shell_points: number }>('/api/points/account').then((r) => {
+      rawApi.get<{ pixel_points: number; shell_points: number; last_checkin: string | null }>('/api/points/account').then((r) => {
         setPixelPoints(r.data.pixel_points);
         setShellPoints(r.data.shell_points);
+        setLastCheckin(r.data.last_checkin);
       }).catch(() => {});
     }
   }, [user]);
@@ -75,6 +77,7 @@ export default function DashboardHome() {
     try {
       const r = await rawApi.post('/api/points/checkin');
       setPixelPoints(r.data.pixel_points);
+      setLastCheckin(new Date().toISOString());
       setCheckinMessage(r.data.message || '签到成功！');
     } catch (err: any) {
       const detail = err?.response?.data?.detail || '签到失败';
@@ -128,6 +131,16 @@ export default function DashboardHome() {
   useEffect(() => {
     if (mojangUrls) checkMojangStatus();
   }, [mojangUrls]);
+
+  // 判断今天是否已签到（北京时间 UTC+8）
+  const alreadyCheckedIn = (() => {
+    if (!lastCheckin) return false;
+    const now = new Date();
+    const bjOffset = 8 * 60;
+    const nowBj = new Date(now.getTime() + (bjOffset + now.getTimezoneOffset()) * 60000);
+    const lastBj = new Date(new Date(lastCheckin).getTime() + (bjOffset + new Date(lastCheckin).getTimezoneOffset()) * 60000);
+    return nowBj.toDateString() === lastBj.toDateString();
+  })();
 
   if (!user) return null;
 
@@ -189,12 +202,15 @@ export default function DashboardHome() {
         </div>
         <button
           onClick={handleCheckin}
-          disabled={checkinLoading}
-          className="btn-primary"
-          style={{ padding: '10px 24px', fontSize: 14, display: 'flex', alignItems: 'center', gap: 8 }}
+          disabled={checkinLoading || alreadyCheckedIn}
+          className={alreadyCheckedIn ? 'btn-ghost' : 'btn-primary'}
+          style={{
+            padding: '10px 24px', fontSize: 14, display: 'flex', alignItems: 'center', gap: 8,
+            opacity: alreadyCheckedIn ? 0.5 : 1,
+          }}
         >
-          {checkinLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CalendarCheck style={{ width: 18, height: 18 }} />}
-          签到
+          {checkinLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : alreadyCheckedIn ? <Check style={{ width: 18, height: 18 }} /> : <CalendarCheck style={{ width: 18, height: 18 }} />}
+          {alreadyCheckedIn ? '已签到' : '签到'}
         </button>
       </div>
 

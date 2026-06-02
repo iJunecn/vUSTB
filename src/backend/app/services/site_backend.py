@@ -229,6 +229,16 @@ class SiteBackend:
         password_hash = hash_password(password)
         user_group = SUPER_ADMIN_GROUP if is_first_user else USER_GROUP
 
+        # 邀请码身份赋权：如果邀请码有 target_group 且不是首个用户，使用邀请码身份
+        if require_invite and invite_code and not is_first_user:
+            ic2 = (await db.execute(select(InviteCode).where(InviteCode.code == invite_code))).scalar_one_or_none()
+            if ic2 and ic2.target_group:
+                try:
+                    UserGroup(ic2.target_group)  # validate
+                    user_group = ic2.target_group
+                except ValueError:
+                    pass
+
         user = User(
             email=email,
             username=username,

@@ -20,9 +20,12 @@ from app.database import get_db
 from app.deps import get_current_admin, get_current_super_admin, get_current_user
 from app.models import (
     User, UserGroup, InviteCode, OAuthApp, SiteSetting, Carousel, FallbackEndpoint,
+    PointAccount, PointTransaction, PointType, PointReason,
+    Player,
 )
 from app.services.admin_backend import admin_backend
 from app.services.oauth_backend import oauth_backend
+from app.services.auth import hash_password
 from app.utils.user_groups import is_admin_group, normalize_user_group
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -42,6 +45,93 @@ class UserOut(BaseModel):
 class UserUpdate(BaseModel):
     user_group: str | None = None
     is_banned: bool | None = None
+
+
+class UserCreate(BaseModel):
+    email: str
+    username: str
+    phone: str = ""
+    password: str
+    user_group: str = "user"
+
+
+@router.post("/users", response_model=UserOut)
+async def create_user(
+    body: UserCreate,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(get_current_admin),
+):
+    """管理员手动创建用户（跳过邀请码和邮箱验证）。"""
+    # 检查重复
+    existing = (await db.execute(
+        select(User).where((User.email == body.email) | (User.username == body.username))
+    )).scalar_one_or_none()
+    if existing:
+        if existing.email == body.email:
+            raise HTTPException(status_code=400, detail="邮箱已被占用")
+        raise HTTPException(status_code=400, detail="用户名已被占用")
+
+    # 验证 user_group 权限
+    try:
+        group = UserGroup(body.user_group)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="invalid user_group")
+    if group in (UserGroup.ADMIN, UserGroup.SUPER_ADMIN) and actor.user_group != UserGroup.SUPER_ADMIN:
+        raise HTTPException(status_code=403, detail="仅超级管理员可创建管理员")
+
+    user = User(
+        email=body.email,
+        username=body.username,
+        display_name=body.username,
+        phone=body.phone,
+        password_hash=hash_password(body.password),
+        user_group=group,
+        is_admin=1 if group in (UserGroup.ADMIN, UserGroup.SUPER_ADMIN) else 0,
+        email_verified=False,
+    )
+    db.add(user)
+    await db.flush()
+
+    # 自动创建默认角色
+    import re
+    base_name = re.sub(r"[^a-zA-Z0-9_]", "_", body.email.split("@")[0])[:12]
+    profile_name = base_name
+    suffix = 1
+    while True:
+        existing_p = (await db.execute(
+            select(Player).where(Player.name == profile_name)
+        )).scalar_one_or_none()
+        if not existing_p:
+            break
+        profile_name = f"{base_name}_{suffix}"
+        suffix += 1
+        if suffix > 100:
+            break
+
+    import os as _os
+    player = Player(uuid=_os.urandom(16).hex, name=profile_name, owner_id=user.id)
+    db.add(player)
+
+    # 赠送 10 像素积分
+    acct = PointAccount(user_id=user.id, pixel_points=10, shell_points=0)
+    db.add(acct)
+    await db.flush()
+    tx = PointTransaction(
+        user_id=user.id,
+        type=PointType.PIXEL,
+        amount=10,
+        reason=PointReason.REGISTER,
+        balance_after=10,
+    )
+    db.add(tx)
+
+    await db.commit()
+    await db.refresh(user)
+    return UserOut(
+        id=user.id, email=user.email, username=user.username,
+        user_group=user.user_group.value, email_verified=user.email_verified,
+        is_banned=user.is_banned, created_at=user.created_at,
+    )
 
 
 @router.get("/users", response_model=list[UserOut])
@@ -106,6 +196,85 @@ async def delete_user(
     return {"ok": True}
 
 
+# ============== 用户积分管理 ==============
+
+class UserPointsUpdate(BaseModel):
+    pixel_points: int | None = None
+    shell_points: int | None = None
+
+
+@router.get("/users/{user_id}/points")
+async def get_user_points(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_super_admin),
+):
+    """超级管理员查看用户积分。"""
+    u = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    if not u:
+        raise HTTPException(status_code=404, detail="not found")
+    acct = (
+        await db.execute(select(PointAccount).where(PointAccount.user_id == user_id))
+    ).scalar_one_or_none()
+    if not acct:
+        return {"pixel_points": 0, "shell_points": 0}
+    return {"pixel_points": acct.pixel_points, "shell_points": acct.shell_points}
+
+
+@router.put("/users/{user_id}/points")
+async def set_user_points(
+    user_id: int,
+    body: UserPointsUpdate,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(get_current_super_admin),
+):
+    """超级管理员直接设置用户积分（非增减，设绝对值），并写流水。"""
+    u = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    if not u:
+        raise HTTPException(status_code=404, detail="not found")
+
+    acct = (
+        await db.execute(select(PointAccount).where(PointAccount.user_id == user_id))
+    ).scalar_one_or_none()
+    if not acct:
+        acct = PointAccount(user_id=user_id, pixel_points=0, shell_points=0)
+        db.add(acct)
+        await db.flush()
+
+    result = {"pixel_points": acct.pixel_points, "shell_points": acct.shell_points}
+
+    if body.pixel_points is not None:
+        diff = body.pixel_points - acct.pixel_points
+        if diff != 0:
+            acct.pixel_points = body.pixel_points
+            db.add(PointTransaction(
+                user_id=user_id,
+                type=PointType.PIXEL,
+                amount=diff,
+                reason=PointReason.ADMIN_ADJUST,
+                ref_id=f"admin:{actor.id}",
+                balance_after=acct.pixel_points,
+            ))
+        result["pixel_points"] = body.pixel_points
+
+    if body.shell_points is not None:
+        diff = body.shell_points - acct.shell_points
+        if diff != 0:
+            acct.shell_points = body.shell_points
+            db.add(PointTransaction(
+                user_id=user_id,
+                type=PointType.SHELL,
+                amount=diff,
+                reason=PointReason.ADMIN_ADJUST,
+                ref_id=f"admin:{actor.id}",
+                balance_after=acct.shell_points,
+            ))
+        result["shell_points"] = body.shell_points
+
+    await db.commit()
+    return {"ok": True, **result}
+
+
 # ============== 邀请码 ==============
 class InviteOut(BaseModel):
     id: int
@@ -114,11 +283,13 @@ class InviteOut(BaseModel):
     used_count: int
     used_by: str | None
     note: str | None
+    target_group: str | None
     created_at: int
 
 
 class InviteCreate(BaseModel):
     count: int = Field(default=1, ge=1, le=100)
+    target_group: str | None = None
 
 
 @router.get("/invites", response_model=list[InviteOut])
@@ -133,7 +304,8 @@ async def list_invites(
         InviteOut(
             id=i.id, code=i.code, total_uses=i.total_uses,
             used_count=i.used_count, used_by=i.used_by,
-            note=i.note, created_at=i.created_at,
+            note=i.note, target_group=i.target_group,
+            created_at=i.created_at,
         )
         for i in rows
     ]
@@ -143,12 +315,33 @@ async def list_invites(
 async def create_invites(
     body: InviteCreate,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin),
+    actor: User = Depends(get_current_user),
 ):
+    # 权限检查：非管理员/教师不能创建邀请码
+    if actor.user_group not in (UserGroup.SUPER_ADMIN, UserGroup.ADMIN, UserGroup.TEACHER):
+        raise HTTPException(status_code=403, detail="需要管理员或教师权限才能创建邀请码")
+
+    # target_group 权限控制
+    target_group = body.target_group
+    if target_group:
+        # 标准化
+        target_group = target_group.lower().strip()
+        if target_group == "super_admin":
+            raise HTTPException(status_code=403, detail="不能通过邀请码授予超级管理员身份")
+        if target_group == "admin" and actor.user_group != UserGroup.SUPER_ADMIN:
+            raise HTTPException(status_code=403, detail="仅超级管理员可创建管理员邀请码")
+        if target_group == "teacher" and actor.user_group not in (UserGroup.SUPER_ADMIN, UserGroup.ADMIN, UserGroup.TEACHER):
+            raise HTTPException(status_code=403, detail="无权创建教师邀请码")
+        # 验证 target_group 值合法
+        if target_group not in ("admin", "teacher"):
+            raise HTTPException(status_code=400, detail="target_group 只能是 admin 或 teacher")
+    else:
+        target_group = None
+
     new_items: list[InviteCode] = []
     for _i in range(body.count):
         code = secrets.token_urlsafe(8)
-        item = InviteCode(code=code, total_uses=1)
+        item = InviteCode(code=code, total_uses=1, target_group=target_group)
         db.add(item)
         new_items.append(item)
     await db.commit()
@@ -158,7 +351,8 @@ async def create_invites(
         InviteOut(
             id=i.id, code=i.code, total_uses=i.total_uses,
             used_count=i.used_count, used_by=i.used_by,
-            note=i.note, created_at=i.created_at,
+            note=i.note, target_group=i.target_group,
+            created_at=i.created_at,
         )
         for i in new_items
     ]
@@ -759,7 +953,7 @@ async def admin_list_textures(
     q: str = "",
     type: str = "",
     cursor: str | None = None,
-    limit: int = 20,
+    limit: int = 200,
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_admin),
 ):
@@ -887,7 +1081,7 @@ class AdminProfileOut(BaseModel):
 async def admin_list_profiles(
     q: str = "",
     cursor: str | None = None,
-    limit: int = 20,
+    limit: int = 200,
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_admin),
 ):

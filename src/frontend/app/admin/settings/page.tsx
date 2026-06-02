@@ -2,22 +2,19 @@
 
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
-import { Loader2, Save, Globe, Lock, Key } from 'lucide-react';
+import { Loader2, Save, Globe, Lock, Key, Mail } from 'lucide-react';
 
 type Setting = { key: string; value: any };
 
 const SECTIONS = [
   {
-    id: 'site',
-    label: '站点配置',
+    id: 'general',
+    label: '基本设置',
     icon: Globe,
     fields: [
       { key: 'public_url', label: '对外访问地址（域名或 IP，含协议）', type: 'text' as const, placeholder: 'https://skin.example.com' },
-      { key: 'texture_base_url', label: '材质 URL 基地址（绝对 URL，留空则用 site_url，材质走 {base}/static/textures/）', type: 'text' as const, placeholder: 'https://cdn.example.com' },
-      { key: 'allow_register', label: '允许注册', type: 'bool' as const },
-      { key: 'require_invite', label: '注册需要邀请码', type: 'bool' as const },
+      { key: 'texture_base_url', label: '材质 URL 基地址（绝对 URL，留空则用 site_url）', type: 'text' as const, placeholder: 'https://cdn.example.com' },
       { key: 'enable_skin_library', label: '启用皮肤库', type: 'bool' as const },
-      { key: 'register_email_suffixes', label: '注册邮箱后缀（逗号分隔，留空允许全部）', type: 'text' as const },
     ],
   },
   {
@@ -27,6 +24,7 @@ const SECTIONS = [
     fields: [
       { key: 'require_email_verify', label: '注册需要邮箱验证', type: 'bool' as const },
       { key: 'allow_password_reset', label: '允许密码重置', type: 'bool' as const },
+      { key: 'register_email_suffixes', label: '注册邮箱后缀（逗号分隔，留空允许全部）', type: 'text' as const, placeholder: 'ustb.edu.cn, emails.ustb.edu.cn' },
     ],
   },
   {
@@ -38,13 +36,27 @@ const SECTIONS = [
       { key: 'jwt_refresh_expire_seconds', label: 'Refresh Token 过期时间（秒）', type: 'text' as const },
     ],
   },
+  {
+    id: 'email',
+    label: '邮件服务',
+    icon: Mail,
+    fields: [
+      { key: 'smtp_host', label: 'SMTP 主机', type: 'text' as const, placeholder: 'smtp.example.com' },
+      { key: 'smtp_port', label: 'SMTP 端口', type: 'text' as const, placeholder: '465' },
+      { key: 'smtp_user', label: 'SMTP 用户名', type: 'text' as const, placeholder: 'noreply@example.com' },
+      { key: 'smtp_password', label: 'SMTP 密码 / 授权码', type: 'password' as const, placeholder: '••••••••' },
+      { key: 'smtp_from', label: '发件人名称', type: 'text' as const, placeholder: '像素北科' },
+      { key: 'smtp_ssl', label: '使用 SSL', type: 'bool' as const },
+      { key: 'email_verify_enabled', label: '启用邮箱验证', type: 'bool' as const },
+    ],
+  },
 ];
 
 export default function AdminSettingsPage() {
   const [settings, setSettings] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
   const [savingSection, setSavingSection] = useState<string | null>(null);
-  const [activeSection, setActiveSection] = useState('site');
+  const [activeSection, setActiveSection] = useState('general');
 
   async function refresh() {
     setLoading(true);
@@ -142,6 +154,14 @@ export default function AdminSettingsPage() {
                       <option value="false">关闭</option>
                       <option value="true">开启</option>
                     </select>
+                  ) : field.type === 'password' ? (
+                    <input
+                      type="password"
+                      value={settings[field.key] ?? ''}
+                      onChange={(e) => setSettings((s) => ({ ...s, [field.key]: e.target.value }))}
+                      placeholder={(field as any).placeholder}
+                      className="input"
+                    />
                   ) : (
                     <input
                       value={settings[field.key] ?? ''}
