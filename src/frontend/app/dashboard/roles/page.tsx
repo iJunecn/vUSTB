@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { rawApi } from '@/lib/api';
-import { Loader2, Plus, Trash2, Shirt, X, Link2, Check } from 'lucide-react';
+import { Loader2, Plus, Trash2, Shirt, X, Link2, Check, Globe } from 'lucide-react';
 import { SkinViewer } from '@/components/skin/SkinViewer';
 import { SkinAvatar } from '@/components/skin/SkinAvatar';
 
@@ -42,6 +42,15 @@ export default function RolesPage() {
   const [msHasGame, setMsHasGame] = useState(false);
   const [importing, setImporting] = useState(false);
   const [showMsDialog, setShowMsDialog] = useState(false);
+
+  // Remote Yggdrasil import state
+  const [showRemoteYggDialog, setShowRemoteYggDialog] = useState(false);
+  const [remoteYggUrl, setRemoteYggUrl] = useState('');
+  const [remoteYggUsername, setRemoteYggUsername] = useState('');
+  const [remoteYggPassword, setRemoteYggPassword] = useState('');
+  const [remoteProfiles, setRemoteProfiles] = useState<Array<{id: string; name: string}>>([]);
+  const [remoteLoading, setRemoteLoading] = useState(false);
+  const [remoteImporting, setRemoteImporting] = useState(false);
 
   async function refresh() {
     setLoading(true);
@@ -151,6 +160,52 @@ export default function RolesPage() {
     }
   }
 
+  async function fetchRemoteProfiles() {
+    if (!remoteYggUrl || !remoteYggUsername || !remoteYggPassword) {
+      setError('请填写远程皮肤站地址、用户名和密码');
+      return;
+    }
+    setRemoteLoading(true);
+    setError(null);
+    try {
+      const res = await rawApi.post('/api/remote-ygg/get-profiles', {
+        api_url: remoteYggUrl,
+        username: remoteYggUsername,
+        password: remoteYggPassword,
+      });
+      setRemoteProfiles(res.data.profiles || []);
+      if (!res.data.profiles?.length) {
+        setError('该账号没有可用角色');
+      }
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || '获取远程角色失败');
+    } finally {
+      setRemoteLoading(false);
+    }
+  }
+
+  async function importRemoteProfile(profileId: string, profileName: string) {
+    setRemoteImporting(true);
+    setError(null);
+    try {
+      await rawApi.post('/api/remote-ygg/import-profile', {
+        api_url: remoteYggUrl,
+        profile_id: profileId,
+        profile_name: profileName,
+      });
+      setShowRemoteYggDialog(false);
+      setRemoteProfiles([]);
+      setRemoteYggUrl('');
+      setRemoteYggUsername('');
+      setRemoteYggPassword('');
+      await refresh();
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || '导入远程角色失败');
+    } finally {
+      setRemoteImporting(false);
+    }
+  }
+
   async function importMicrosoftProfile() {
     if (!msProfile) return;
     setImporting(true);
@@ -220,6 +275,10 @@ export default function RolesPage() {
         <button type="button" onClick={startMicrosoftAuth} className="btn-ghost" style={{ padding: '8px 16px', fontSize: 13, borderColor: '#22c55e', color: '#22c55e' }}>
           <Link2 style={{ width: 14, height: 14 }} />
           绑定正版角色
+        </button>
+        <button type="button" onClick={() => setShowRemoteYggDialog(true)} className="btn-ghost" style={{ padding: '8px 16px', fontSize: 13, borderColor: '#6366f1', color: '#6366f1' }}>
+          <Globe style={{ width: 14, height: 14 }} />
+          从其他皮肤站导入
         </button>
         {error && <p style={{ fontSize: 13, color: '#dc2626', width: '100%' }}>{error}</p>}
         {/* Progress bar during creation */}
@@ -413,6 +472,116 @@ export default function RolesPage() {
               >
                 {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check style={{ width: 14, height: 14 }} />}
                 确认导入
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Remote Yggdrasil import dialog */}
+      {showRemoteYggDialog && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)',
+          }}
+          onClick={() => { setShowRemoteYggDialog(false); setRemoteProfiles([]); }}
+        >
+          <div
+            className="surface-card"
+            style={{ width: '90%', maxWidth: 520, padding: 24, maxHeight: '85vh', overflowY: 'auto' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ fontSize: 18, fontWeight: 600, color: 'var(--color-heading)', marginBottom: 4 }}>
+              <Globe style={{ width: 18, height: 18, display: 'inline', marginRight: 8, verticalAlign: '-3px' }} />
+              从其他皮肤站导入角色
+            </h3>
+            <p style={{ fontSize: 13, color: 'var(--color-text-light)', marginBottom: 16 }}>
+              输入其他 Yggdrasil 皮肤站的 API 地址和账号，导入角色及其皮肤/披风。
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <span style={{ fontSize: 13, fontWeight: 500 }}>API 根地址</span>
+                <input
+                  value={remoteYggUrl}
+                  onChange={(e) => setRemoteYggUrl(e.target.value)}
+                  className="input"
+                  placeholder="https://skin.example.com/api/yggdrasil/"
+                />
+              </label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <span style={{ fontSize: 13, fontWeight: 500 }}>用户名</span>
+                  <input
+                    value={remoteYggUsername}
+                    onChange={(e) => setRemoteYggUsername(e.target.value)}
+                    className="input"
+                    placeholder="邮箱或用户名"
+                  />
+                </label>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <span style={{ fontSize: 13, fontWeight: 500 }}>密码</span>
+                  <input
+                    type="password"
+                    value={remoteYggPassword}
+                    onChange={(e) => setRemoteYggPassword(e.target.value)}
+                    className="input"
+                    placeholder="远程站密码"
+                    onKeyDown={(e) => { if (e.key === 'Enter') fetchRemoteProfiles(); }}
+                  />
+                </label>
+              </div>
+              <button
+                onClick={fetchRemoteProfiles}
+                disabled={remoteLoading || !remoteYggUrl || !remoteYggUsername}
+                className="btn-primary"
+                style={{ padding: '8px 16px', fontSize: 13 }}
+              >
+                {remoteLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : '获取角色列表'}
+              </button>
+            </div>
+
+            {remoteProfiles.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-heading)', marginBottom: 4 }}>
+                  可导入的角色 ({remoteProfiles.length})
+                </p>
+                {remoteProfiles.map((p) => (
+                  <div
+                    key={p.id}
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '12px 16px', borderRadius: 8,
+                      background: 'var(--color-background-soft)',
+                    }}
+                  >
+                    <div>
+                      <p style={{ fontWeight: 600, color: 'var(--color-heading)', margin: 0 }}>{p.name}</p>
+                      <p style={{ fontSize: 12, fontFamily: 'monospace', color: 'var(--color-text-light)', marginTop: 2 }}>{formatUUID(p.id)}</p>
+                    </div>
+                    <button
+                      onClick={() => importRemoteProfile(p.id, p.name)}
+                      disabled={remoteImporting}
+                      className="btn-primary"
+                      style={{ padding: '6px 16px', fontSize: 13 }}
+                    >
+                      {remoteImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check style={{ width: 14, height: 14 }} />}
+                      导入
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+              <button
+                onClick={() => { setShowRemoteYggDialog(false); setRemoteProfiles([]); }}
+                className="btn-ghost"
+                style={{ padding: '8px 16px', fontSize: 13 }}
+              >
+                关闭
               </button>
             </div>
           </div>

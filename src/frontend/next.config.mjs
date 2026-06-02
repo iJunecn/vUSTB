@@ -44,7 +44,13 @@ const nextConfig = {
       { source: '/api/:path*', destination: `${backend}/api/:path*` },
       { source: '/oauth/:path*', destination: `${backend}/oauth/:path*` },
       { source: '/.well-known/:path*', destination: `${backend}/.well-known/:path*` },
+      // OpenID 配置端点也在 /api 下
+      { source: '/skinapi/.well-known/:path*', destination: `${backend}/.well-known/:path*` },
       { source: '/static/:path*', destination: `${backend}/static/:path*` },
+      // Yggdrasil skin API — authlib-injector 兼容
+      // Caddy 在生产环境会将 /skinapi/* 重写到 /api/yggdrasil/*
+      // 开发环境由 Next.js rewrite 处理
+      { source: '/skinapi/:path*', destination: `${backend}/api/yggdrasil/:path*` },
       // CustomSkinAPI（CustomSkinLoader Mod 用）
       { source: '/csl/:path*', destination: `${backend}/api/csl/:path*` },
       // MCA world data files served by Caddy directly (backend manages /resource/mca/)

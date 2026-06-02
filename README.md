@@ -37,9 +37,40 @@
 ```
 src/
 ├── frontend/            # Next.js 应用
+│   ├── app/            # 页面路由
+│   │   ├── skin/       # 皮肤站页面（首页/皮肤库/上传/配置）
+│   │   ├── dashboard/  # 用户中心（面板/资料/角色/安全/衣柜）
+│   │   ├── admin/      # 管理后台（用户/材质/角色/动态/打印/设置等）
+│   │   ├── oauth/      # OAuth 授权页面
+│   │   ├── login/      # 登录
+│   │   ├── register/   # 注册
+│   │   ├── dynamics/   # 动态发布系统
+│   │   ├── print/      # 3D 打印预约
+│   │   └── ...
+│   ├── components/     # 组件
+│   │   └── skin/       # 皮肤站组件（SkinViewer/CapeViewer/SkinAvatar）
+│   ├── lib/            # API 客户端
+│   ├── config/         # 环境配置
+│   └── engine/         # 3D 校园 WASM 引擎
 ├── backend/             # FastAPI 应用
+│   └── app/
+│       ├── routers/    # API 路由
+│       │   ├── yggdrasil.py    # Yggdrasil 协议
+│       │   ├── csl.py          # CustomSkinAPI 协议
+│       │   ├── remote_ygg.py   # 远程 Yggdrasil 导入
+│       │   ├── site_routes.py  # 站点用户路由（登录/注册/材质/角色）
+│       │   ├── admin.py        # 管理员 API
+│       │   ├── microsoft.py    # 微软正版验证
+│       │   ├── oauth_provider.py # OAuth Provider
+│       │   ├── textures.py     # 材质管理
+│       │   ├── article.py      # 动态发布
+│       │   └── print_booking.py # 3D 打印预约
+│       ├── services/  # 业务逻辑
+│       ├── models/     # 数据模型
+│       └── utils/      # 工具函数
 ├── caddy/Caddyfile      # 反代配置
 └── legacy-wasm-engine/  # 待迁移的 Rust/WASM 3D 引擎
+element-skin/             # 原 element-skin 项目（已合并到主站）
 docker-compose.yml
 .env.example
 ```
@@ -94,7 +125,6 @@ BACKEND_INTERNAL_URL=http://localhost:8000 npm run dev
 
 ### 动态发布系统
 
-> 由原 kuno-main 项目整合而来，提供博客式的动态发布功能。
 
 | 路由 | 功能 |
 |------|------|
@@ -140,10 +170,40 @@ BACKEND_INTERNAL_URL=http://localhost:8000 npm run dev
 
 ### 皮肤站
 
-- `/skin` — 皮肤站首页
-- `/skin/library` — 皮肤库
-- `/skin/settings` — 皮肤设置
-- `/skin/upload` — 皮肤上传
+像素北科皮肤站，完整实现 Yggdrasil 与 CustomSkinAPI 两套皮肤协议，支持第三方启动器登录、材质上传/管理、衣柜、公共皮肤库等功能。由 element-skin 项目演化而来，已合并到主站。
+
+**前台页面：**
+
+| 路由 | 功能 |
+|------|------|
+| `/skin` | 皮肤站首页 — 功能入口（皮肤库、上传、配置引导） |
+| `/skin/library` | 皮肤库 — 公开材质浏览、分类筛选、一键收藏到衣柜、3D 预览 |
+| `/skin/upload` | 上传材质 — 选择文件 → 3D 预览 → 编辑信息 → 保存到衣柜 |
+| `/skin/settings` | 启动器配置 — API 地址复制、拖拽接入、JVM 参数、HMCL/PCL/服务端接入说明 |
+
+**用户中心（皮肤相关）：**
+
+| 路由 | 功能 |
+|------|------|
+| `/dashboard` | 用户面板 — 材质/角色统计、快速配置启动器、Mojang 服务状态 |
+| `/dashboard/wardrobe` | 皮肤衣柜 — 管理上传和收藏的材质、3D 预览、编辑名称/模型/公开状态、应用到角色、设为头像 |
+| `/dashboard/roles` | 游戏角色 — 创建角色、绑定材质、微软正版角色导入、远程 Yggdrasil 角色导入 |
+| `/dashboard/profile` | 个人资料 — 头像设置（从皮肤截取）、账号信息、修改密码、注销 |
+| `/dashboard/security` | 账号安全 — 修改用户名/邮箱/手机号、修改密码 |
+
+**管理员后台（皮肤站相关）：**
+
+| 路由 | 功能 |
+|------|------|
+| `/admin` | 管理首页 — 统计概览（用户数、邀请码、OAuth 应用） |
+| `/admin/textures` | 材质管理 — 全站材质列表、搜索/类型筛选、3D 预览、编辑名称/模型/公开状态、强制下架 |
+| `/admin/profiles` | 角色管理 — 全站角色列表、搜索、3D 预览、编辑名称、清除皮肤/披风绑定、删除角色 |
+| `/admin/users` | 用户管理 — 列表、切换管理组、封禁/解封、重置密码、删除 |
+| `/admin/invites` | 邀请码管理 — 生成、删除 |
+| `/admin/settings` | 站点设置 — 分组配置（站点/安全/邮件/微软/Fallback） |
+| `/admin/oauth-apps` | OAuth 应用管理 |
+| `/admin/mojang` | Mojang 回退配置 |
+| `/admin/email` | 邮件设置 |
 
 **皮肤协议支持：**
 
@@ -156,22 +216,24 @@ BACKEND_INTERNAL_URL=http://localhost:8000 npm run dev
 
 ### 用户中心
 
-- `/dashboard` — 用户面板
-- `/dashboard/profile` — 个人资料
-- `/dashboard/roles` — 角色管理
-- `/dashboard/security` — 安全设置
-- `/dashboard/wardrobe` — 皮肤衣柜
+- `/dashboard` — 用户面板（材质/角色统计、快速配置启动器、Mojang 服务状态）
+- `/dashboard/profile` — 个人资料（头像设置、账号信息、修改密码、注销账号）
+- `/dashboard/roles` — 角色管理（创建角色、绑定材质、微软正版导入、远程皮肤站导入）
+- `/dashboard/security` — 安全设置（修改用户名/邮箱/手机号、修改密码）
+- `/dashboard/wardrobe` — 皮肤衣柜（材质管理、3D 预览、应用到角色、设为头像）
 
 ### 管理员后台
 
-- `/admin` — 管理首页
-- `/admin/users` — 用户管理
-- `/admin/invites` — 邀请码管理
-- `/admin/oauth-apps` — OAuth 应用
+- `/admin` — 管理首页（用户/邀请码/OAuth 应用统计）
+- `/admin/textures` — 材质管理（全站材质搜索/筛选/编辑/3D 预览/强制下架）
+- `/admin/profiles` — 角色管理（全站角色搜索/编辑/3D 预览/删除）
+- `/admin/users` — 用户管理（列表、切换管理组、封禁/解封、重置密码、删除）
+- `/admin/invites` — 邀请码管理（生成、删除）
+- `/admin/oauth-apps` — OAuth 应用管理
 - `/admin/email` — 邮件设置
-- `/admin/mojang` — Mojang 回退
+- `/admin/mojang` — Mojang 回退配置
 - `/admin/servers` — 服务器管理
-- `/admin/settings` — 站点设置
+- `/admin/settings` — 站点设置（站点/安全/邮件/微软/Fallback 分组配置）
 - `/admin/print` — 打印预约管理
 
 ### OAuth Provider
@@ -181,7 +243,6 @@ BACKEND_INTERNAL_URL=http://localhost:8000 npm run dev
 
 ### 3D 打印预约系统
 
-> 由原 vLab-main 项目整合而来，为智能学院天码智能社提供 Bambu H2D 3D 打印机在线预约服务。
 
 | 路由 | 功能 |
 |------|------|
@@ -360,20 +421,78 @@ https://mc.ustb.edu.cn/csl/
 | 端点 | 方法 | 说明 |
 |------|------|------|
 | `/api/microsoft/auth-url` | GET | 获取微软 OAuth 授权链接 |
-| `/api/microsoft/callback` | POST | 微软 OAuth 回调，获取 MC 角色并导入 |
+| `/api/microsoft/callback` | GET | 微软 OAuth 回调，获取 MC 角色并导入 |
+| `/api/microsoft/get-profile` | POST | 使用临时 token 获取 profile 数据 |
+| `/api/microsoft/import-profile` | POST | 导入正版角色（含皮肤/披风下载保存） |
+
+### 远程 Yggdrasil 导入
+
+支持从其他 Yggdrasil 皮肤站导入角色和材质：
+
+- 在"游戏角色"页面点击"从其他皮肤站导入"
+- 输入远程皮肤站 API 地址、用户名和密码
+- 选择要导入的角色，系统自动下载皮肤和披风并创建角色
 
 ### 材质管理 API
 
 | 端点 | 方法 | 说明 |
 |------|------|------|
 | `/api/textures` | GET | 材质列表 |
-| `/api/textures/upload` | POST | 上传材质 |
+| `/api/textures/upload` | POST | 上传材质（同时应用到角色） |
 | `/api/textures/{id}` | DELETE | 删除材质 |
 | `/api/textures/wardrobe` | GET | 衣柜列表 |
 | `/api/textures/wardrobe` | POST | 添加到衣柜 |
 | `/api/textures/wardrobe/{id}` | DELETE | 从衣柜移除 |
-| `/api/textures/public-library` | GET | 公共皮肤库 |
+| `/api/textures/library` | GET | 公共皮肤库 |
+| `/api/me/textures` | GET | 我的衣柜材质列表 |
+| `/api/me/textures` | POST | 上传材质到衣柜 |
+| `/api/me/textures/{hash}/{type}` | GET | 材质详情 |
+| `/api/me/textures/{hash}/{type}` | PATCH | 修改材质信息（名称/模型/公开） |
+| `/api/me/textures/{hash}/{type}` | DELETE | 从衣柜删除材质 |
+| `/api/me/textures/{hash}/add` | POST | 添加材质到衣柜（收藏） |
+| `/api/me/textures/{hash}/apply` | POST | 将材质应用到角色 |
 | `/api/users/{id}/avatar` | GET | 用户头像 |
+
+### 角色/玩家管理 API
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/api/players` | GET | 我的角色列表 |
+| `/api/players` | POST | 创建角色 |
+| `/api/players/{id}` | DELETE | 删除角色 |
+| `/api/players/{id}/bind` | POST | 绑定/解绑材质到角色 |
+| `/api/me/profiles` | POST | 创建角色（vSkin 兼容） |
+| `/api/me/profiles/{pid}` | DELETE | 删除角色 |
+| `/api/me/profiles/{pid}/skin` | DELETE | 清除角色皮肤 |
+| `/api/me/profiles/{pid}/cape` | DELETE | 清除角色披风 |
+
+### 远程 Yggdrasil 导入 API
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/api/remote-ygg/get-profiles` | POST | 从远程皮肤站获取角色列表 |
+| `/api/remote-ygg/import-profile` | POST | 导入单个远程角色（含皮肤/披风） |
+| `/api/remote-ygg/import-profiles` | POST | 批量导入远程角色 |
+
+### 管理员 API（皮肤站相关）
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/api/admin/textures` | GET | 材质列表（支持搜索/分页/类型筛选） |
+| `/api/admin/textures/{hash}` | PATCH | 修改材质信息 |
+| `/api/admin/textures/{hash}` | DELETE | 删除材质（同时清理衣柜和角色绑定） |
+| `/api/admin/profiles` | GET | 角色列表（支持搜索/分页） |
+| `/api/admin/profiles/{id}` | PATCH | 修改角色信息 |
+| `/api/admin/profiles/{id}` | DELETE | 删除角色 |
+| `/api/admin/profiles/{id}/skin` | PATCH | 设置角色皮肤 |
+| `/api/admin/profiles/{id}/cape` | PATCH | 设置角色披风 |
+| `/api/admin/official-whitelist` | GET | 白名单列表 |
+| `/api/admin/official-whitelist` | POST | 添加白名单 |
+| `/api/admin/official-whitelist/{username}` | DELETE | 移除白名单 |
+| `/api/admin/carousel` | POST | 上传轮播图 |
+| `/api/admin/carousel/{filename}` | DELETE | 删除轮播图 |
+| `/api/admin/settings/{group}` | GET | 获取设置组 |
+| `/api/admin/settings/{group}` | POST | 保存设置组 |
 
 ---
 
@@ -383,8 +502,8 @@ https://mc.ustb.edu.cn/csl/
 
 参考与致谢：
 - [USTB-Official-Website](https://github.com/USTB-SkyCode/USTB-Official-Website) 与 [USTB-Official-Backend](https://github.com/USTB-SkyCode/USTB-Official-Backend) 原官网代码与设计灵感
-- [vSkin](https://github.com/LYOfficial/vSkin) — 皮肤站协议实现
-- [vLab-main](https://github.com/LYOfficial/vLab-main) — 3D 打印预约系统原始实现（Express + SQLite）
+- [vSkin](https://github.com/iJunecn/vSkin) — 皮肤站协议实现
+- [vLab-main](https://github.com/iJunecn/vLab) — 3D 打印预约系统原始实现（Express + SQLite）
 - [kuno-main](https://github.com/xuemian168/kuno) — 动态发布系统原始实现（Go + Next.js）
 - [Blessing Skin Server](https://github.com/bs-community/blessing-skin-server)
 - [mc.sjtu.cn](https://mc.sjtu.cn/) — UI 设计灵感

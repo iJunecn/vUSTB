@@ -739,6 +739,327 @@ async def save_fallback_settings(body: dict = Body(...), db: AsyncSession = Depe
     return {"ok": True}
 
 
+# ============== vSkin 兼容: 材质管理 ==============
+
+class AdminTextureOut(BaseModel):
+    hash: str
+    type: str
+    model: str
+    name: str
+    is_public: bool
+    uploader: int | None = None
+    uploader_name: str | None = None
+    uploader_display_name: str | None = None
+    uploader_email: str | None = None
+    created_at: datetime | None = None
+
+
+@router.get("/textures", response_model=list[AdminTextureOut])
+async def admin_list_textures(
+    q: str = "",
+    type: str = "",
+    cursor: str | None = None,
+    limit: int = 20,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_admin),
+):
+    """管理员材质列表（vSkin 兼容，支持搜索和分页）"""
+    base_q = select(Texture)
+    if type in ("skin", "cape"):
+        base_q = base_q.where(Texture.type == type)
+    if q:
+        base_q = base_q.where(Texture.name.ilike(f"%{q}%"))
+    if cursor:
+        # cursor-based: use created_at as cursor
+        try:
+            import datetime as _dt
+            cursor_dt = _dt.datetime.fromisoformat(cursor)
+            base_q = base_q.where(Texture.created_at < cursor_dt)
+        except (ValueError, TypeError):
+            pass
+
+    rows = (await db.execute(
+        base_q.order_by(Texture.created_at.desc()).limit(limit + 1)
+    )).scalars().all()
+
+    # 获取上传者信息
+    uploader_ids = list(set(t.uploader_id for t in rows if t.uploader_id))
+    uploader_map = {}
+    if uploader_ids:
+        users = (await db.execute(select(User).where(User.id.in_(uploader_ids)))).scalars().all()
+        uploader_map = {u.id: u for u in users}
+
+    has_next = len(rows) > limit
+    items = rows[:limit]
+
+    return [
+        AdminTextureOut(
+            hash=t.hash,
+            type=t.type,
+            model=t.model,
+            name=t.name,
+            is_public=t.is_public,
+            uploader=t.uploader_id,
+            uploader_name=uploader_map[t.uploader_id].username if t.uploader_id in uploader_map else None,
+            uploader_display_name=uploader_map[t.uploader_id].display_name if t.uploader_id in uploader_map else None,
+            uploader_email=uploader_map[t.uploader_id].email if t.uploader_id in uploader_map else None,
+            created_at=t.created_at,
+        )
+        for t in items
+    ]
+
+
+@router.patch("/textures/{texture_hash}")
+async def admin_patch_texture(
+    texture_hash: str,
+    body: dict = Body(...),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_admin),
+):
+    """管理员修改材质信息"""
+    tex = (await db.execute(select(Texture).where(Texture.hash == texture_hash))).scalar_one_or_none()
+    if not tex:
+        raise HTTPException(status_code=404, detail="Texture not found")
+    if "model" in body and body["model"] in ("classic", "slim") and tex.type == "skin":
+        tex.model = body["model"]
+    if "note" in body and body["note"] is not None:
+        tex.name = body["note"]
+    if "is_public" in body and body["is_public"] is not None:
+        tex.is_public = bool(body["is_public"])
+    await db.commit()
+    return {"ok": True}
+
+
+@router.delete("/textures/{texture_hash}")
+async def admin_delete_texture(
+    texture_hash: str,
+    type: str = "",
+    user_id: int | None = None,
+    force: bool = False,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_admin),
+):
+    """管理员删除材质"""
+    q = select(Texture).where(Texture.hash == texture_hash)
+    if type in ("skin", "cape"):
+        q = q.where(Texture.type == type)
+    tex = (await db.execute(q)).scalar_one_or_none()
+    if not tex:
+        raise HTTPException(status_code=404, detail="Texture not found")
+    # Remove wardrobe entries
+    from app.models import Wardrobe
+    wardrobes = (await db.execute(
+        select(Wardrobe).where(Wardrobe.texture_id == tex.id)
+    )).scalars().all()
+    for w in wardrobes:
+        await db.delete(w)
+    # Unbind from players
+    from app.models import Player
+    players_skin = (await db.execute(
+        select(Player).where(Player.skin_texture_id == tex.id)
+    )).scalars().all()
+    for p in players_skin:
+        p.skin_texture_id = None
+    players_cape = (await db.execute(
+        select(Player).where(Player.cape_texture_id == tex.id)
+    )).scalars().all()
+    for p in players_cape:
+        p.cape_texture_id = None
+    await db.delete(tex)
+    await db.commit()
+    return {"ok": True}
+
+
+# ============== vSkin 兼容: 角色管理 ==============
+
+class AdminProfileOut(BaseModel):
+    id: int
+    name: str
+    model: str
+    skin_hash: str | None = None
+    cape_hash: str | None = None
+    user_id: int | None = None
+    owner_email: str | None = None
+    owner_display_name: str | None = None
+
+
+@router.get("/profiles", response_model=list[AdminProfileOut])
+async def admin_list_profiles(
+    q: str = "",
+    cursor: str | None = None,
+    limit: int = 20,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_admin),
+):
+    """管理员角色列表"""
+    base_q = select(Player)
+    if q:
+        base_q = base_q.where(Player.name.ilike(f"%{q}%"))
+
+    rows = (await db.execute(
+        base_q.order_by(Player.created_at.desc()).limit(limit)
+    )).scalars().all()
+
+    # 获取 owner 信息
+    owner_ids = list(set(p.owner_id for p in rows))
+    owner_map = {}
+    if owner_ids:
+        users = (await db.execute(select(User).where(User.id.in_(owner_ids)))).scalars().all()
+        owner_map = {u.id: u for u in users}
+
+    result = []
+    for p in rows:
+        skin_hash = None
+        cape_hash = None
+        skin_model = "default"
+        if p.skin_texture_id:
+            tex = (await db.execute(select(Texture).where(Texture.id == p.skin_texture_id))).scalar_one_or_none()
+            if tex:
+                skin_hash = tex.hash
+                skin_model = tex.model if tex.model == "slim" else "default"
+        if p.cape_texture_id:
+            tex = (await db.execute(select(Texture).where(Texture.id == p.cape_texture_id))).scalar_one_or_none()
+            if tex:
+                cape_hash = tex.hash
+
+        owner = owner_map.get(p.owner_id)
+        result.append(AdminProfileOut(
+            id=p.id,
+            name=p.name,
+            model=skin_model,
+            skin_hash=skin_hash,
+            cape_hash=cape_hash,
+            user_id=p.owner_id,
+            owner_email=owner.email if owner else None,
+            owner_display_name=owner.display_name if owner else None,
+        ))
+
+    return result
+
+
+@router.patch("/profiles/{profile_id}")
+async def admin_patch_profile(
+    profile_id: int,
+    body: dict = Body(...),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_admin),
+):
+    """管理员修改角色"""
+    p = (await db.execute(select(Player).where(Player.id == profile_id))).scalar_one_or_none()
+    if not p:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    if "name" in body and body["name"]:
+        p.name = body["name"]
+    await db.commit()
+    return {"ok": True}
+
+
+@router.delete("/profiles/{profile_id}")
+async def admin_delete_profile(
+    profile_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_admin),
+):
+    """管理员删除角色"""
+    p = (await db.execute(select(Player).where(Player.id == profile_id))).scalar_one_or_none()
+    if not p:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    await db.delete(p)
+    await db.commit()
+    return {"ok": True}
+
+
+@router.patch("/profiles/{profile_id}/skin")
+async def admin_patch_profile_skin(
+    profile_id: int,
+    body: dict = Body(...),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_admin),
+):
+    """管理员设置角色皮肤"""
+    p = (await db.execute(select(Player).where(Player.id == profile_id))).scalar_one_or_none()
+    if not p:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    hash_val = body.get("hash")
+    if not hash_val:
+        p.skin_texture_id = None
+    else:
+        tex = (await db.execute(select(Texture).where(Texture.hash == hash_val, Texture.type == "skin"))).scalar_one_or_none()
+        if not tex:
+            raise HTTPException(status_code=404, detail="Texture not found")
+        p.skin_texture_id = tex.id
+    await db.commit()
+    return {"ok": True}
+
+
+@router.patch("/profiles/{profile_id}/cape")
+async def admin_patch_profile_cape(
+    profile_id: int,
+    body: dict = Body(...),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_admin),
+):
+    """管理员设置角色披风"""
+    p = (await db.execute(select(Player).where(Player.id == profile_id))).scalar_one_or_none()
+    if not p:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    hash_val = body.get("hash")
+    if not hash_val:
+        p.cape_texture_id = None
+    else:
+        tex = (await db.execute(select(Texture).where(Texture.hash == hash_val, Texture.type == "cape"))).scalar_one_or_none()
+        if not tex:
+            raise HTTPException(status_code=404, detail="Texture not found")
+        p.cape_texture_id = tex.id
+    await db.commit()
+    return {"ok": True}
+
+
+# ============== vSkin 兼容: 白名单管理 ==============
+
+class WhitelistEntryOut(BaseModel):
+    username: str
+    created_at: int | None = None
+
+
+@router.get("/official-whitelist", response_model=list[WhitelistEntryOut])
+async def admin_get_whitelist(
+    endpoint_id: int = 0,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_admin),
+):
+    """管理员获取白名单列表（vSkin 兼容）"""
+    # 白名单基于 Player 表 — 在 vUSTB 中所有已注册角色即视为白名单
+    # 若需要与特定 Fallback 端点联动，可扩展此逻辑
+    rows = (await db.execute(select(Player).order_by(Player.name))).scalars().all()
+    return [WhitelistEntryOut(username=p.name) for p in rows]
+
+
+@router.post("/official-whitelist")
+async def admin_add_whitelist_user(
+    body: dict = Body(...),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_admin),
+):
+    """管理员添加白名单用户（vSkin 兼容 — 仅记录，vUSTB 自动白名单）"""
+    username = body.get("username", "")
+    endpoint_id = body.get("endpoint_id", 0)
+    if not username:
+        raise HTTPException(status_code=400, detail="username required")
+    return {"ok": True}
+
+
+@router.delete("/official-whitelist/{username}")
+async def admin_remove_whitelist_user(
+    username: str,
+    endpoint_id: int = 0,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_admin),
+):
+    """管理员移除白名单用户（vSkin 兼容）"""
+    return {"ok": True}
+
+
 # ============== vSkin 兼容: Carousel 文件上传/删除 ==============
 
 @router.post("/carousel")

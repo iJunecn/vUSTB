@@ -7,12 +7,15 @@ import { useUserStore } from '@/stores/user';
 import {
   LayoutDashboard, Users, KeySquare, Settings, Mail,
   Shield, Monitor, LogOut, Loader2, Menu, X, Printer, Newspaper, ImageIcon,
+  Palette, UserCircle,
 } from 'lucide-react';
 import { SkinAvatar } from '@/components/skin/SkinAvatar';
 
 const NAV = [
   { href: '/admin', label: '概览', icon: LayoutDashboard, exact: true },
   { href: '/admin/users', label: '用户管理', icon: Users },
+  { href: '/admin/textures', label: '材质管理', icon: Palette },
+  { href: '/admin/profiles', label: '角色管理', icon: UserCircle },
   { href: '/admin/dynamics', label: '动态管理', icon: Newspaper },
   { href: '/admin/media', label: '图片管理', icon: ImageIcon },
   { href: '/admin/print', label: '打印预约管理', icon: Printer },
