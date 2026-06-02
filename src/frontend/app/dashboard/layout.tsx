@@ -5,12 +5,13 @@ import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useUserStore } from '@/stores/user';
 import {
-  LayoutDashboard, Shirt, Users, Shield, LogOut, Loader2, Menu, X,
+  LayoutDashboard, Coins, Shirt, Users, Shield, LogOut, Loader2, Menu, X,
 } from 'lucide-react';
 import { SkinAvatar } from '@/components/skin/SkinAvatar';
 
 const NAV = [
   { href: '/dashboard', label: '概览', icon: LayoutDashboard, exact: true },
+  { href: '/dashboard/points', label: '积分详细', icon: Coins },
   { href: '/dashboard/wardrobe', label: '皮肤衣柜', icon: Shirt },
   { href: '/dashboard/roles', label: '游戏角色', icon: Users },
   { href: '/dashboard/security', label: '账号安全', icon: Shield },

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useUserStore } from '@/stores/user';
 import { rawApi } from '@/lib/api';
-import { Shirt, Users, Copy, MousePointerClick, Check, Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Shirt, Users, Copy, MousePointerClick, Check, Loader2, AlertTriangle, RefreshCw, Coins, CalendarCheck } from 'lucide-react';
 
 type MojangStatusUrls = {
   session: string;
@@ -22,6 +22,10 @@ export default function DashboardHome() {
   const user = useUserStore((s) => s.user);
   const [textureCount, setTextureCount] = useState(0);
   const [profileCount, setProfileCount] = useState(0);
+  const [pixelPoints, setPixelPoints] = useState(0);
+  const [shellPoints, setShellPoints] = useState(0);
+  const [checkinLoading, setCheckinLoading] = useState(false);
+  const [checkinMessage, setCheckinMessage] = useState<string | null>(null);
   const [apiUrl, setApiUrl] = useState('');
   const [copied, setCopied] = useState(false);
   const [mojangUrls, setMojangUrls] = useState<MojangStatusUrls | null>(null);
@@ -56,8 +60,29 @@ export default function DashboardHome() {
       rawApi.get<any[]>('/api/players').then((r) => {
         setProfileCount(r.data.length);
       }).catch(() => {});
+
+      // Load points
+      rawApi.get<{ pixel_points: number; shell_points: number }>('/api/points/account').then((r) => {
+        setPixelPoints(r.data.pixel_points);
+        setShellPoints(r.data.shell_points);
+      }).catch(() => {});
     }
   }, [user]);
+
+  async function handleCheckin() {
+    setCheckinLoading(true);
+    setCheckinMessage(null);
+    try {
+      const r = await rawApi.post('/api/points/checkin');
+      setPixelPoints(r.data.pixel_points);
+      setCheckinMessage(r.data.message || '签到成功！');
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail || '签到失败';
+      setCheckinMessage(detail);
+    } finally {
+      setCheckinLoading(false);
+    }
+  }
 
   async function copyApiUrl() {
     if (!apiUrl) return;
@@ -122,6 +147,18 @@ export default function DashboardHome() {
       {/* Stats cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
         <StatsCard
+          label="像素积分"
+          value={pixelPoints}
+          icon={<Coins style={{ width: 28, height: 28 }} />}
+          gradientClass="bg-gradient-purple"
+        />
+        <StatsCard
+          label="贝壳积分"
+          value={shellPoints}
+          icon={<Coins style={{ width: 28, height: 28 }} />}
+          gradientClass="bg-gradient-blue"
+        />
+        <StatsCard
           label="材质数量"
           value={textureCount}
           icon={<Shirt style={{ width: 28, height: 28 }} />}
@@ -133,6 +170,32 @@ export default function DashboardHome() {
           icon={<Users style={{ width: 28, height: 28 }} />}
           gradientClass="bg-gradient-blue"
         />
+      </div>
+
+      {/* Daily checkin */}
+      <div className="surface-card" style={{ padding: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          <h2 style={{ fontSize: 18, fontWeight: 600, color: 'var(--color-heading)', margin: '0 0 4px 0' }}>
+            每日签到
+          </h2>
+          <p style={{ fontSize: 14, color: 'var(--color-text-light)', margin: 0 }}>
+            每天签到可获得 2 像素积分
+          </p>
+          {checkinMessage && (
+            <p style={{ fontSize: 13, color: checkinMessage.includes('成功') ? '#22c55e' : '#ef4444', margin: '4px 0 0', fontWeight: 500 }}>
+              {checkinMessage}
+            </p>
+          )}
+        </div>
+        <button
+          onClick={handleCheckin}
+          disabled={checkinLoading}
+          className="btn-primary"
+          style={{ padding: '10px 24px', fontSize: 14, display: 'flex', alignItems: 'center', gap: 8 }}
+        >
+          {checkinLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CalendarCheck style={{ width: 18, height: 18 }} />}
+          签到
+        </button>
       </div>
 
       {/* Quick Config Section */}

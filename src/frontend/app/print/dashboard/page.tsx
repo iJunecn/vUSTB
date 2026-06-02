@@ -2,12 +2,11 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import Image from 'next/image';
 import { useUserStore } from '@/stores/user';
 import { rawApi } from '@/lib/api';
 import {
   ChevronLeft, ChevronRight, CalendarCheck, XCircle, Play,
-  Clock, CheckCircle2, AlertCircle, Loader2, X, Save, Trash2, QrCode,
+  Clock, CheckCircle2, AlertCircle, Loader2, X, Save, Trash2,
 } from 'lucide-react';
 
 type Booking = {
@@ -56,10 +55,9 @@ function getMonday(d: Date): Date {
   return dt;
 }
 
-function renderCost(ownFilament: boolean, printType: string, weight: number): string {
-  if (ownFilament) return '0.00';
-  const unit = printType === 'multi' ? 0.15 : 0.10;
-  return (weight * unit).toFixed(2);
+function renderCost(weight: number): string {
+  if (weight <= 0) return '0';
+  return String(Math.ceil(weight / 10));
 }
 
 export default function PrintDashboard() {
@@ -76,16 +74,12 @@ export default function PrintDashboard() {
   const [detailBooking, setDetailBooking] = useState<Booking | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [editForm, setEditForm] = useState({
-    own_filament: false,
-    print_type: 'single' as string,
     weight: 0,
-    is_paid: false,
     file_name: '',
     purpose: '',
   });
 
-  // Payment QR modal
-  const [showPayQR, setShowPayQR] = useState(false);
+  // Payment QR modal (removed — using shell points now)
 
   useEffect(() => { hydrate(); }, [hydrate]);
 
@@ -165,10 +159,7 @@ export default function PrintDashboard() {
       const b = r.data;
       setDetailBooking(b);
       setEditForm({
-        own_filament: b.own_filament,
-        print_type: b.print_type,
         weight: b.weight,
-        is_paid: b.is_paid,
         file_name: b.file_name || '',
         purpose: b.purpose || '',
       });
@@ -186,10 +177,7 @@ export default function PrintDashboard() {
     if (!detailBooking) return;
     try {
       await rawApi.put(`/api/print/bookings/${detailBooking.id}`, {
-        own_filament: editForm.own_filament,
-        print_type: editForm.print_type,
-        weight: editForm.own_filament ? 0 : editForm.weight,
-        is_paid: editForm.is_paid,
+        weight: editForm.weight,
         file_name: editForm.file_name || null,
         purpose: editForm.purpose || null,
       });
@@ -200,7 +188,7 @@ export default function PrintDashboard() {
     }
   };
 
-  const editCost = renderCost(editForm.own_filament, editForm.print_type, editForm.weight);
+  const editCost = renderCost(editForm.weight);
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 24px', display: 'flex', flexDirection: 'column', gap: 32 }}>
@@ -383,7 +371,7 @@ export default function PrintDashboard() {
                     <div style={{ fontSize: 12, color: 'var(--color-text-light)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {b.file_name && <span>文件: {b.file_name} · </span>}
                       {b.purpose && <span>用途: {b.purpose} · </span>}
-                      <span>{b.own_filament ? '自带耗材' : `${b.print_type === 'multi' ? '多色' : '单色'} ${b.weight}g`} · {b.cost > 0 ? `¥${b.cost}` : '免费'}</span>
+                      <span>{b.weight}g · {b.cost > 0 ? `${b.cost} 积分` : '免费'}</span>
                       {b.rejection_reason && <span style={{ color: '#ef4444' }}> · 拒绝原因: {b.rejection_reason}</span>}
                     </div>
                   </div>
@@ -467,79 +455,18 @@ export default function PrintDashboard() {
                     <span style={{ fontSize: 11, color: 'var(--color-text-light)' }}>修改后立即生效</span>
                   </div>
 
-                  {/* Payment toggle */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderRadius: 8, background: 'var(--color-background-soft)', marginBottom: 12 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-heading)' }}>支付状态</span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <button
-                        onClick={() => {
-                          if (!editForm.is_paid) setShowPayQR(true);
-                          setEditForm({ ...editForm, is_paid: !editForm.is_paid });
-                        }}
-                        style={{
-                          padding: '4px 12px', borderRadius: 6, fontSize: 12, cursor: 'pointer', border: '1px solid',
-                          borderColor: editForm.is_paid ? '#22c55e' : '#ef4444',
-                          background: editForm.is_paid ? 'color-mix(in srgb, #22c55e 10%, transparent)' : 'color-mix(in srgb, #ef4444 10%, transparent)',
-                          color: editForm.is_paid ? '#22c55e' : '#ef4444', fontWeight: 600,
-                        }}
-                      >
-                        {editForm.is_paid ? '已支付' : '未支付'}
-                      </button>
-                      {!editForm.own_filament && !editForm.is_paid && (
-                        <button
-                          onClick={() => setShowPayQR(true)}
-                          style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-light)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
-                        >
-                          <QrCode style={{ width: 12, height: 12 }} /> 付款
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Own filament */}
+                  {/* Weight */}
                   <div style={{ marginBottom: 12 }}>
-                    <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-heading)', marginBottom: 6, display: 'block' }}>耗材选择</label>
-                    <div style={{ display: 'flex', gap: 12 }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
-                        <input type="radio" name="edit_own_filament" checked={editForm.own_filament} onChange={() => setEditForm({ ...editForm, own_filament: true })} />
-                        个人耗材 (免费)
-                      </label>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
-                        <input type="radio" name="edit_own_filament" checked={!editForm.own_filament} onChange={() => setEditForm({ ...editForm, own_filament: false })} />
-                        社团耗材 (计费)
-                      </label>
-                    </div>
+                    <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-heading)', marginBottom: 6, display: 'block' }}>预计打印克数 (g)</label>
+                    <input
+                      type="number" step={0.1} min={0}
+                      value={editForm.weight}
+                      onChange={(e) => setEditForm({ ...editForm, weight: parseFloat(e.target.value) || 0 })}
+                      className="input"
+                      style={{ fontSize: 14 }}
+                    />
+                    <p style={{ fontSize: 11, color: 'var(--color-text-light)', margin: '4px 0 0' }}>请如实填写，管理员将核对。</p>
                   </div>
-
-                  {/* Print type & weight */}
-                  {!editForm.own_filament && (
-                    <>
-                      <div style={{ marginBottom: 12 }}>
-                        <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-heading)', marginBottom: 6, display: 'block' }}>打印类型</label>
-                        <div style={{ display: 'flex', gap: 12 }}>
-                          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
-                            <input type="radio" name="edit_print_type" checked={editForm.print_type === 'single'} onChange={() => setEditForm({ ...editForm, print_type: 'single' })} />
-                            单色 (¥0.10/g)
-                          </label>
-                          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
-                            <input type="radio" name="edit_print_type" checked={editForm.print_type === 'multi'} onChange={() => setEditForm({ ...editForm, print_type: 'multi' })} />
-                            多色 (¥0.15/g)
-                          </label>
-                        </div>
-                      </div>
-                      <div style={{ marginBottom: 12 }}>
-                        <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-heading)', marginBottom: 6, display: 'block' }}>预计打印克数 (g)</label>
-                        <input
-                          type="number" step={0.1} min={0}
-                          value={editForm.weight}
-                          onChange={(e) => setEditForm({ ...editForm, weight: parseFloat(e.target.value) || 0 })}
-                          className="input"
-                          style={{ fontSize: 14 }}
-                        />
-                        <p style={{ fontSize: 11, color: 'var(--color-text-light)', margin: '4px 0 0' }}>请如实填写，管理员将核对。</p>
-                      </div>
-                    </>
-                  )}
 
                   {/* File name & purpose */}
                   <div style={{ marginBottom: 12 }}>
@@ -566,8 +493,8 @@ export default function PrintDashboard() {
 
                   {/* Cost display */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', borderRadius: 8, background: 'var(--color-background-soft)', border: '1px solid var(--color-border)' }}>
-                    <span style={{ fontSize: 13, color: 'var(--color-text-light)' }}>预估费用</span>
-                    <span style={{ fontSize: 20, fontWeight: 700, color: 'var(--color-primary)' }}>¥{editCost}</span>
+                    <span style={{ fontSize: 13, color: 'var(--color-text-light)' }}>消耗贝壳积分</span>
+                    <span style={{ fontSize: 20, fontWeight: 700, color: 'var(--color-primary)' }}>{editCost} 积分</span>
                   </div>
                 </div>
               )}
@@ -657,34 +584,6 @@ export default function PrintDashboard() {
         </div>
       )}
 
-      {/* ===== Payment QR Code Modal ===== */}
-      {showPayQR && (
-        <div
-          style={{ position: 'fixed', inset: 0, zIndex: 110, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
-          onClick={(e) => { if (e.target === e.currentTarget) setShowPayQR(false); }}
-        >
-          <div style={{ background: 'var(--color-card-background)', borderRadius: 16, maxWidth: 320, width: '100%', boxShadow: '0 16px 48px rgba(0,0,0,0.2)', animation: 'slideUp 0.3s ease-out', textAlign: 'center', padding: 24 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: 'var(--color-heading)' }}>
-                <QrCode style={{ width: 16, height: 16, display: 'inline', marginRight: 6 }} /> 扫码支付
-              </h3>
-              <button onClick={() => setShowPayQR(false)} style={{ background: 'none', border: 'none', color: 'var(--color-text-light)', cursor: 'pointer' }}>
-                <X style={{ width: 18, height: 18 }} />
-              </button>
-            </div>
-            <Image
-              src="/images/pay.jpg"
-              alt="支付二维码"
-              width={200}
-              height={200}
-              style={{ width: 200, height: 'auto', borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.1)', display: 'inline-block' }}
-            />
-            <p style={{ marginTop: 16, color: 'var(--color-text-light)', fontSize: 13, marginBottom: 0 }}>
-              请使用微信扫描二维码支付材料费
-            </p>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -14,7 +14,7 @@ from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.models import User, UserGroup, Player, Texture, Wardrobe, SiteSetting, VerificationCode, InviteCode
+from app.models import User, UserGroup, Player, Texture, Wardrobe, SiteSetting, VerificationCode, InviteCode, PointAccount, PointTransaction, PointType, PointReason
 from app.services.auth import hash_password, verify_password, create_jwt, decode_jwt
 from app.utils.image import (
     extract_skin_head_avatar,
@@ -255,6 +255,20 @@ class SiteBackend:
 
         player = Player(uuid=os.urandom(16).hex(), name=profile_name, owner_id=user.id)
         db.add(player)
+
+        # Grant 10 pixel points on registration
+        acct = PointAccount(user_id=user.id, pixel_points=10, shell_points=0)
+        db.add(acct)
+        await db.flush()
+        tx = PointTransaction(
+            user_id=user.id,
+            type=PointType.PIXEL,
+            amount=10,
+            reason=PointReason.REGISTER,
+            balance_after=10,
+        )
+        db.add(tx)
+
         await db.commit()
         return str(user.id)
 

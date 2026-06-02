@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { rawApi } from '@/lib/api';
-import { Loader2, Plus, Trash2, Shirt, X, Link2, Check, Globe } from 'lucide-react';
+import { Loader2, Plus, Trash2, Shirt, X, Link2, Check, Globe, Coins } from 'lucide-react';
 import { SkinViewer } from '@/components/skin/SkinViewer';
 import { SkinAvatar } from '@/components/skin/SkinAvatar';
 
@@ -36,6 +36,7 @@ export default function RolesPage() {
   const [creating, setCreating] = useState(false);
   const [createProgress, setCreateProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [pixelPoints, setPixelPoints] = useState(0);
 
   // Microsoft auth state
   const [msProfile, setMsProfile] = useState<any>(null);
@@ -55,12 +56,16 @@ export default function RolesPage() {
   async function refresh() {
     setLoading(true);
     try {
-      const [p, w] = await Promise.all([
+      const [p, w, pts] = await Promise.all([
         rawApi.get<Player[]>('/api/players'),
         rawApi.get<Texture[]>('/api/me/textures'),
+        rawApi.get<{ pixel_points: number; shell_points: number }>('/api/points/account'),
       ]);
       setPlayers(p.data);
       setWardrobe(w.data);
+      setPixelPoints(pts.data.pixel_points);
+    } catch {
+      // points fetch may fail for unauthenticated users, that's ok
     } finally {
       setLoading(false);
     }
@@ -92,6 +97,11 @@ export default function RolesPage() {
   async function createPlayer(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+
+    if (pixelPoints < 5) {
+      setError('像素积分不足，创建角色需要 5 像素积分。请前往个人中心签到获取积分。');
+      return;
+    }
     setCreating(true);
     setCreateProgress(0);
 
@@ -268,10 +278,22 @@ export default function RolesPage() {
             disabled={creating}
           />
         </label>
-        <button type="submit" disabled={creating} className="btn-primary">
+        <button type="submit" disabled={creating || pixelPoints < 5} className="btn-primary">
           {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus style={{ width: 16, height: 16 }} />}
           新建角色
         </button>
+        <div style={{
+          display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12,
+          padding: '4px 10px', borderRadius: 8,
+          background: pixelPoints >= 5
+            ? 'color-mix(in srgb, #8b5cf6 10%, transparent)'
+            : 'color-mix(in srgb, #ef4444 10%, transparent)',
+          color: pixelPoints >= 5 ? '#8b5cf6' : '#ef4444',
+          fontWeight: 500,
+        }}>
+          <Coins style={{ width: 14, height: 14 }} />
+          {pixelPoints >= 5 ? `消耗 5 积分（当前 ${pixelPoints}）` : `积分不足（${pixelPoints}/5）`}
+        </div>
         <button type="button" onClick={startMicrosoftAuth} className="btn-ghost" style={{ padding: '8px 16px', fontSize: 13, borderColor: '#22c55e', color: '#22c55e' }}>
           <Link2 style={{ width: 14, height: 14 }} />
           绑定正版角色

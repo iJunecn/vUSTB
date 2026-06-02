@@ -68,6 +68,10 @@ class Settings(BaseSettings):
     ustb_token_url: str = ""
     ustb_user_url: str = ""
 
+    # Afdian (爱发电) integration
+    afdian_user_id: str = "REDACTED_AF_UID"
+    afdian_token: str = "REDACTED_AF_TOKEN"
+
 
 @lru_cache
 def get_settings() -> Settings:

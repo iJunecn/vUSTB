@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import get_db
-from app.models import User, Player, Texture, Wardrobe, SiteSetting, FallbackEndpoint
+from app.models import User, Player, Texture, Wardrobe, SiteSetting, FallbackEndpoint, PointAccount, PointTransaction, PointType, PointReason
 from app.services.auth import decode_jwt
 from app.services.oauth_backend import oauth_backend
 from app.services.site_backend import site_backend
@@ -21,6 +21,30 @@ from app.utils.rate_limiter import rate_limiter
 router = APIRouter(tags=["site"])
 
 security = HTTPBearer(auto_error=False)
+
+
+async def _deduct_pixel_points(
+    db: AsyncSession, user_id: int, amount: int, reason: PointReason, ref_id: str | None = None
+) -> PointAccount:
+    """扣减像素积分，余额不足时抛 403。"""
+    acct = (
+        await db.execute(select(PointAccount).where(PointAccount.user_id == user_id))
+    ).scalar_one_or_none()
+    if not acct:
+        raise HTTPException(status_code=403, detail="像素积分不足")
+    if acct.pixel_points < amount:
+        raise HTTPException(status_code=403, detail=f"像素积分不足，需要 {amount}，当前 {acct.pixel_points}")
+    acct.pixel_points -= amount
+    tx = PointTransaction(
+        user_id=user_id,
+        type=PointType.PIXEL,
+        amount=-amount,
+        reason=reason,
+        ref_id=ref_id,
+        balance_after=acct.pixel_points,
+    )
+    db.add(tx)
+    return acct
 
 
 def _get_bearer_token(request: Request) -> str:
@@ -160,7 +184,10 @@ async def create_profile(
     user_id: int = Depends(_get_jwt_user_id),
     db: AsyncSession = Depends(get_db),
 ):
-    return await site_backend.create_profile(db, user_id, body.get("name"), body.get("model", "default"))
+    # 创建角色消耗 5 像素积分
+    await _deduct_pixel_points(db, user_id, 5, PointReason.CREATE_PLAYER)
+    result = await site_backend.create_profile(db, user_id, body.get("name"), body.get("model", "default"))
+    return result
 
 
 @router.delete("/api/me/profiles/{pid}")
@@ -193,6 +220,9 @@ async def upload_texture_to_library(
     user_id: int = Depends(_get_jwt_user_id),
     db: AsyncSession = Depends(get_db),
 ):
+    # 上传皮肤消耗 1 像素积分
+    await _deduct_pixel_points(db, user_id, 1, PointReason.UPLOAD_SKIN)
+
     content = await file.read()
     public_bool = is_public.lower() == "true"
 

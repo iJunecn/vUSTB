@@ -9,6 +9,7 @@ from app.models.scene_camera_preset import SceneCameraPreset
 from app.models.fallback import FallbackEndpoint
 from app.models.print_booking import Printer3D, Booking, BookingStatus, SlotType, PrintType, WeeklyReport
 from app.models.article import Article, ArticleCategory, ArticleMedia
+from app.models.points import PointAccount, PointTransaction, PointType, PointReason
 
 __all__ = [
     "User", "UserGroup",
@@ -22,4 +23,5 @@ __all__ = [
     "FallbackEndpoint",
     "Printer3D", "Booking", "BookingStatus", "SlotType", "PrintType", "WeeklyReport",
     "Article", "ArticleCategory", "ArticleMedia",
+    "PointAccount", "PointTransaction", "PointType", "PointReason",
 ]

@@ -1,12 +1,13 @@
 """3D 打印预约系统 API。
 
 公开接口：打印机状态、预约时间表
-用户接口：创建/取消/签到预约
+用户接口：创建/取消/签到预约（贝壳积分计费）
 管理接口（super_admin / admin / teacher）：审批、打印机管理、报表导出
 """
 from __future__ import annotations
 
 import io
+import math
 import os
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -22,6 +23,7 @@ from app.deps import get_current_user, get_current_admin
 from app.models import (
     User, UserGroup,
     Printer3D, Booking, BookingStatus, SlotType, PrintType, WeeklyReport,
+    PointAccount, PointTransaction, PointType, PointReason,
 )
 from app.utils.user_groups import is_admin_group
 
@@ -33,11 +35,11 @@ def _can_manage_printer(user: User) -> bool:
     return user.user_group in (UserGroup.SUPER_ADMIN, UserGroup.ADMIN, UserGroup.TEACHER)
 
 
-def _cost(own_filament: bool, print_type: PrintType, weight: float) -> float:
-    if own_filament:
-        return 0.0
-    unit = 0.15 if print_type == PrintType.MULTI else 0.10
-    return round(weight * unit, 2)
+def _shell_cost(weight: float) -> int:
+    """计算打印消耗的贝壳积分：1 积分 = 10 克，向上取整。"""
+    if weight <= 0:
+        return 0
+    return math.ceil(weight / 10)
 
 
 # ──────────────── Pydantic schemas ────────────────
@@ -68,19 +70,13 @@ class BookingCreate(BaseModel):
     printer_id: int | None = None
     date: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")
     slot_type: SlotType
-    own_filament: bool = False
-    print_type: PrintType = PrintType.SINGLE
     weight: float = Field(default=0, ge=0)
     file_name: str | None = None
     purpose: str | None = None
-    is_paid: bool = False
 
 
 class BookingUpdate(BaseModel):
-    own_filament: bool | None = None
-    print_type: PrintType | None = None
     weight: float | None = None
-    is_paid: bool | None = None
     file_name: str | None = None
     purpose: str | None = None
     status: BookingStatus | None = None
@@ -92,13 +88,13 @@ class BookingOut(BaseModel):
     printer_id: int | None
     date: str
     slot_type: str
-    own_filament: bool
-    print_type: str
+    own_filament: bool = False
+    print_type: str = "single"
     weight: float
     cost: float
     file_name: str | None
     purpose: str | None
-    is_paid: bool
+    is_paid: bool = True
     status: str
     rejection_reason: str | None
     created_at: str | None
@@ -285,23 +281,51 @@ async def create_booking(
     if existing:
         raise HTTPException(status_code=409, detail="该时段已被预约")
 
-    cost = _cost(body.own_filament, body.print_type, body.weight)
+    # 计算贝壳积分消耗
+    shell_cost = _shell_cost(body.weight)
+
+    # 扣减贝壳积分
+    if shell_cost > 0:
+        acct = (
+            await db.execute(select(PointAccount).where(PointAccount.user_id == user.id))
+        ).scalar_one_or_none()
+        if not acct or acct.shell_points < shell_cost:
+            raise HTTPException(
+                status_code=403,
+                detail=f"贝壳积分不足，需要 {shell_cost}，当前 {acct.shell_points if acct else 0}，请前往个人中心充值",
+            )
+        acct.shell_points -= shell_cost
+        tx = PointTransaction(
+            user_id=user.id,
+            type=PointType.SHELL,
+            amount=-shell_cost,
+            reason=PointReason.PRINT_BOOKING,
+            ref_id=None,  # will update after flush
+            balance_after=acct.shell_points,
+        )
+        db.add(tx)
 
     booking = Booking(
         user_id=user.id,
         printer_id=body.printer_id,
         date=body.date,
         slot_type=body.slot_type,
-        own_filament=body.own_filament,
-        print_type=body.print_type,
-        weight=body.weight if not body.own_filament else 0,
-        cost=cost,
+        own_filament=False,
+        print_type=PrintType.SINGLE,
+        weight=body.weight,
+        cost=shell_cost,
         file_name=body.file_name,
         purpose=body.purpose,
-        is_paid=body.is_paid,
+        is_paid=True,
         status=BookingStatus.PENDING,
     )
     db.add(booking)
+    await db.flush()
+
+    # Update ref_id in transaction with booking id
+    if shell_cost > 0:
+        tx.ref_id = str(booking.id)
+
     await db.commit()
     await db.refresh(booking)
     d = booking.to_dict()
@@ -344,20 +368,54 @@ async def update_booking(
 
     updates = body.model_dump(exclude_unset=True)
 
-    # Recalculate cost if relevant fields changed
-    own_filament = updates.get("own_filament", booking.own_filament)
-    print_type = updates.get("print_type", booking.print_type)
-    weight = updates.get("weight", booking.weight)
+    old_weight = booking.weight
+    old_cost = booking.cost
 
     for k, v in updates.items():
         setattr(booking, k, v)
 
-    if not booking.own_filament:
-        booking.weight = weight
-        booking.cost = _cost(booking.own_filament, booking.print_type, booking.weight)
-    else:
-        booking.weight = 0
-        booking.cost = 0.0
+    # Recalculate shell cost if weight changed
+    new_weight = updates.get("weight", old_weight)
+    new_cost = _shell_cost(new_weight)
+    booking.weight = new_weight
+    booking.cost = new_cost
+
+    # Handle shell points difference
+    cost_diff = new_cost - old_cost
+    if cost_diff > 0:
+        # Need to deduct additional points
+        acct = (
+            await db.execute(select(PointAccount).where(PointAccount.user_id == booking.user_id))
+        ).scalar_one_or_none()
+        if not acct or acct.shell_points < cost_diff:
+            raise HTTPException(status_code=403, detail=f"贝壳积分不足，需补扣 {cost_diff} 积分")
+        acct.shell_points -= cost_diff
+        tx = PointTransaction(
+            user_id=booking.user_id,
+            type=PointType.SHELL,
+            amount=-cost_diff,
+            reason=PointReason.PRINT_BOOKING,
+            ref_id=str(booking.id),
+            balance_after=acct.shell_points,
+        )
+        db.add(tx)
+    elif cost_diff < 0:
+        # Refund excess points
+        refund = abs(cost_diff)
+        acct = (
+            await db.execute(select(PointAccount).where(PointAccount.user_id == booking.user_id))
+        ).scalar_one_or_none()
+        if acct:
+            acct.shell_points += refund
+            tx = PointTransaction(
+                user_id=booking.user_id,
+                type=PointType.SHELL,
+                amount=refund,
+                reason=PointReason.PRINT_REFUND,
+                ref_id=str(booking.id),
+                balance_after=acct.shell_points,
+            )
+            db.add(tx)
 
     await db.commit()
     await db.refresh(booking)
@@ -379,6 +437,25 @@ async def cancel_booking(
         raise HTTPException(status_code=404, detail="预约不存在")
     if booking.user_id != user.id and not _can_manage_printer(user):
         raise HTTPException(status_code=403, detail="无权操作")
+
+    # Refund shell points if booking was pending/booked and had cost
+    if booking.cost > 0 and booking.status in (BookingStatus.PENDING, BookingStatus.BOOKED):
+        acct = (
+            await db.execute(select(PointAccount).where(PointAccount.user_id == booking.user_id))
+        ).scalar_one_or_none()
+        if acct:
+            refund_amount = int(booking.cost)
+            acct.shell_points += refund_amount
+            tx = PointTransaction(
+                user_id=booking.user_id,
+                type=PointType.SHELL,
+                amount=refund_amount,
+                reason=PointReason.PRINT_CANCEL,
+                ref_id=str(booking.id),
+                balance_after=acct.shell_points,
+            )
+            db.add(tx)
+
     booking.status = BookingStatus.CANCELLED
     await db.commit()
     return {"ok": True}
@@ -477,6 +554,25 @@ async def reject_booking(
     booking = (await db.execute(select(Booking).where(Booking.id == booking_id))).scalar_one_or_none()
     if not booking:
         raise HTTPException(status_code=404, detail="预约不存在")
+
+    # Refund shell points on rejection
+    if booking.cost > 0:
+        acct = (
+            await db.execute(select(PointAccount).where(PointAccount.user_id == booking.user_id))
+        ).scalar_one_or_none()
+        if acct:
+            refund_amount = int(booking.cost)
+            acct.shell_points += refund_amount
+            tx = PointTransaction(
+                user_id=booking.user_id,
+                type=PointType.SHELL,
+                amount=refund_amount,
+                reason=PointReason.PRINT_REFUND,
+                ref_id=str(booking.id),
+                balance_after=acct.shell_points,
+            )
+            db.add(tx)
+
     booking.status = BookingStatus.REJECTED
     booking.rejection_reason = body.reason
     await db.commit()

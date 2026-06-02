@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { rawApi } from '@/lib/api';
 import { useUserStore } from '@/stores/user';
-import { Loader2, Upload, Save, Eye } from 'lucide-react';
+import { Loader2, Upload, Save, Eye, Coins } from 'lucide-react';
 import { SkinViewer } from '@/components/skin/SkinViewer';
 
 export default function SkinUploadPage() {
@@ -16,6 +16,7 @@ export default function SkinUploadPage() {
   const [isPublic, setIsPublic] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [pixelPoints, setPixelPoints] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Preview state
@@ -30,6 +31,14 @@ export default function SkinUploadPage() {
   useEffect(() => {
     if (loaded && !user) router.replace('/login');
   }, [loaded, user, router]);
+
+  useEffect(() => {
+    if (user) {
+      rawApi.get<{ pixel_points: number; shell_points: number }>('/api/points/account').then((r) => {
+        setPixelPoints(r.data.pixel_points);
+      }).catch(() => {});
+    }
+  }, [user]);
 
   function onFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -55,6 +64,10 @@ export default function SkinUploadPage() {
       setMsg({ ok: false, text: '请为材质起一个名称' });
       return;
     }
+    if (pixelPoints < 1) {
+      setMsg({ ok: false, text: '像素积分不足，上传皮肤需要 1 像素积分。请前往个人中心签到获取积分。' });
+      return;
+    }
     setUploading(true);
     setMsg(null);
     try {
@@ -65,7 +78,8 @@ export default function SkinUploadPage() {
       fd.append('note', name.trim());
       fd.append('is_public', String(isPublic));
       await rawApi.post('/api/me/textures', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
-      setMsg({ ok: true, text: '上传成功，已加入衣柜。' });
+      setPixelPoints((p) => p - 1);
+      setMsg({ ok: true, text: '上传成功，已加入衣柜。消耗 1 像素积分。' });
       // Reset to select step after successful upload
       resetForm();
     } catch (err: any) {
@@ -95,6 +109,15 @@ export default function SkinUploadPage() {
           <p style={{ fontSize: 14, color: 'var(--color-text-light)', marginTop: 4 }}>
             支持标准 64x64 / 64x32 像素 PNG 文件。选择文件后可预览、修改信息，再保存到皮肤库。
           </p>
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 8,
+            padding: '4px 10px', borderRadius: 8, fontSize: 12, fontWeight: 500,
+            background: 'color-mix(in srgb, #8b5cf6 10%, transparent)',
+            color: pixelPoints >= 1 ? '#8b5cf6' : '#ef4444',
+          }}>
+            <Coins style={{ width: 14, height: 14 }} />
+            {pixelPoints >= 1 ? `像素积分 ${pixelPoints}（消耗 1）` : `像素积分不足（当前 ${pixelPoints}，需要 1）`}
+          </div>
         </div>
 
         {step === 'select' ? (
