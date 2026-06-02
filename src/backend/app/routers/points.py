@@ -76,10 +76,16 @@ def _compute_afdian_sign(token: str, params: str, ts: int, user_id: str) -> str:
     return hashlib.md5(raw.encode()).hexdigest()
 
 
-async def _query_afdian_order(out_trade_no: str) -> dict | None:
-    """调用爱发电 query-order API 查询订单。"""
+async def _query_afdian_order(out_trade_no: str) -> tuple[dict | None, str]:
+    """调用爱发电 query-order API 查询订单。
+
+    Returns (order_dict_or_None, error_message).
+    """
     ts = int(time.time())
-    params = json.dumps({"out_trade_no": out_trade_no})
+    # 关键：必须使用紧凑 JSON（separators=(',', ':')），否则签名不匹配！
+    # Python json.dumps 默认输出 {"out_trade_no": "xxx"}（冒号后有空格），
+    # 但爱发电签名验证期望 {"out_trade_no":"xxx"}（无空格）。
+    params = json.dumps({"out_trade_no": out_trade_no}, separators=(',', ':'))
     sign = _compute_afdian_sign(settings.afdian_token, params, ts, settings.afdian_user_id)
 
     payload = {
@@ -96,14 +102,20 @@ async def _query_afdian_order(out_trade_no: str) -> dict | None:
         )
         data = resp.json()
 
-    if data.get("ec") != 200:
-        return None
+    ec = data.get("ec")
+    if ec != 200:
+        em = data.get("em", "unknown error")
+        return None, f"爱发电 API 返回错误 (ec={ec}): {em}"
 
     order_list = data.get("data", {}).get("list", [])
+    if not order_list:
+        return None, "爱发电未找到该订单，请确认订单号是否正确"
+
     for order in order_list:
         if order.get("out_trade_no") == out_trade_no:
-            return order
-    return None
+            return order, ""
+
+    return None, "爱发电返回的订单列表中未匹配到该订单号"
 
 
 async def _process_afdian_order(
@@ -262,9 +274,9 @@ async def verify_afdian(
     user: User = Depends(get_current_user),
 ):
     """用户点击"确认已购买"后，调用爱发电 API 查询订单并充值。"""
-    order = await _query_afdian_order(body.out_trade_no)
+    order, err = await _query_afdian_order(body.out_trade_no)
     if not order:
-        raise HTTPException(status_code=404, detail="未找到该订单")
+        raise HTTPException(status_code=404, detail=err or "未找到该订单")
 
     return await _process_afdian_order(db, order, user.id)
 

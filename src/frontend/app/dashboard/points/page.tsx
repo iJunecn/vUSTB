@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { rawApi } from '@/lib/api';
 import { useUserStore } from '@/stores/user';
 import {
-  Coins, CalendarCheck, Loader2, ExternalLink, Check, AlertCircle, Filter,
+  Coins, CalendarCheck, Loader2, Check, AlertCircle, Filter, CreditCard,
 } from 'lucide-react';
 
 type PointAccount = {
@@ -34,15 +34,7 @@ const REASON_LABELS: Record<string, string> = {
   recharge: '充值',
 };
 
-// Afdian shop products
-const AFDIAN_PRODUCTS = [
-  { name: '1点 贝壳积分', price: 1, points: 1, url: 'https://ifdian.net/order/create?product_id=010ff078177211eca44f52540025c377&sku_id=&type=shop' },
-  { name: '6点 贝壳积分', price: 6, points: 6, url: 'https://ifdian.net/order/create?product_id=010ff078177211eca44f52540025c377&sku_id=&type=shop' },
-  { name: '10点 贝壳积分', price: 10, points: 10, url: 'https://ifdian.net/order/create?product_id=010ff078177211eca44f52540025c377&sku_id=&type=shop' },
-  { name: '20点 贝壳积分', price: 20, points: 20, url: 'https://ifdian.net/order/create?product_id=010ff078177211eca44f52540025c377&sku_id=&type=shop' },
-  { name: '50点 贝壳积分', price: 50, points: 50, url: 'https://ifdian.net/order/create?product_id=010ff078177211eca44f52540025c377&sku_id=&type=shop' },
-  { name: '100点 贝壳积分', price: 100, points: 100, url: 'https://ifdian.net/order/create?product_id=010ff078177211eca44f52540025c377&sku_id=&type=shop' },
-];
+const AFDIAN_SHOP_URL = 'https://ifdian.net/item/7e31e1f85db611f1a9ad52540025c377';
 
 export default function PointsPage() {
   const user = useUserStore((s) => s.user);
@@ -217,40 +209,28 @@ export default function PointsPage() {
         <p style={{ fontSize: 14, color: 'var(--color-text-light)', marginBottom: 16 }}>
           通过爱发电购买贝壳积分，1 元 = 1 贝壳积分。购买后点击"确认已购买"验证订单。
         </p>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12, marginBottom: 16 }}>
-          {AFDIAN_PRODUCTS.map((p) => (
-            <div key={p.points} className="surface-card" style={{ padding: 16, textAlign: 'center' }}>
-              <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--color-primary)', marginBottom: 4 }}>
-                {p.points}
-              </div>
-              <div style={{ fontSize: 13, color: 'var(--color-text-light)', marginBottom: 12 }}>
-                贝壳积分
-              </div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-heading)', marginBottom: 12 }}>
-                ¥{p.price}
-              </div>
-              <a
-                href={p.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn-ghost"
-                style={{
-                  fontSize: 12, padding: '6px 12px', display: 'inline-flex',
-                  alignItems: 'center', gap: 4, textDecoration: 'none',
-                }}
-              >
-                <ExternalLink style={{ width: 12, height: 12 }} /> 购买
-              </a>
-            </div>
-          ))}
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <a
+            href={AFDIAN_SHOP_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn-primary"
+            style={{
+              fontSize: 14, padding: '10px 24px',
+              display: 'inline-flex', alignItems: 'center', gap: 8,
+              textDecoration: 'none',
+            }}
+          >
+            <CreditCard style={{ width: 16, height: 16 }} /> 前往爱发电充值
+          </a>
+          <button
+            onClick={() => { setVerifyModalOpen(true); setVerifyMessage(null); }}
+            className="btn-ghost"
+            style={{ padding: '10px 24px', fontSize: 14, display: 'inline-flex', alignItems: 'center', gap: 8 }}
+          >
+            <Check style={{ width: 16, height: 16 }} /> 确认已购买
+          </button>
         </div>
-        <button
-          onClick={() => { setVerifyModalOpen(true); setVerifyMessage(null); }}
-          className="btn-primary"
-          style={{ padding: '10px 24px', fontSize: 14, display: 'inline-flex', alignItems: 'center', gap: 8 }}
-        >
-          <Check style={{ width: 16, height: 16 }} /> 确认已购买
-        </button>
       </div>
 
       {/* Transaction history */}
