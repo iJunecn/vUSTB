@@ -13,7 +13,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    site_name: str = "像素北科 vUSTB"
+    site_name: str = "像素北科"
     site_url: str = "http://localhost"
     api_url: str = "http://localhost/skinapi"
     environment: str = "development"

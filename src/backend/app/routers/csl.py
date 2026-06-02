@@ -253,7 +253,7 @@ async def extralist_entry(request: Request, db: AsyncSession = Depends(get_db)):
 
     文件格式：
     {
-        "name": "像素北科 vUSTB",
+        "name": "像素北科",
         "type": "CustomSkinAPI",
         "root": "https://mc.ustb.edu.cn/csl/"
     }
@@ -273,6 +273,6 @@ async def extralist_entry(request: Request, db: AsyncSession = Depends(get_db)):
         media_type="application/json; charset=utf-8",
         headers={
             "Cache-Control": "public, max-age=3600",
-            "Content-Disposition": 'attachment; filename="vUSTB.json"',
+            "Content-Disposition": 'attachment; filename="skycode.json"',
         },
     )

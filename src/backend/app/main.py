@@ -19,7 +19,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="vUSTB API",
+    title="像素北科 API",
     description="像素北科 / 北京科技大学元宇宙体素工作坊 统一后端 API",
     version="0.1.0",
     lifespan=lifespan,

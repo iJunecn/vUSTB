@@ -254,7 +254,7 @@ class OAuthBackend:
             raise HTTPException(status_code=400, detail="redirect_uri mismatch")
 
         normalized_scope, parsed_scopes = self._parse_scope(scope)
-        site_name = await self._get_setting(db, "site_name", "vUSTB")
+        site_name = await self._get_setting(db, "site_name", "像素北科")
         return {
             "app_id": app.app_id,
             "client_name": app.client_name,
@@ -427,7 +427,7 @@ class OAuthBackend:
         if not app:
             raise HTTPException(status_code=404, detail="OAuth 应用不存在")
 
-        site_name = await self._get_setting(db, "site_name", "vUSTB")
+        site_name = await self._get_setting(db, "site_name", "像素北科")
         _, parsed_scopes = self._parse_scope(dc.scope or self.DEVICE_DEFAULT_SCOPE, default_scope=self.DEVICE_DEFAULT_SCOPE, allowed_scopes=self.DEVICE_SCOPE_KEYS)
         return {
             "user_code": normalized_user_code,

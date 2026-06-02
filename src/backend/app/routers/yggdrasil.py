@@ -292,7 +292,7 @@ async def yggdrasil_meta(request: Request, db: AsyncSession = Depends(get_db)):
     meta = {
         "meta": {
             "serverName": site_name,
-            "implementationName": "vUSTB",
+            "implementationName": "像素北科",
             "implementationVersion": "0.1.0",
             "links": {
                 "homepage": site_url,

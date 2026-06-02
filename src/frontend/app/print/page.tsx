@@ -81,9 +81,6 @@ export default function PrintHomePage() {
         <h1 style={{ fontSize: 36, fontWeight: 800, color: 'var(--color-heading)', margin: '0 0 8px', letterSpacing: '-0.5px' }}>
           智能学院天码智能社<br />3D打印预约系统
         </h1>
-        <p style={{ fontSize: 16, color: 'var(--color-text-light)', maxWidth: 500, margin: '0 auto', lineHeight: 1.6 }}>
-          Bambu H2D (配备AMS2 Pro) 在线预约平台
-        </p>
       </div>
 
       {/* Printer status */}
@@ -148,7 +145,7 @@ export default function PrintHomePage() {
         <div className="surface-card" style={{ padding: 24, textAlign: 'center' }}>
           <ShieldCheck style={{ width: 32, height: 32, color: '#ef4444', marginBottom: 8 }} />
           <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--color-heading)', margin: '0 0 4px' }}>安全可靠</h3>
-          <p style={{ fontSize: 13, color: 'var(--color-text-light)', margin: 0 }}>专业管理，设备维护及时，使用安全有保障</p>
+          <p style={{ fontSize: 13, color: 'var(--color-text-light)', margin: 0 }}>团队设备，及时维护，安全有保障</p>
         </div>
       </div>
 
