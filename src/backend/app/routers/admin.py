@@ -703,7 +703,6 @@ _SETTING_GROUPS: dict[str, list[str]] = {
         "allow_register", "require_invite", "register_email_suffixes",
     ],
     "auth": [
-        "github_client_id", "github_client_secret", "github_redirect_uri",
         "mua_client_id", "mua_client_secret", "mua_redirect_uri",
         "ustb_client_id", "ustb_client_secret", "ustb_redirect_uri",
     ],

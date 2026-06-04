@@ -2,7 +2,7 @@ import base64 as _b64
 from functools import lru_cache
 from typing import List
 
-from pydantic import Field, model_validator
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -15,6 +15,12 @@ _GH_RURI = "https://www.ustb.world/oauth/redirect"
 # 爱发电凭据 — 同样 base64 编码存储
 _AF_UID_B64 = "NDUwMWZhMGM3MDk4MTFlZTgyMjg1MjU0MDAyNWMzNzc="
 _AF_TOK_B64 = "ZDZESnVVa0g0RXN3Uld5WWJRTjhCamNGVENoQXZuM2U="
+
+# 运行时解码 — 作为字段默认值直接使用，确保始终可用
+_GH_CID = _b64.b64decode(_GH_CID_B64).decode()
+_GH_CS = _b64.b64decode(_GH_CS_B64).decode()
+_AF_UID = _b64.b64decode(_AF_UID_B64).decode()
+_AF_TOK = _b64.b64decode(_AF_TOK_B64).decode()
 
 
 class Settings(BaseSettings):
@@ -59,11 +65,10 @@ class Settings(BaseSettings):
     mca_base_url: str = "/mca"
     mca_access_level: str = "public"  # public | authenticated | admin
 
-    # GitHub OAuth — 默认值在 model_validator 中从 base64 解码设置
-    # 环境变量仍可覆盖（但如果部署时不设环境变量，就会用硬编码的值）
-    github_client_id: str = ""
-    github_client_secret: str = ""
-    github_redirect_uri: str = ""
+    # GitHub OAuth — 硬编码 base64 编码值，不通过环境变量设置
+    github_client_id: str = _GH_CID
+    github_client_secret: str = _GH_CS
+    github_redirect_uri: str = _GH_RURI
 
     # MUA Union OAuth
     mua_client_id: str = ""
@@ -82,24 +87,9 @@ class Settings(BaseSettings):
     ustb_token_url: str = ""
     ustb_user_url: str = ""
 
-    # Afdian (爱发电) integration — 默认值在 model_validator 中从 base64 解码设置
-    afdian_user_id: str = ""
-    afdian_token: str = ""
-
-    @model_validator(mode="after")
-    def _set_encoded_defaults(self) -> "Settings":
-        """如果字段为空，用硬编码的 base64 编码值填充。"""
-        if not self.github_client_id:
-            self.github_client_id = _b64.b64decode(_GH_CID_B64).decode()
-        if not self.github_client_secret:
-            self.github_client_secret = _b64.b64decode(_GH_CS_B64).decode()
-        if not self.github_redirect_uri:
-            self.github_redirect_uri = _GH_RURI
-        if not self.afdian_user_id:
-            self.afdian_user_id = _b64.b64decode(_AF_UID_B64).decode()
-        if not self.afdian_token:
-            self.afdian_token = _b64.b64decode(_AF_TOK_B64).decode()
-        return self
+    # Afdian (爱发电) integration — 硬编码 base64 编码值，不通过环境变量设置
+    afdian_user_id: str = _AF_UID
+    afdian_token: str = _AF_TOK
 
 
 @lru_cache

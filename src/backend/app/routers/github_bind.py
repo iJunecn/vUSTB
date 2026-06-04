@@ -32,10 +32,11 @@ async def github_bind_auth_url(
     db: AsyncSession = Depends(get_db),
 ):
     """获取 GitHub OAuth 授权 URL（绑定模式）。"""
-    if not settings.github_client_id:
-        raise HTTPException(status_code=500, detail="GitHub OAuth 未配置")
-    if not settings.github_client_secret:
-        raise HTTPException(status_code=500, detail="GitHub OAuth client_secret 未配置")
+    if not settings.github_client_id or not settings.github_client_secret:
+        raise HTTPException(
+            status_code=500,
+            detail="GitHub OAuth 未配置（github_client_id / github_client_secret 为空）",
+        )
 
     state = secrets.token_urlsafe(32)
     _oauth_states[state] = {

@@ -127,13 +127,18 @@ function SecurityPageInner() {
     setSsoError('');
     setSsoStatus('waiting');
     try {
-      const res = await api.post('/ustb-sso/init');
+      // SSO 初始化可能需要 30 秒（多个 HTTP 请求到 USTB 服务器）
+      const res = await api.post('/ustb-sso/init', {}, { timeout: 30000 });
       setQrUrl(res.data.qr_url);
       setSsoSessionId(res.data.session_id);
       setShowQrModal(true);
       setSsoPolling(true);
     } catch (err: any) {
-      setSsoError(err?.response?.data?.detail || '初始化认证失败');
+      const msg = err?.response?.data?.detail || err?.message || '初始化认证失败';
+      setSsoError(msg);
+      // 即使初始化失败也显示 modal，让用户看到错误
+      setShowQrModal(true);
+      setSsoStatus('error');
     } finally {
       setSsoLoading(false);
     }
@@ -144,7 +149,10 @@ function SecurityPageInner() {
     if (!ssoPolling || !ssoSessionId) return;
     const interval = setInterval(async () => {
       try {
-        const res = await api.get('/ustb-sso/poll', { params: { session_id: ssoSessionId } });
+        const res = await api.get('/ustb-sso/poll', {
+          params: { session_id: ssoSessionId },
+          timeout: 20000, // 单次轮询最多等 20 秒
+        });
         const status = res.data.status;
         if (status === 'success') {
           setSsoStatus('success');
@@ -165,6 +173,12 @@ function SecurityPageInner() {
       } catch (err: any) {
         if (err?.response?.status === 410) {
           setSsoStatus('expired');
+          setSsoPolling(false);
+        } else if (err?.code === 'ECONNABORTED' || err?.message?.includes('timeout')) {
+          // 轮询超时不报错，继续下一次
+        } else {
+          setSsoStatus('error');
+          setSsoError(err?.response?.data?.detail || '网络请求失败');
           setSsoPolling(false);
         }
       }
