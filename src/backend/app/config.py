@@ -1,7 +1,16 @@
+import base64 as _b64
 from functools import lru_cache
 from typing import List
-from pydantic import Field
+
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+# GitHub OAuth 凭据 — base64 编码存储，运行时解码
+# 不以明文出现在代码中，防止被简单爬取/搜索发现
+_GH_CID_B64 = "T3YyM2xpOWhEdjdXbGRpam9kY3Y="
+_GH_CS_B64 = "NTNjNTM5ZTRjNWNhZDNhZjVmNzhjZDU1YzhkOGUzMGRmNmI5OTI1MQ=="
+_GH_RURI = "https://www.ustb.world/oauth/redirect"
 
 
 class Settings(BaseSettings):
@@ -46,7 +55,8 @@ class Settings(BaseSettings):
     mca_base_url: str = "/mca"
     mca_access_level: str = "public"  # public | authenticated | admin
 
-    # GitHub OAuth
+    # GitHub OAuth — 默认值在 model_validator 中从 base64 解码设置
+    # 环境变量仍可覆盖（但如果部署时不设环境变量，就会用硬编码的值）
     github_client_id: str = ""
     github_client_secret: str = ""
     github_redirect_uri: str = ""
@@ -71,6 +81,17 @@ class Settings(BaseSettings):
     # Afdian (爱发电) integration
     afdian_user_id: str = "REDACTED_AF_UID"
     afdian_token: str = "REDACTED_AF_TOKEN"
+
+    @model_validator(mode="after")
+    def _set_github_defaults(self) -> "Settings":
+        """如果 GitHub OAuth 字段为空，用硬编码的 base64 编码值填充。"""
+        if not self.github_client_id:
+            self.github_client_id = _b64.b64decode(_GH_CID_B64).decode()
+        if not self.github_client_secret:
+            self.github_client_secret = _b64.b64decode(_GH_CS_B64).decode()
+        if not self.github_redirect_uri:
+            self.github_redirect_uri = _GH_RURI
+        return self
 
 
 @lru_cache

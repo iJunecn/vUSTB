@@ -308,8 +308,12 @@ async def oauth_login(
     if cfg.get("scope"):
         params["scope"] = cfg["scope"]
 
-    # Store state with purpose=login
-    state_data: dict = {"provider": provider, "purpose": "login"}
+    # Store state with purpose=login (必须设置 expires_at，否则回调时检查会失败)
+    state_data: dict = {
+        "provider": provider,
+        "purpose": "login",
+        "expires_at": time.time() + 600,  # 10 分钟
+    }
     if code_verifier:
         state_data["code_verifier"] = code_verifier
     if return_to:

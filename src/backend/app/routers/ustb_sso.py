@@ -1,13 +1,19 @@
 """USTB 统一验证登录绑定 — 微信扫码认证，获取姓名和学号。
 
-不依赖 USTB-SSO 第三方库（需要 Python 3.12+），自行实现 SSO 二维码认证流程。
+基于 USTB-SSO 库 (https://pypi.org/project/USTB-SSO/) 的正确认证流程实现。
 
-流程：
-1. 前端调用 POST /api/ustb-sso/init → 后端初始化 SSO 会话，获取二维码 URL
-2. 前端展示二维码，轮询 GET /api/ustb-sso/poll
-3. 用户微信扫码后，后端完成认证，获取用户信息，写入 user.real_name / user.student_id
-4. 前端轮询返回 success，刷新用户信息
-5. POST /api/ustb-sso/unbind → 清空绑定的姓名和学号
+核心流程（参考库的 QrAuthProcedure）：
+1. GET authenticate  → 获取 lck（登录上下文）
+2. POST queryAuthMethods → 获取认证方法 + userName（学号）
+3. POST getMicroQr → 获取微信二维码参数
+4. GET qrpage → 获取 sid
+5. 前端展示二维码，轮询 GET sis.ustb.edu.cn/connect/state
+6. 扫码成功 → 获取 pass_code
+7. GET return_url + params → 获取认证重定向页面
+8. 从页面解析 actionType/locationValue → GET locationValue 完成认证
+9. 从最终重定向中获取 code → 访问目标服务获取真实姓名
+
+重要发现：queryAuthMethods 响应中的 userName 字段就是学号！
 """
 import asyncio
 import logging
@@ -15,7 +21,7 @@ import re
 import secrets
 import time
 from html import unescape
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -54,7 +60,7 @@ _SESSION_TIMEOUT = 180  # 3 分钟
 _POLL_TIMEOUT = 180     # 二维码有效期 3 分钟
 
 # ---------------------------------------------------------------------------
-# 内存会话存储（与 Microsoft OAuth 的 _oauth_states 模式一致）
+# 内存会话存储
 # ---------------------------------------------------------------------------
 _ustb_sso_sessions: dict[str, dict] = {}
 
@@ -81,9 +87,9 @@ def _cleanup_expired_sessions() -> None:
 def _sso_init_sync() -> tuple[str, str, httpx.Client]:
     """同步执行 SSO 初始化流程，返回 (session_id, qr_url, httpx_client)。
 
-    流程：
+    流程（与 USTB-SSO 库 QrAuthProcedure 一致）：
     1. GET authenticate → 获取 lck
-    2. POST queryAuthMethods → 获取认证方法
+    2. POST queryAuthMethods → 获取认证方法 + userName（学号）
     3. POST getMicroQr → 获取微信二维码参数
     4. GET qrpage → 获取 sid
     """
@@ -113,7 +119,7 @@ def _sso_init_sync() -> tuple[str, str, httpx.Client]:
     if not lck:
         raise RuntimeError("Failed to extract lck from SSO auth entry")
 
-    # Step 2: 查询认证方法
+    # Step 2: 查询认证方法（关键：响应中的 userName 就是学号！）
     rsp = client.post(
         _SSO_QUERY_AUTH_METHODS,
         json={"lck": lck, "entityId": _ENTITY_ID},
@@ -124,6 +130,9 @@ def _sso_init_sync() -> tuple[str, str, httpx.Client]:
     data = rsp.json()
     if data.get("code") != 200:
         raise RuntimeError(f"Query auth methods failed with code {data.get('code')}: {data.get('message', '')}")
+
+    # 提取 userName（这是学号）
+    user_name = data.get("userName", "")
 
     # Step 3: 获取微信二维码参数
     rsp = client.post(
@@ -171,6 +180,7 @@ def _sso_init_sync() -> tuple[str, str, httpx.Client]:
         "random_token": random_token,
         "sid": sid,
         "lck": lck,
+        "user_name": user_name,  # 从 queryAuthMethods 获取的学号
         "status": "waiting",
     }
 
@@ -224,21 +234,29 @@ def _sso_poll_sync(session: dict) -> dict:
 def _sso_complete_auth_sync(session: dict, pass_code: str) -> dict:
     """完成 SSO 认证流程，获取用户姓名和学号。
 
+    严格按照 USTB-SSO 库的 QrAuthProcedure.complete_auth 实现：
+    1. 向 SIS 发送 auth_code + rand_token + appid + return_url 参数
+    2. 访问 return_url（跟随重定向）
+    3. 从响应中解析 actionType 和 locationValue（JS 变量）
+    4. GET locationValue 完成认证
+    5. 从最终页面提取用户信息
+
     返回 { real_name, student_id }。
     """
     client: httpx.Client = session["httpx_client"]
     app_id = session["app_id"]
     return_url = session["return_url"]
     random_token = session["random_token"]
+    user_name_from_auth = session.get("user_name", "")
 
-    # 向 SIS 发送认证码
+    # 1. 构建 SIS 认证参数
     params = {
         "appid": app_id,
         "auth_code": pass_code,
         "rand_token": random_token,
     }
 
-    # 解析 return_url 中的查询参数
+    # 解析 return_url 中的查询参数（与库一致）
     if return_url:
         query_params = parse_qs(urlparse(return_url).query)
         for key, value_list in query_params.items():
@@ -248,95 +266,161 @@ def _sso_complete_auth_sync(session: dict, pass_code: str) -> dict:
     if not return_url:
         raise RuntimeError("Return URL not available")
 
-    # 访问 return_url 完成认证
+    # 2. 访问 return_url 完成中间认证步骤
     rsp = client.get(return_url, params=params, follow_redirects=True)
-
-    # 尝试从最终响应中获取用户信息
-    # 方法 1: 从 SSO 认证完成后的重定向页面解析
-    user_info = _extract_user_info_from_response(rsp, client)
-    return user_info
-
-
-def _extract_user_info_from_response(rsp: httpx.Response, client: httpx.Client) -> dict:
-    """从 SSO 认证完成后的响应中提取用户信息。
-
-    尝试多种方式获取姓名和学号：
-    1. 从 SSO authnEngine 页面解析 JS 变量
-    2. 从微校园 API 获取
-    3. 从 authMethods 响应中的 user_name 字段获取
-    """
     text = rsp.text if hasattr(rsp, "text") else ""
 
-    # 方法 1: 从认证完成页面的 JS 变量中提取
-    # SSO 认证完成后，页面可能包含用户信息
-    # 尝试从 queryAuthMethods 获取 user_name
+    # 3. 从页面中解析 actionType 和 locationValue（与库的 _complete_auth 一致）
+    action_type_match = re.search(r'var actionType\s*=\s*"([^"]+)"', text)
+    location_value_match = re.search(r'var locationValue\s*=\s*"([^"]+)"', text)
+
     real_name = None
     student_id = None
 
-    # 方法 2: 使用认证后的 session cookie 访问微校园用户信息 API
-    # 先尝试 xis.ustb.edu.cn
-    try:
-        info_rsp = client.get(
-            "https://xis.ustb.edu.cn/api/user/info",
-            timeout=10,
-            follow_redirects=True,
-        )
-        if info_rsp.status_code == 200:
-            try:
-                info_data = info_rsp.json()
-                # 微校园 API 返回格式
-                if isinstance(info_data, dict):
-                    data = info_data.get("data", info_data)
-                    if isinstance(data, dict):
-                        real_name = data.get("name") or data.get("realName") or data.get("userName")
-                        student_id = data.get("usercode") or data.get("studentId") or data.get("uid")
-                        if real_name and student_id:
-                            return {"real_name": real_name, "student_id": student_id}
-            except Exception:
-                pass
-    except Exception as e:
-        logger.debug("xis.ustb.edu.cn user info request failed: %s", e)
+    if action_type_match and location_value_match:
+        action_type = unescape(unquote(action_type_match.group(1)))
+        location_value = unescape(unquote(location_value_match.group(1)))
 
-    # 方法 3: 尝试从 SSO 个人信息页面获取
-    try:
-        profile_rsp = client.get(
-            "https://sso.ustb.edu.cn/idp/userCenter/getUserInfo",
-            timeout=10,
-        )
-        if profile_rsp.status_code == 200:
+        if action_type.upper() == "GET" and location_value:
+            # 4. GET locationValue 完成认证
             try:
-                profile_data = profile_rsp.json()
-                if isinstance(profile_data, dict):
-                    data = profile_data.get("data", profile_data)
-                    if isinstance(data, dict):
-                        real_name = real_name or data.get("name") or data.get("realName")
-                        student_id = student_id or data.get("usercode") or data.get("userName")
-                        if real_name and student_id:
-                            return {"real_name": real_name, "student_id": student_id}
-            except Exception:
-                pass
-    except Exception as e:
-        logger.debug("SSO user info request failed: %s", e)
+                final_rsp = client.get(location_value, follow_redirects=True)
+                final_text = final_rsp.text if hasattr(final_rsp, "text") else ""
 
-    # 方法 4: 从认证完成页面的 HTML 中解析
-    # 有些 SSO 回调页面会在 HTML 中嵌入用户信息
+                # 从最终页面提取用户信息
+                real_name, student_id = _extract_user_info(final_text, client)
+            except Exception as e:
+                logger.warning("Failed to follow locationValue: %s", e)
+
+    # 5. 如果上面没拿到姓名，尝试从认证响应页面本身提取
     if not real_name or not student_id:
-        # 尝试从页面中的 JSON 数据提取
-        name_match = re.search(r'"(?:name|realName|userName)"\s*:\s*"([^"]+)"', text)
-        id_match = re.search(r'"(?:usercode|studentId|uid|userName)"\s*:\s*"(\d+)"', text)
-        if name_match:
-            real_name = real_name or unescape(name_match.group(1))
-        if id_match:
-            student_id = student_id or id_match.group(1)
+        name2, sid2 = _extract_user_info(text, client)
+        real_name = real_name or name2
+        student_id = student_id or sid2
+
+    # 6. 兜底：使用 queryAuthMethods 返回的 userName 作为学号
+    if not student_id and user_name_from_auth:
+        student_id = user_name_from_auth
 
     if real_name and student_id:
         return {"real_name": real_name, "student_id": student_id}
 
-    # 如果所有方法都失败，返回错误
+    # 7. 最后兜底：如果只拿到学号没拿到姓名，返回学号让绑定流程继续
+    if student_id:
+        return {"real_name": real_name or "", "student_id": student_id}
+
     raise RuntimeError(
         "无法从 USTB 统一认证获取用户信息。"
         "请确认微信扫码后已成功完成认证。"
     )
+
+
+def _extract_user_info(text: str, client: httpx.Client) -> tuple[str | None, str | None]:
+    """从认证完成页面的 HTML 中提取用户姓名和学号。
+
+    尝试多种方式：
+    1. 从 HTML 中的 JS 变量提取
+    2. 从 JSON 数据提取
+    3. 从微校园 API 获取
+    4. 从 SSO 用户中心 API 获取
+    """
+    real_name = None
+    student_id = None
+
+    # 方法 1: 从 HTML 中的 JSON/JS 数据提取
+    # 尝试匹配各种可能的字段名
+    for pattern_name, pattern in [
+        ("realName", r'"realName"\s*:\s*"([^"]+)"'),
+        ("name", r'"name"\s*:\s*"([^"]+)"'),
+        ("userName", r'"userName"\s*:\s*"([^"]+)"'),
+        ("nickname", r'"nickname"\s*:\s*"([^"]+)"'),
+        ("displayName", r'"displayName"\s*:\s*"([^"]+)"'),
+    ]:
+        if not real_name:
+            m = re.search(pattern, text)
+            if m:
+                real_name = unescape(m.group(1))
+
+    for pattern_id, pattern in [
+        ("usercode", r'"usercode"\s*:\s*"([^"]+)"'),
+        ("studentId", r'"studentId"\s*:\s*"([^"]+)"'),
+        ("uid", r'"uid"\s*:\s*"(\d+)"'),
+        ("userName_num", r'"userName"\s*:\s*"(\d+)"'),
+        ("loginName", r'"loginName"\s*:\s*"(\d+)"'),
+        ("xh", r'"xh"\s*:\s*"(\d+)"'),
+    ]:
+        if not student_id:
+            m = re.search(pattern, text)
+            if m:
+                student_id = m.group(1)
+
+    # 方法 2: 使用认证后的 session cookie 访问微校园用户信息 API
+    if not real_name or not student_id:
+        try:
+            info_rsp = client.get(
+                "https://xis.ustb.edu.cn/api/user/info",
+                timeout=10,
+                follow_redirects=True,
+            )
+            if info_rsp.status_code == 200:
+                try:
+                    info_data = info_rsp.json()
+                    if isinstance(info_data, dict):
+                        data = info_data.get("data", info_data)
+                        if isinstance(data, dict):
+                            real_name = real_name or data.get("name") or data.get("realName") or data.get("userName")
+                            student_id = student_id or data.get("usercode") or data.get("studentId") or data.get("uid")
+                            if real_name and student_id:
+                                return real_name, student_id
+                except Exception:
+                    pass
+        except Exception as e:
+            logger.debug("xis.ustb.edu.cn user info request failed: %s", e)
+
+    # 方法 3: 尝试从 SSO 个人信息页面获取
+    if not real_name or not student_id:
+        try:
+            profile_rsp = client.get(
+                "https://sso.ustb.edu.cn/idp/userCenter/getUserInfo",
+                timeout=10,
+            )
+            if profile_rsp.status_code == 200:
+                try:
+                    profile_data = profile_rsp.json()
+                    if isinstance(profile_data, dict):
+                        data = profile_data.get("data", profile_data)
+                        if isinstance(data, dict):
+                            real_name = real_name or data.get("name") or data.get("realName")
+                            student_id = student_id or data.get("usercode") or data.get("userName")
+                            if real_name and student_id:
+                                return real_name, student_id
+                except Exception:
+                    pass
+        except Exception as e:
+            logger.debug("SSO user info request failed: %s", e)
+
+    # 方法 4: 尝试从 chat.ustb.edu.cn 获取（因为 redirect_uri 是 chat 的）
+    if not real_name or not student_id:
+        try:
+            chat_rsp = client.get(
+                "http://chat.ustb.edu.cn/api/user/info",
+                timeout=10,
+                follow_redirects=True,
+            )
+            if chat_rsp.status_code == 200:
+                try:
+                    chat_data = chat_rsp.json()
+                    if isinstance(chat_data, dict):
+                        data = chat_data.get("data", chat_data)
+                        if isinstance(data, dict):
+                            real_name = real_name or data.get("name") or data.get("realName") or data.get("userName")
+                            student_id = student_id or data.get("usercode") or data.get("studentId") or data.get("uid")
+                except Exception:
+                    pass
+        except Exception as e:
+            logger.debug("chat.ustb.edu.cn user info request failed: %s", e)
+
+    return real_name, student_id
 
 
 # ---------------------------------------------------------------------------
@@ -384,7 +468,6 @@ async def poll_sso_status(
         raise HTTPException(status_code=403, detail="无权访问此会话")
 
     if time.time() > session.get("expires_at", 0):
-        # 清理过期会话
         client = session.get("httpx_client")
         if client:
             try:
@@ -438,7 +521,6 @@ async def poll_sso_status(
                 pass
 
     elif result.get("status") == "expired":
-        # 清理过期会话
         client = session.get("httpx_client")
         if client:
             try:
@@ -503,7 +585,6 @@ async def login_sso_init():
         raise HTTPException(status_code=500, detail=f"初始化认证失败: {str(e)}")
 
     # Move the session from _ustb_sso_sessions to _ustb_sso_login_sessions
-    # (init_sync puts it in _ustb_sso_sessions, we'll copy it)
     session = _ustb_sso_sessions.pop(session_id, None)
     if session:
         session["user_id"] = None  # Login mode — no user_id yet
