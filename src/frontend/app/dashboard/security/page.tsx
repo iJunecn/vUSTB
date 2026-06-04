@@ -417,15 +417,27 @@ function SecurityPageInner() {
           </div>
 
           {isGithubBound ? (
-            <button
-              onClick={unbindGithub}
-              disabled={githubUnbinding}
-              className="btn-ghost"
-              style={{ padding: '6px 14px', fontSize: 13, color: '#dc2626', borderColor: 'color-mix(in srgb, #dc2626 30%, transparent)' }}
-            >
-              {githubUnbinding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Unlink style={{ width: 14, height: 14 }} />}
-              解绑
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span
+                style={{
+                  padding: '6px 14px', fontSize: 13, borderRadius: 6,
+                  background: 'color-mix(in srgb, var(--color-text-light) 10%, transparent)',
+                  color: 'var(--color-text-light)', fontWeight: 500,
+                }}
+              >
+                <Check style={{ width: 13, height: 13, display: 'inline', verticalAlign: '-2px', color: '#22c55e' }} />
+                {' '}已绑定
+              </span>
+              <button
+                onClick={unbindGithub}
+                disabled={githubUnbinding}
+                className="btn-ghost"
+                style={{ padding: '6px 14px', fontSize: 13, color: '#dc2626', borderColor: 'color-mix(in srgb, #dc2626 30%, transparent)' }}
+              >
+                {githubUnbinding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Unlink style={{ width: 14, height: 14 }} />}
+                解绑
+              </button>
+            </div>
           ) : (
             <button
               onClick={startGithubBind}
