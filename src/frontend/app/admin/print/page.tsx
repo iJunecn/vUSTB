@@ -557,7 +557,7 @@ export default function AdminPrintPage() {
                             <td style={tdStyle}>
                               {user.user_group === 'super_admin' && u.user_group !== 'super_admin' && (
                                 <button
-                                  onClick={() => {
+                                  onClick={async () => {
                                     const newGroup = u.user_group === 'user' ? 'admin' : 'user';
                                     if (await showConfirm({ title: '修改用户组', message: `确认将 ${u.username} 设为 ${USER_GROUP_LABELS[newGroup]?.label || newGroup}？`, confirmText: '确定' })) {
                                       handleSetUserGroup(u.id, newGroup);
