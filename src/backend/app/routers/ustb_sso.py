@@ -14,6 +14,8 @@
 9. 从最终页面提取用户信息（姓名、学号）
 
 重要发现：queryAuthMethods 响应中的 userName 字段就是学号！
+
+⚠️ 多 worker 注意：gunicorn 多进程不共享内存，所有会话数据必须存 Redis。
 """
 import asyncio
 import logging
@@ -32,6 +34,7 @@ from app.database import get_db
 from app.deps import get_current_user
 from app.models import User
 from app.services.auth import create_jwt
+from app.utils.redis import get_json, set_json, delete
 
 logger = logging.getLogger(__name__)
 
@@ -55,29 +58,75 @@ _REDIRECT_URI = (
 )
 _STATE = "ustb"
 
-# 会话超时
+# 超时
 _SESSION_TIMEOUT = 180  # 3 分钟
-_POLL_TIMEOUT = 180     # 二维码有效期 3 分钟
 _HTTP_TIMEOUT = 10      # 单个 HTTP 请求超时（秒）
 
-# ---------------------------------------------------------------------------
-# 内存会话存储
-# ---------------------------------------------------------------------------
-_ustb_sso_sessions: dict[str, dict] = {}
+# Redis key 前缀
+_BIND_KEY_PREFIX = "ustb_sso:bind:"
+_LOGIN_KEY_PREFIX = "ustb_sso:login:"
 
 
-def _cleanup_expired_sessions() -> None:
-    """清理过期的 SSO 会话。"""
-    now = time.time()
-    expired = [k for k, v in _ustb_sso_sessions.items() if v.get("expires_at", 0) < now]
-    for k in expired:
-        client = _ustb_sso_sessions[k].get("httpx_client")
-        if client:
-            try:
-                client.close()
-            except Exception:
-                pass
-        del _ustb_sso_sessions[k]
+# ---------------------------------------------------------------------------
+# httpx Client Cookie 序列化（跨 worker 共享 session cookies）
+# ---------------------------------------------------------------------------
+
+
+def _serialize_cookies(client: httpx.Client) -> list[dict]:
+    """从 httpx.Client 提取 cookies 为 JSON 可序列化的列表。"""
+    cookies = []
+    for cookie in client.cookies.jar:
+        cookies.append({
+            "name": cookie.name,
+            "value": cookie.value,
+            "domain": cookie.domain,
+            "path": cookie.path,
+        })
+    return cookies
+
+
+def _create_client_with_cookies(cookies: list[dict] | None = None) -> httpx.Client:
+    """创建 httpx.Client 并可选地设置预存储的 cookies。"""
+    client = httpx.Client(timeout=_HTTP_TIMEOUT, follow_redirects=False)
+    if cookies:
+        for c in cookies:
+            client.cookies.set(c["name"], c["value"], domain=c.get("domain", ""), path=c.get("path", "/"))
+    return client
+
+
+# ---------------------------------------------------------------------------
+# Redis 会话存储辅助
+# ---------------------------------------------------------------------------
+
+
+async def _save_bind_session(session_id: str, data: dict) -> None:
+    """保存绑定模式会话到 Redis，TTL = _SESSION_TIMEOUT。"""
+    await set_json(f"{_BIND_KEY_PREFIX}{session_id}", data, ex=_SESSION_TIMEOUT)
+
+
+async def _load_bind_session(session_id: str) -> dict | None:
+    """从 Redis 读取绑定模式会话。"""
+    return await get_json(f"{_BIND_KEY_PREFIX}{session_id}")
+
+
+async def _delete_bind_session(session_id: str) -> None:
+    """删除绑定模式会话。"""
+    await delete(f"{_BIND_KEY_PREFIX}{session_id}")
+
+
+async def _save_login_session(session_id: str, data: dict) -> None:
+    """保存登录模式会话到 Redis，TTL = _SESSION_TIMEOUT。"""
+    await set_json(f"{_LOGIN_KEY_PREFIX}{session_id}", data, ex=_SESSION_TIMEOUT)
+
+
+async def _load_login_session(session_id: str) -> dict | None:
+    """从 Redis 读取登录模式会话。"""
+    return await get_json(f"{_LOGIN_KEY_PREFIX}{session_id}")
+
+
+async def _delete_login_session(session_id: str) -> None:
+    """删除登录模式会话。"""
+    await delete(f"{_LOGIN_KEY_PREFIX}{session_id}")
 
 
 # ---------------------------------------------------------------------------
@@ -85,14 +134,11 @@ def _cleanup_expired_sessions() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _sso_init_sync() -> tuple[str, str, httpx.Client]:
-    """同步执行 SSO 初始化流程，返回 (session_id, qr_url, httpx_client)。
+def _sso_init_sync() -> tuple[str, str, list[dict], dict]:
+    """同步执行 SSO 初始化流程。
 
-    流程（与 USTB-SSO 库 QrAuthProcedure 一致）：
-    1. GET authenticate → 获取 lck
-    2. POST queryAuthMethods → 获取认证方法 + userName（学号）
-    3. POST getMicroQr → 获取微信二维码参数
-    4. GET qrpage → 获取 sid
+    返回 (session_id, qr_url, cookies, session_data)。
+    注意：不再返回 httpx.Client，而是返回序列化的 cookies。
     """
     client = httpx.Client(timeout=_HTTP_TIMEOUT, follow_redirects=False)
 
@@ -128,7 +174,7 @@ def _sso_init_sync() -> tuple[str, str, httpx.Client]:
         raise RuntimeError("Failed to extract lck from SSO auth entry")
     logger.debug("SSO init step 1 done: lck=%s...%s", lck[:4], lck[-4:])
 
-    # Step 2: 查询认证方法（关键：响应中的 userName 就是学号！）
+    # Step 2: 查询认证方法
     logger.debug("SSO init step 2: POST queryAuthMethods")
     try:
         rsp = client.post(
@@ -145,7 +191,6 @@ def _sso_init_sync() -> tuple[str, str, httpx.Client]:
     if data.get("code") != 200:
         raise RuntimeError(f"Query auth methods failed with code {data.get('code')}: {data.get('message', '')}")
 
-    # 提取 userName（这是学号）
     user_name = data.get("userName", "")
     logger.debug("SSO init step 2 done: userName=%s", user_name or "(empty)")
 
@@ -195,190 +240,167 @@ def _sso_init_sync() -> tuple[str, str, httpx.Client]:
     sid = match.group(1)
     logger.debug("SSO init step 4 done: sid=%s...%s", sid[:4], sid[-4:])
 
-    # 生成 session_id 并存储
+    # 提取 cookies（用于后续 complete_auth）
+    cookies = _serialize_cookies(client)
+
+    # 关闭 client（不再需要保持连接）
+    client.close()
+
     session_id = secrets.token_urlsafe(32)
-    _ustb_sso_sessions[session_id] = {
-        "user_id": None,  # 在 init endpoint 中设置
+    session_data = {
+        "user_id": None,
         "created_at": time.time(),
         "expires_at": time.time() + _SESSION_TIMEOUT,
-        "httpx_client": client,
         "app_id": app_id,
         "return_url": return_url,
         "random_token": random_token,
         "sid": sid,
         "lck": lck,
-        "user_name": user_name,  # 从 queryAuthMethods 获取的学号
+        "user_name": user_name,
+        "cookies": cookies,
         "status": "waiting",
     }
 
     qr_url = f"{_SIS_QR_IMG}?sid={sid}"
-    return session_id, qr_url, client
+    return session_id, qr_url, cookies, session_data
 
 
 def _sso_poll_sync(session: dict) -> dict:
     """同步执行 SSO 轮询。返回 { status, real_name?, student_id? }。"""
-    client: httpx.Client = session["httpx_client"]
     sid = session["sid"]
 
-    # 轮询扫码状态（与库 wait_for_pass_code 一致，单次 16 秒超时）
+    # 轮询扫码状态（不需要 cookies，只需要 sid）
+    client = httpx.Client(timeout=16, follow_redirects=False)
     try:
         rsp = client.get(_SIS_QR_STATE, params={"sid": sid}, timeout=16)
         data = rsp.json()
     except httpx.TimeoutException:
-        # 单次轮询超时不视为错误，让前端下次重试
         return {"status": "waiting"}
     except Exception as e:
         logger.warning("SSO poll request failed: %s", e)
         return {"status": "waiting"}
+    finally:
+        client.close()
 
     code = data.get("code")
     if code == 1:
-        # 扫码成功 → 获取 pass_code 并完成认证
         pass_code = data.get("data", "")
         if not pass_code:
             return {"status": "error", "message": "Pass code is empty"}
 
-        # 关键：立即标记 session 为 "completing" 状态
-        # 防止并发的 poll 请求在认证完成期间看到已消费的 QR 码而误报 "expired"
-        session["status"] = "completing"
-
         logger.info("SSO QR scanned, completing auth...")
-        # 完成认证
         try:
             user_info = _sso_complete_auth_sync(session, pass_code)
             return {"status": "success", **user_info}
         except Exception as e:
             logger.error("SSO complete auth failed: %s", e)
-            # 认证失败时重置状态，允许重新尝试
-            session["status"] = "waiting"
             return {"status": "error", "message": str(e)}
 
     elif code in (3, 202):
-        # 二维码过期
         return {"status": "expired"}
 
     elif code == 4:
-        # 等待扫码
         return {"status": "waiting"}
 
     elif code in (101, 102):
-        # 无效
         return {"status": "error", "message": f"API code {code}: {data.get('message', '')}"}
 
     return {"status": "waiting"}
 
 
 def _sso_complete_auth_sync(session: dict, pass_code: str) -> dict:
-    """完成 SSO 认证流程，获取用户姓名和学号。
+    """完成 SSO 认证流程，获取用户姓名和学号。"""
+    # 从 session 中恢复 cookies 创建 httpx.Client
+    cookies = session.get("cookies", [])
+    client = _create_client_with_cookies(cookies)
 
-    严格按照 USTB-SSO 库的 QrAuthProcedure.complete_auth 实现：
-    1. 向 SIS 发送 auth_code + rand_token + appid + return_url 参数
-    2. 访问 return_url（跟随重定向）
-    3. 从响应中解析 actionType 和 locationValue（JS 变量）
-    4. GET locationValue 完成认证
-    5. 从最终页面提取用户信息
-
-    返回 { real_name, student_id }。
-    """
-    client: httpx.Client = session["httpx_client"]
-    app_id = session["app_id"]
-    return_url = session["return_url"]
-    random_token = session["random_token"]
-    user_name_from_auth = session.get("user_name", "")
-
-    # 1. 构建 SIS 认证参数（与库 complete_auth 一致）
-    params = {
-        "appid": app_id,
-        "auth_code": pass_code,
-        "rand_token": random_token,
-    }
-
-    # 解析 return_url 中的查询参数（与库一致）
-    if return_url:
-        query_params = parse_qs(urlparse(return_url).query)
-        for key, value_list in query_params.items():
-            if value_list:
-                params[key] = value_list[0]
-
-    if not return_url:
-        raise RuntimeError("Return URL not available")
-
-    # 2. 访问 return_url 完成中间认证步骤（与库 complete_auth 的 _get 一致）
-    logger.debug("SSO complete: GET return_url with params")
     try:
-        rsp = client.get(return_url, params=params, follow_redirects=True, timeout=_HTTP_TIMEOUT)
-    except httpx.TimeoutException as e:
-        raise RuntimeError("访问认证回调超时，请稍后重试") from e
-    except Exception as e:
-        raise RuntimeError(f"访问认证回调失败: {e}") from e
+        app_id = session["app_id"]
+        return_url = session["return_url"]
+        random_token = session["random_token"]
+        user_name_from_auth = session.get("user_name", "")
 
-    text = rsp.text if hasattr(rsp, "text") else ""
-    logger.debug("SSO complete: return_url response status=%d, length=%d", rsp.status_code, len(text))
+        # 1. 构建 SIS 认证参数
+        params = {
+            "appid": app_id,
+            "auth_code": pass_code,
+            "rand_token": random_token,
+        }
 
-    # 3. 从页面中解析 actionType 和 locationValue（与库的 _complete_auth 一致）
-    action_type_match = re.search(r'var actionType\s*=\s*"([^"]+)"', text)
-    location_value_match = re.search(r'var locationValue\s*=\s*"([^"]+)"', text)
+        if return_url:
+            query_params = parse_qs(urlparse(return_url).query)
+            for key, value_list in query_params.items():
+                if value_list:
+                    params[key] = value_list[0]
 
-    real_name = None
-    student_id = None
+        if not return_url:
+            raise RuntimeError("Return URL not available")
 
-    if action_type_match and location_value_match:
-        action_type = unescape(unquote(action_type_match.group(1)))
-        location_value = unescape(unquote(location_value_match.group(1)))
-        logger.debug("SSO complete: actionType=%s, locationValue=%s...", action_type, location_value[:60])
+        # 2. 访问 return_url
+        logger.debug("SSO complete: GET return_url with params")
+        try:
+            rsp = client.get(return_url, params=params, follow_redirects=True, timeout=_HTTP_TIMEOUT)
+        except httpx.TimeoutException as e:
+            raise RuntimeError("访问认证回调超时，请稍后重试") from e
+        except Exception as e:
+            raise RuntimeError(f"访问认证回调失败: {e}") from e
 
-        if action_type.upper() == "GET" and location_value:
-            # 4. GET locationValue 完成认证
-            try:
-                final_rsp = client.get(location_value, follow_redirects=True, timeout=_HTTP_TIMEOUT)
-                final_text = final_rsp.text if hasattr(final_rsp, "text") else ""
-                logger.debug("SSO complete: locationValue response status=%d, length=%d", final_rsp.status_code, len(final_text))
+        text = rsp.text if hasattr(rsp, "text") else ""
+        logger.debug("SSO complete: return_url response status=%d, length=%d", rsp.status_code, len(text))
 
-                # 从最终页面提取用户信息
-                real_name, student_id = _extract_user_info(final_text, client)
-            except Exception as e:
-                logger.warning("Failed to follow locationValue: %s", e)
-    else:
-        logger.warning("SSO complete: actionType/locationValue not found in response (HTML length=%d)", len(text))
+        # 3. 解析 actionType 和 locationValue
+        action_type_match = re.search(r'var actionType\s*=\s*"([^"]+)"', text)
+        location_value_match = re.search(r'var locationValue\s*=\s*"([^"]+)"', text)
 
-    # 5. 如果上面没拿到姓名，尝试从认证响应页面本身提取
-    if not real_name or not student_id:
-        name2, sid2 = _extract_user_info(text, client)
-        real_name = real_name or name2
-        student_id = student_id or sid2
+        real_name = None
+        student_id = None
 
-    # 6. 兜底：使用 queryAuthMethods 返回的 userName 作为学号
-    if not student_id and user_name_from_auth:
-        student_id = user_name_from_auth
-        logger.debug("SSO complete: using userName from queryAuthMethods as student_id: %s", student_id)
+        if action_type_match and location_value_match:
+            action_type = unescape(unquote(action_type_match.group(1)))
+            location_value = unescape(unquote(location_value_match.group(1)))
+            logger.debug("SSO complete: actionType=%s, locationValue=%s...", action_type, location_value[:60])
 
-    if real_name and student_id:
-        return {"real_name": real_name, "student_id": student_id}
+            if action_type.upper() == "GET" and location_value:
+                try:
+                    final_rsp = client.get(location_value, follow_redirects=True, timeout=_HTTP_TIMEOUT)
+                    final_text = final_rsp.text if hasattr(final_rsp, "text") else ""
+                    logger.debug("SSO complete: locationValue response status=%d, length=%d", final_rsp.status_code, len(final_text))
+                    real_name, student_id = _extract_user_info(final_text, client)
+                except Exception as e:
+                    logger.warning("Failed to follow locationValue: %s", e)
+        else:
+            logger.warning("SSO complete: actionType/locationValue not found in response (HTML length=%d)", len(text))
 
-    # 7. 最后兜底：如果只拿到学号没拿到姓名，返回学号让绑定流程继续
-    if student_id:
-        return {"real_name": real_name or "", "student_id": student_id}
+        # 5. 从认证响应页面提取
+        if not real_name or not student_id:
+            name2, sid2 = _extract_user_info(text, client)
+            real_name = real_name or name2
+            student_id = student_id or sid2
 
-    raise RuntimeError(
-        "无法从 USTB 统一认证获取用户信息。"
-        "请确认微信扫码后已成功完成认证。"
-    )
+        # 6. 兜底：userName 作为学号
+        if not student_id and user_name_from_auth:
+            student_id = user_name_from_auth
+            logger.debug("SSO complete: using userName as student_id: %s", student_id)
+
+        if real_name and student_id:
+            return {"real_name": real_name, "student_id": student_id}
+
+        if student_id:
+            return {"real_name": real_name or "", "student_id": student_id}
+
+        raise RuntimeError(
+            "无法从 USTB 统一认证获取用户信息。"
+            "请确认微信扫码后已成功完成认证。"
+        )
+    finally:
+        client.close()
 
 
 def _extract_user_info(text: str, client: httpx.Client) -> tuple[str | None, str | None]:
-    """从认证完成页面的 HTML 中提取用户姓名和学号。
-
-    尝试多种方式：
-    1. 从 HTML 中的 JS 变量提取
-    2. 从 JSON 数据提取
-    3. 从微校园 API 获取
-    4. 从 SSO 用户中心 API 获取
-    """
+    """从认证完成页面的 HTML 中提取用户姓名和学号。"""
     real_name = None
     student_id = None
 
-    # 方法 1: 从 HTML 中的 JSON/JS 数据提取
-    # 尝试匹配各种可能的字段名
     for pattern_name, pattern in [
         ("realName", r'"realName"\s*:\s*"([^"]+)"'),
         ("name", r'"name"\s*:\s*"([^"]+)"'),
@@ -408,76 +430,63 @@ def _extract_user_info(text: str, client: httpx.Client) -> tuple[str | None, str
         logger.debug("Extracted user info from HTML: real_name=%s, student_id=%s", real_name, student_id)
         return real_name, student_id
 
-    # 方法 2: 使用认证后的 session cookie 访问微校园用户信息 API
+    # 方法 2: 微校园 API
     if not real_name or not student_id:
         try:
-            info_rsp = client.get(
-                "https://xis.ustb.edu.cn/api/user/info",
-                timeout=_HTTP_TIMEOUT,
-                follow_redirects=True,
-            )
+            info_rsp = client.get("https://xis.ustb.edu.cn/api/user/info", timeout=_HTTP_TIMEOUT, follow_redirects=True)
             if info_rsp.status_code == 200:
                 try:
                     info_data = info_rsp.json()
                     if isinstance(info_data, dict):
-                        data = info_data.get("data", info_data)
-                        if isinstance(data, dict):
-                            real_name = real_name or data.get("name") or data.get("realName") or data.get("userName")
-                            student_id = student_id or data.get("usercode") or data.get("studentId") or data.get("uid")
+                        d = info_data.get("data", info_data)
+                        if isinstance(d, dict):
+                            real_name = real_name or d.get("name") or d.get("realName") or d.get("userName")
+                            student_id = student_id or d.get("usercode") or d.get("studentId") or d.get("uid")
                             if real_name and student_id:
-                                logger.debug("Extracted user info from xis API: real_name=%s, student_id=%s", real_name, student_id)
                                 return real_name, student_id
                 except Exception:
                     pass
         except Exception as e:
             logger.debug("xis.ustb.edu.cn user info request failed: %s", e)
 
-    # 方法 3: 尝试从 SSO 个人信息页面获取
+    # 方法 3: SSO 个人信息
     if not real_name or not student_id:
         try:
-            profile_rsp = client.get(
-                "https://sso.ustb.edu.cn/idp/userCenter/getUserInfo",
-                timeout=_HTTP_TIMEOUT,
-            )
+            profile_rsp = client.get("https://sso.ustb.edu.cn/idp/userCenter/getUserInfo", timeout=_HTTP_TIMEOUT)
             if profile_rsp.status_code == 200:
                 try:
                     profile_data = profile_rsp.json()
                     if isinstance(profile_data, dict):
-                        data = profile_data.get("data", profile_data)
-                        if isinstance(data, dict):
-                            real_name = real_name or data.get("name") or data.get("realName")
-                            student_id = student_id or data.get("usercode") or data.get("userName")
+                        d = profile_data.get("data", profile_data)
+                        if isinstance(d, dict):
+                            real_name = real_name or d.get("name") or d.get("realName")
+                            student_id = student_id or d.get("usercode") or d.get("userName")
                             if real_name and student_id:
-                                logger.debug("Extracted user info from SSO API: real_name=%s, student_id=%s", real_name, student_id)
                                 return real_name, student_id
                 except Exception:
                     pass
         except Exception as e:
             logger.debug("SSO user info request failed: %s", e)
 
-    # 方法 4: 尝试从 chat.ustb.edu.cn 获取（因为 redirect_uri 是 chat 的）
+    # 方法 4: chat.ustb.edu.cn
     if not real_name or not student_id:
         try:
-            chat_rsp = client.get(
-                "http://chat.ustb.edu.cn/api/user/info",
-                timeout=_HTTP_TIMEOUT,
-                follow_redirects=True,
-            )
+            chat_rsp = client.get("http://chat.ustb.edu.cn/api/user/info", timeout=_HTTP_TIMEOUT, follow_redirects=True)
             if chat_rsp.status_code == 200:
                 try:
                     chat_data = chat_rsp.json()
                     if isinstance(chat_data, dict):
-                        data = chat_data.get("data", chat_data)
-                        if isinstance(data, dict):
-                            real_name = real_name or data.get("name") or data.get("realName") or data.get("userName")
-                            student_id = student_id or data.get("usercode") or data.get("studentId") or data.get("uid")
+                        d = chat_data.get("data", chat_data)
+                        if isinstance(d, dict):
+                            real_name = real_name or d.get("name") or d.get("realName") or d.get("userName")
+                            student_id = student_id or d.get("usercode") or d.get("studentId") or d.get("uid")
                 except Exception:
                     pass
         except Exception as e:
             logger.debug("chat.ustb.edu.cn user info request failed: %s", e)
 
     if real_name or student_id:
-        logger.debug("Extracted partial user info: real_name=%s, student_id=%s", real_name, student_id)
+        logger.debug("Extracted partial: real_name=%s, student_id=%s", real_name, student_id)
     else:
         logger.warning("Failed to extract user info from any source")
 
@@ -485,7 +494,7 @@ def _extract_user_info(text: str, client: httpx.Client) -> tuple[str | None, str
 
 
 # ---------------------------------------------------------------------------
-# API Endpoints
+# API Endpoints — 绑定模式
 # ---------------------------------------------------------------------------
 
 
@@ -495,18 +504,14 @@ async def init_sso_session(
     db: AsyncSession = Depends(get_db),
 ):
     """初始化 USTB SSO 认证会话，返回二维码 URL。"""
-    _cleanup_expired_sessions()
-
     try:
-        session_id, qr_url, _ = await asyncio.to_thread(_sso_init_sync)
+        session_id, qr_url, cookies, session_data = await asyncio.to_thread(_sso_init_sync)
     except Exception as e:
         logger.error("SSO init failed: %s", e)
         raise HTTPException(status_code=500, detail=f"初始化认证失败: {str(e)}")
 
-    # 关联用户
-    session = _ustb_sso_sessions.get(session_id)
-    if session:
-        session["user_id"] = user.id
+    session_data["user_id"] = user.id
+    await _save_bind_session(session_id, session_data)
 
     return {
         "session_id": session_id,
@@ -521,7 +526,7 @@ async def poll_sso_status(
     db: AsyncSession = Depends(get_db),
 ):
     """轮询 USTB SSO 扫码状态。"""
-    session = _ustb_sso_sessions.get(session_id)
+    session = await _load_bind_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="会话不存在或已过期")
 
@@ -529,20 +534,14 @@ async def poll_sso_status(
         raise HTTPException(status_code=403, detail="无权访问此会话")
 
     if time.time() > session.get("expires_at", 0):
-        client = session.get("httpx_client")
-        if client:
-            try:
-                client.close()
-            except Exception:
-                pass
-        del _ustb_sso_sessions[session_id]
+        await _delete_bind_session(session_id)
         raise HTTPException(status_code=410, detail="二维码已过期，请重新获取")
 
-    # 如果认证完成中（另一个 poll 已检测到扫码，正在完成认证），返回 waiting
+    # 认证完成中，返回 waiting（防止竞态：另一个 poll 正在 complete_auth）
     if session.get("status") == "completing":
         return {"status": "waiting", "message": "认证完成中..."}
 
-    # 如果已经完成，直接返回缓存结果
+    # 已完成，直接返回缓存结果
     if session.get("status") == "success":
         return {
             "status": "success",
@@ -550,18 +549,22 @@ async def poll_sso_status(
             "student_id": session.get("student_id"),
         }
 
+    # 标记为 completing 后再执行（防止并发 poll 竞态）
+    session["status"] = "completing"
+    await _save_bind_session(session_id, session)
+
     try:
         result = await asyncio.to_thread(_sso_poll_sync, session)
     except Exception as e:
         logger.error("SSO poll failed: %s", e)
+        session["status"] = "waiting"
+        await _save_bind_session(session_id, session)
         return {"status": "error", "message": str(e)}
 
-    # 如果认证成功，更新用户信息
     if result.get("status") == "success":
         real_name = result.get("real_name")
         student_id = result.get("student_id")
 
-        # 更新数据库
         db_user = (
             await db.execute(select(User).where(User.id == user.id))
         ).scalar_one_or_none()
@@ -572,27 +575,19 @@ async def poll_sso_status(
                 db_user.student_id = student_id
             await db.commit()
 
-        # 缓存结果到会话
         session["status"] = "success"
         session["real_name"] = real_name
         session["student_id"] = student_id
-
-        # 关闭 httpx 客户端
-        client = session.get("httpx_client")
-        if client:
-            try:
-                client.close()
-            except Exception:
-                pass
+        await _save_bind_session(session_id, session)
 
     elif result.get("status") == "expired":
-        client = session.get("httpx_client")
-        if client:
-            try:
-                client.close()
-            except Exception:
-                pass
-        del _ustb_sso_sessions[session_id]
+        await _delete_bind_session(session_id)
+        return result
+
+    else:
+        # waiting 或 error — 重置状态
+        session["status"] = "waiting"
+        await _save_bind_session(session_id, session)
 
     return result
 
@@ -620,40 +615,18 @@ async def unbind_ustb_sso(
 # Login mode endpoints (no auth required)
 # ---------------------------------------------------------------------------
 
-# Login-mode SSO sessions (separate from bind-mode sessions)
-_ustb_sso_login_sessions: dict[str, dict] = {}
-
-
-def _cleanup_expired_login_sessions() -> None:
-    """清理过期的登录模式 SSO 会话。"""
-    now = time.time()
-    expired = [k for k, v in _ustb_sso_login_sessions.items() if v.get("expires_at", 0) < now]
-    for k in expired:
-        client = _ustb_sso_login_sessions[k].get("httpx_client")
-        if client:
-            try:
-                client.close()
-            except Exception:
-                pass
-        del _ustb_sso_login_sessions[k]
-
 
 @router.post("/login/init")
 async def login_sso_init():
     """初始化 USTB SSO 登录会话（无需登录），返回二维码 URL。"""
-    _cleanup_expired_login_sessions()
-
     try:
-        session_id, qr_url, _ = await asyncio.to_thread(_sso_init_sync)
+        session_id, qr_url, cookies, session_data = await asyncio.to_thread(_sso_init_sync)
     except Exception as e:
         logger.error("SSO login init failed: %s", e)
         raise HTTPException(status_code=500, detail=f"初始化认证失败: {str(e)}")
 
-    # Move the session from _ustb_sso_sessions to _ustb_sso_login_sessions
-    session = _ustb_sso_sessions.pop(session_id, None)
-    if session:
-        session["user_id"] = None  # Login mode — no user_id yet
-        _ustb_sso_login_sessions[session_id] = session
+    session_data["user_id"] = None  # Login mode — no user_id yet
+    await _save_login_session(session_id, session_data)
 
     return {
         "session_id": session_id,
@@ -666,34 +639,20 @@ async def login_sso_poll(
     session_id: str = Query(...),
     db: AsyncSession = Depends(get_db),
 ):
-    """轮询 USTB SSO 登录扫码状态（无需登录）。
-
-    返回：
-    - {status: "waiting"} — 等待扫码
-    - {status: "success", access_token: "jwt..."} — 登录成功（已绑定用户）
-    - {status: "unregistered", oauth_token: "xxx", real_name: "...", student_id: "..."} — 未绑定用户
-    - {status: "expired"} — 二维码过期
-    - {status: "error", message: "..."} — 错误
-    """
-    session = _ustb_sso_login_sessions.get(session_id)
+    """轮询 USTB SSO 登录扫码状态（无需登录）。"""
+    session = await _load_login_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="会话不存在或已过期")
 
     if time.time() > session.get("expires_at", 0):
-        client = session.get("httpx_client")
-        if client:
-            try:
-                client.close()
-            except Exception:
-                pass
-        del _ustb_sso_login_sessions[session_id]
+        await _delete_login_session(session_id)
         raise HTTPException(status_code=410, detail="二维码已过期，请重新获取")
 
-    # 如果认证完成中（另一个 poll 已检测到扫码，正在完成认证），返回 waiting
+    # 认证完成中
     if session.get("status") == "completing":
         return {"status": "waiting", "message": "认证完成中..."}
 
-    # If already completed, return cached result
+    # 已完成，返回缓存结果
     if session.get("login_status") == "success":
         return {
             "status": "success",
@@ -707,17 +666,22 @@ async def login_sso_poll(
             "student_id": session.get("student_id"),
         }
 
+    # 标记为 completing 后再执行
+    session["status"] = "completing"
+    await _save_login_session(session_id, session)
+
     try:
         result = await asyncio.to_thread(_sso_poll_sync, session)
     except Exception as e:
         logger.error("SSO login poll failed: %s", e)
+        session["status"] = "waiting"
+        await _save_login_session(session_id, session)
         return {"status": "error", "message": str(e)}
 
     if result.get("status") == "success":
         real_name = result.get("real_name")
         student_id = result.get("student_id")
 
-        # Try to find a user with this student_id
         db_user = None
         if student_id:
             db_user = (
@@ -725,55 +689,40 @@ async def login_sso_poll(
             ).scalar_one_or_none()
 
         if db_user:
-            # Found a bound user → issue JWT
             if db_user.is_banned:
+                session["status"] = "waiting"
+                await _save_login_session(session_id, session)
                 return {"status": "error", "message": "账号已被封禁"}
 
             jwt_token = create_jwt(sub=db_user.id, extra={"provider": "ustb_sso"})
 
-            # Cache result
             session["login_status"] = "success"
             session["access_token"] = jwt_token
-
-            # Close httpx client
-            client = session.get("httpx_client")
-            if client:
-                try:
-                    client.close()
-                except Exception:
-                    pass
+            session["status"] = "success"
+            await _save_login_session(session_id, session)
 
             return {
                 "status": "success",
                 "access_token": jwt_token,
             }
         else:
-            # No bound user found → store pending info
-            from app.routers.oauth_login import _pending_oauth
-            import secrets as _secrets
-
-            oauth_token = _secrets.token_urlsafe(32)
-            _pending_oauth[oauth_token] = {
+            # 存储到 Redis 的 pending_oauth
+            from app.routers.oauth_login import store_pending_oauth
+            oauth_token = secrets.token_urlsafe(32)
+            await store_pending_oauth(oauth_token, {
                 "provider": "ustb_sso",
                 "created_at": time.time(),
                 "expires_at": time.time() + 600,
                 "real_name": real_name or "",
                 "student_id": student_id or "",
-            }
+            })
 
-            # Cache result
             session["login_status"] = "unregistered"
             session["oauth_token"] = oauth_token
             session["real_name"] = real_name
             session["student_id"] = student_id
-
-            # Close httpx client
-            client = session.get("httpx_client")
-            if client:
-                try:
-                    client.close()
-                except Exception:
-                    pass
+            session["status"] = "success"
+            await _save_login_session(session_id, session)
 
             return {
                 "status": "unregistered",
@@ -783,12 +732,11 @@ async def login_sso_poll(
             }
 
     elif result.get("status") == "expired":
-        client = session.get("httpx_client")
-        if client:
-            try:
-                client.close()
-            except Exception:
-                pass
-        del _ustb_sso_login_sessions[session_id]
+        await _delete_login_session(session_id)
+        return result
+
+    else:
+        session["status"] = "waiting"
+        await _save_login_session(session_id, session)
 
     return result

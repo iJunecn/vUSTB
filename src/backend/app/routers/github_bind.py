@@ -19,9 +19,7 @@ from app.config import settings
 from app.database import get_db
 from app.deps import get_current_user
 from app.models import User
-
-# 复用 oauth_login.py 的 _oauth_states（模块级共享）
-from app.routers.oauth_login import _oauth_states
+from app.routers.oauth_login import save_oauth_state
 
 router = APIRouter(prefix="/api/github", tags=["github_bind"])
 
@@ -39,12 +37,12 @@ async def github_bind_auth_url(
         )
 
     state = secrets.token_urlsafe(32)
-    _oauth_states[state] = {
+    await save_oauth_state(state, {
         "provider": "github",
         "purpose": "bind",
         "user_id": user.id,
-        "expires_at": time.time() + 600,  # 10 分钟
-    }
+        "expires_at": time.time() + 600,
+    })
 
     params = {
         "client_id": settings.github_client_id,
