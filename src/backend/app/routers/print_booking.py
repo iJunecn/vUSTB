@@ -136,28 +136,38 @@ async def printer_status(printer_id: int, db: AsyncSession = Depends(get_db)):
         logic_status = "暂停使用"
         css_class = "paused"
     else:
-        current_slot = None
-        if "00:00" <= current_time <= "11:59":
-            current_slot = SlotType.AM
-        elif "12:00" <= current_time <= "23:59":
-            current_slot = SlotType.PM
-
-        if current_slot:
-            booking = (
-                await db.execute(
-                    select(Booking).where(
-                        Booking.printer_id == printer_id,
-                        Booking.date == today,
-                        Booking.slot_type == current_slot,
-                        Booking.status.in_([BookingStatus.BOOKED, BookingStatus.RUNNING, BookingStatus.PENDING]),
-                    )
+        # 优先检查：该打印机是否有正在运行的预约（不限时段）
+        running_booking = (
+            await db.execute(
+                select(Booking).where(
+                    Booking.printer_id == printer_id,
+                    Booking.status == BookingStatus.RUNNING,
                 )
-            ).scalar_one_or_none()
-            if booking:
-                if booking.status == BookingStatus.RUNNING:
-                    logic_status = "正在运行"
-                    css_class = "running"
-                else:
+            )
+        ).scalar_one_or_none()
+        if running_booking:
+            logic_status = "正在运行"
+            css_class = "running"
+        else:
+            # 再检查当前时段是否有预约
+            current_slot = None
+            if "00:00" <= current_time <= "11:59":
+                current_slot = SlotType.AM
+            elif "12:00" <= current_time <= "23:59":
+                current_slot = SlotType.PM
+
+            if current_slot:
+                booking = (
+                    await db.execute(
+                        select(Booking).where(
+                            Booking.printer_id == printer_id,
+                            Booking.date == today,
+                            Booking.slot_type == current_slot,
+                            Booking.status.in_([BookingStatus.BOOKED, BookingStatus.PENDING]),
+                        )
+                    )
+                ).scalar_one_or_none()
+                if booking:
                     logic_status = "已预约"
                     css_class = "reserved"
 
@@ -481,11 +491,25 @@ async def checkin_booking(
         raise HTTPException(status_code=403, detail="无法操作")
 
     if not _can_manage_printer(user):
-        start_clock = "00:00" if booking.slot_type == SlotType.AM else "12:00"
-        start_moment = datetime.strptime(f"{booking.date} {start_clock}", "%Y-%m-%d %H:%M")
-        start_moment = start_moment.replace(tzinfo=timezone(timedelta(hours=8)))
-        if datetime.now(timezone(timedelta(hours=8))) < start_moment:
-            raise HTTPException(status_code=400, detail="未到开始时间，暂不可签到")
+        # 普通用户只能在预约日期的所属时段内签到
+        now_cst = datetime.now(timezone(timedelta(hours=8)))
+        today = now_cst.strftime("%Y-%m-%d")
+        current_time = now_cst.strftime("%H:%M")
+
+        # 必须是预约当天
+        if booking.date != today:
+            raise HTTPException(status_code=400, detail="仅限预约当日签到")
+
+        # 必须在预约时段范围内
+        if booking.slot_type == SlotType.AM:
+            slot_start, slot_end = "00:00", "11:59"
+        else:
+            slot_start, slot_end = "12:00", "23:59"
+
+        if current_time < slot_start:
+            raise HTTPException(status_code=400, detail="未到签到时间，请在时段开始后签到")
+        if current_time > slot_end:
+            raise HTTPException(status_code=400, detail="已超过签到时间，该时段已结束")
 
     booking.status = BookingStatus.RUNNING
     await db.commit()
