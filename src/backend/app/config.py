@@ -12,6 +12,10 @@ _GH_CID_B64 = "T3YyM2xpOWhEdjdXbGRpam9kY3Y="
 _GH_CS_B64 = "NTNjNTM5ZTRjNWNhZDNhZjVmNzhjZDU1YzhkOGUzMGRmNmI5OTI1MQ=="
 _GH_RURI = "https://www.ustb.world/oauth/redirect"
 
+# 爱发电凭据 — 同样 base64 编码存储
+_AF_UID_B64 = "NDUwMWZhMGM3MDk4MTFlZTgyMjg1MjU0MDAyNWMzNzc="
+_AF_TOK_B64 = "ZDZESnVVa0g0RXN3Uld5WWJRTjhCamNGVENoQXZuM2U="
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -78,19 +82,23 @@ class Settings(BaseSettings):
     ustb_token_url: str = ""
     ustb_user_url: str = ""
 
-    # Afdian (爱发电) integration
-    afdian_user_id: str = "REDACTED_AF_UID"
-    afdian_token: str = "REDACTED_AF_TOKEN"
+    # Afdian (爱发电) integration — 默认值在 model_validator 中从 base64 解码设置
+    afdian_user_id: str = ""
+    afdian_token: str = ""
 
     @model_validator(mode="after")
-    def _set_github_defaults(self) -> "Settings":
-        """如果 GitHub OAuth 字段为空，用硬编码的 base64 编码值填充。"""
+    def _set_encoded_defaults(self) -> "Settings":
+        """如果字段为空，用硬编码的 base64 编码值填充。"""
         if not self.github_client_id:
             self.github_client_id = _b64.b64decode(_GH_CID_B64).decode()
         if not self.github_client_secret:
             self.github_client_secret = _b64.b64decode(_GH_CS_B64).decode()
         if not self.github_redirect_uri:
             self.github_redirect_uri = _GH_RURI
+        if not self.afdian_user_id:
+            self.afdian_user_id = _b64.b64decode(_AF_UID_B64).decode()
+        if not self.afdian_token:
+            self.afdian_token = _b64.b64decode(_AF_TOK_B64).decode()
         return self
 
 
