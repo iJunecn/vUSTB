@@ -5,7 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useUserStore } from '@/stores/user';
 import { rawApi } from '@/lib/api';
-import { Printer, CalendarCheck, ClipboardList, ShieldCheck, Clock, AlertTriangle, X, Info } from 'lucide-react';
+import { Printer, AlertTriangle, X, Info } from 'lucide-react';
 
 type PrinterInfo = {
   id: number;
@@ -24,7 +24,7 @@ type PrinterStatus = {
 };
 
 export default function PrintHomePage() {
-  const { user, loaded, hydrate } = useUserStore();
+  const { hydrate } = useUserStore();
   const [printers, setPrinters] = useState<PrinterInfo[]>([]);
   const [statuses, setStatuses] = useState<Map<number, PrinterStatus>>(new Map());
   const [loading, setLoading] = useState(true);
@@ -102,7 +102,7 @@ export default function PrintHomePage() {
               const st = statuses.get(p.id);
               const info = statusLabel[st?.status_class || 'idle'] || statusLabel.idle;
               return (
-                <div key={p.id} className="surface-card" style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <Link key={p.id} href="/print/dashboard" className="surface-card hoverable" style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12, textDecoration: 'none', cursor: 'pointer' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <Printer style={{ width: 22, height: 22, color: 'var(--color-primary)' }} />
@@ -123,61 +123,11 @@ export default function PrintHomePage() {
                   <p style={{ fontSize: 12, color: 'var(--color-text-light)', margin: 0 }}>
                     {st?.status_class === 'idle' ? '当前设备空闲，欢迎预约' : '请根据预约时间表合理安排'}
                   </p>
-                </div>
+                </Link>
               );
             })}
           </div>
         )}
-      </div>
-
-      {/* Feature cards */}
-      <div className="grid-feature-3">
-        <div className="surface-card feature-card">
-          <CalendarCheck className="feature-card-icon" style={{ color: 'var(--color-primary)' }} />
-          <h3 className="feature-card-title">在线预约</h3>
-          <p className="feature-card-desc">实时查看预约时间表，快速预定打印时段</p>
-        </div>
-        <div className="surface-card feature-card">
-          <Clock className="feature-card-icon" style={{ color: '#22c55e' }} />
-          <h3 className="feature-card-title">灵活管理</h3>
-          <p className="feature-card-desc">随时查看和取消您的预约，合理安排时间</p>
-        </div>
-        <div className="surface-card feature-card">
-          <ShieldCheck className="feature-card-icon" style={{ color: '#ef4444' }} />
-          <h3 className="feature-card-title">安全可靠</h3>
-          <p className="feature-card-desc">团队设备，及时维护，安全有保障</p>
-        </div>
-      </div>
-
-      {/* Entry cards */}
-      <div className="grid-entry-cards">
-        <EntryCard
-          href="/print/dashboard"
-          icon={<ClipboardList style={{ width: 24, height: 24 }} />}
-          title="预约面板"
-          desc="查看时间表、管理你的预约记录。"
-          requireAuth
-          loaded={loaded}
-          user={user}
-        />
-        <EntryCard
-          href="/print/booking"
-          icon={<CalendarCheck style={{ width: 24, height: 24 }} />}
-          title="创建预约"
-          desc="选择日期和时段，提交打印任务。"
-          requireAuth
-          loaded={loaded}
-          user={user}
-        />
-        <EntryCard
-          href="/print/dashboard"
-          icon={<Printer style={{ width: 24, height: 24 }} />}
-          title="我的预约"
-          desc="查看历史预约，签到或取消。"
-          requireAuth
-          loaded={loaded}
-          user={user}
-        />
       </div>
 
       {/* Notice button */}
@@ -259,46 +209,5 @@ export default function PrintHomePage() {
         @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
     </div>
-  );
-}
-
-function EntryCard({
-  href,
-  icon,
-  title,
-  desc,
-  requireAuth,
-  loaded,
-  user,
-}: {
-  href: string;
-  icon: React.ReactNode;
-  title: string;
-  desc: string;
-  requireAuth?: boolean;
-  loaded?: boolean;
-  user?: any;
-}) {
-  const target = requireAuth && loaded && !user ? '/login' : href;
-  return (
-    <Link
-      href={target}
-      className="surface-card hoverable entry-card"
-    >
-      <div
-        style={{
-          width: 48, height: 48, borderRadius: 12,
-          background: 'color-mix(in srgb, var(--color-primary) 10%, transparent)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: 'var(--color-primary)',
-        }}
-      >
-        {icon}
-      </div>
-      <div>
-        <h3 style={{ fontSize: 18, fontWeight: 600, color: 'var(--color-heading)', margin: '0 0 4px 0' }}>{title}</h3>
-        <p style={{ fontSize: 14, color: 'var(--color-text-light)', margin: 0, lineHeight: 1.5 }}>{desc}</p>
-      </div>
-    </Link>
   );
 }
