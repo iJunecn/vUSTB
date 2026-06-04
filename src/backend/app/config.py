@@ -2,7 +2,7 @@ import base64 as _b64
 from functools import lru_cache
 from typing import List
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -16,7 +16,7 @@ _GH_RURI = "https://www.ustb.world/oauth/redirect"
 _AF_UID_B64 = "NDUwMWZhMGM3MDk4MTFlZTgyMjg1MjU0MDAyNWMzNzc="
 _AF_TOK_B64 = "ZDZESnVVa0g0RXN3Uld5WWJRTjhCamNGVENoQXZuM2U="
 
-# 运行时解码 — 作为字段默认值直接使用，确保始终可用
+# 运行时解码
 _GH_CID = _b64.b64decode(_GH_CID_B64).decode()
 _GH_CS = _b64.b64decode(_GH_CS_B64).decode()
 _AF_UID = _b64.b64decode(_AF_UID_B64).decode()
@@ -65,10 +65,17 @@ class Settings(BaseSettings):
     mca_base_url: str = "/mca"
     mca_access_level: str = "public"  # public | authenticated | admin
 
-    # GitHub OAuth — 硬编码 base64 编码值，不通过环境变量设置
-    github_client_id: str = _GH_CID
-    github_client_secret: str = _GH_CS
-    github_redirect_uri: str = _GH_RURI
+    # GitHub OAuth — 硬编码 base64 编码值
+    # 使用 validation_alias 防止环境变量 GITHUB_CLIENT_ID="" 覆盖默认值
+    github_client_id: str = Field(
+        default=_GH_CID, validation_alias="_gh_cid_internal"
+    )
+    github_client_secret: str = Field(
+        default=_GH_CS, validation_alias="_gh_cs_internal"
+    )
+    github_redirect_uri: str = Field(
+        default=_GH_RURI, validation_alias="_gh_ruri_internal"
+    )
 
     # MUA Union OAuth
     mua_client_id: str = ""
@@ -87,9 +94,29 @@ class Settings(BaseSettings):
     ustb_token_url: str = ""
     ustb_user_url: str = ""
 
-    # Afdian (爱发电) integration — 硬编码 base64 编码值，不通过环境变量设置
-    afdian_user_id: str = _AF_UID
-    afdian_token: str = _AF_TOK
+    # 爱发电 — 硬编码 base64 编码值
+    # 同样使用 validation_alias 防止环境变量覆盖
+    afdian_user_id: str = Field(
+        default=_AF_UID, validation_alias="_af_uid_internal"
+    )
+    afdian_token: str = Field(
+        default=_AF_TOK, validation_alias="_af_tok_internal"
+    )
+
+    @model_validator(mode="after")
+    def _fill_hardcoded_if_empty(self) -> "Settings":
+        """安全网：如果字段被意外清空，用硬编码值回填。"""
+        if not self.github_client_id:
+            self.github_client_id = _GH_CID
+        if not self.github_client_secret:
+            self.github_client_secret = _GH_CS
+        if not self.github_redirect_uri:
+            self.github_redirect_uri = _GH_RURI
+        if not self.afdian_user_id:
+            self.afdian_user_id = _AF_UID
+        if not self.afdian_token:
+            self.afdian_token = _AF_TOK
+        return self
 
 
 @lru_cache

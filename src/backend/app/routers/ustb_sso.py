@@ -238,6 +238,10 @@ def _sso_poll_sync(session: dict) -> dict:
         if not pass_code:
             return {"status": "error", "message": "Pass code is empty"}
 
+        # 关键：立即标记 session 为 "completing" 状态
+        # 防止并发的 poll 请求在认证完成期间看到已消费的 QR 码而误报 "expired"
+        session["status"] = "completing"
+
         logger.info("SSO QR scanned, completing auth...")
         # 完成认证
         try:
@@ -245,6 +249,8 @@ def _sso_poll_sync(session: dict) -> dict:
             return {"status": "success", **user_info}
         except Exception as e:
             logger.error("SSO complete auth failed: %s", e)
+            # 认证失败时重置状态，允许重新尝试
+            session["status"] = "waiting"
             return {"status": "error", "message": str(e)}
 
     elif code in (3, 202):
@@ -532,6 +538,10 @@ async def poll_sso_status(
         del _ustb_sso_sessions[session_id]
         raise HTTPException(status_code=410, detail="二维码已过期，请重新获取")
 
+    # 如果认证完成中（另一个 poll 已检测到扫码，正在完成认证），返回 waiting
+    if session.get("status") == "completing":
+        return {"status": "waiting", "message": "认证完成中..."}
+
     # 如果已经完成，直接返回缓存结果
     if session.get("status") == "success":
         return {
@@ -678,6 +688,10 @@ async def login_sso_poll(
                 pass
         del _ustb_sso_login_sessions[session_id]
         raise HTTPException(status_code=410, detail="二维码已过期，请重新获取")
+
+    # 如果认证完成中（另一个 poll 已检测到扫码，正在完成认证），返回 waiting
+    if session.get("status") == "completing":
+        return {"status": "waiting", "message": "认证完成中..."}
 
     # If already completed, return cached result
     if session.get("login_status") == "success":
