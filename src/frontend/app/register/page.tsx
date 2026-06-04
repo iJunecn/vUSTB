@@ -1,14 +1,15 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { useUserStore } from '@/stores/user';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Github, Check, AlertCircle } from 'lucide-react';
 
-export default function RegisterPage() {
+function RegisterInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const setToken = useUserStore((s) => s.setToken);
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
@@ -22,6 +23,31 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+
+  // OAuth token info
+  const oauthToken = searchParams.get('oauth_token') || '';
+  const isSso = searchParams.get('sso') === '1';
+  const githubLogin = searchParams.get('github_login') || '';
+  const [oauthInfo, setOauthInfo] = useState<{ provider: string; github_name?: string; real_name?: string; student_id?: string } | null>(null);
+  const [oauthInfoLoaded, setOauthInfoLoaded] = useState(false);
+
+  // Fetch pending OAuth info if token exists
+  useEffect(() => {
+    if (!oauthToken) {
+      setOauthInfoLoaded(true);
+      return;
+    }
+    api.get('/auth/oauth/pending-info', { params: { oauth_token: oauthToken } })
+      .then((res) => {
+        setOauthInfo(res.data);
+      })
+      .catch(() => {
+        // Token invalid/expired — ignore silently
+      })
+      .finally(() => {
+        setOauthInfoLoaded(true);
+      });
+  }, [oauthToken]);
 
   async function sendCode() {
     if (!email) return setError('请先填写邮箱');
@@ -62,8 +88,20 @@ export default function RegisterPage() {
         password,
         verification_code: verificationCode || undefined,
         invite_code: inviteCode || undefined,
+        oauth_token: oauthToken || undefined,
       });
+
       await setToken(r.data.access_token);
+
+      // If we had an OAuth token, try to bind it (in case the register endpoint didn't auto-bind)
+      if (oauthToken) {
+        try {
+          await api.post('/auth/oauth/bind-pending', { oauth_token: oauthToken });
+        } catch {
+          // Ignore — the register endpoint should have already handled binding
+        }
+      }
+
       router.replace('/dashboard');
     } catch (err: any) {
       setError(err?.response?.data?.detail || '注册失败');
@@ -83,6 +121,57 @@ export default function RegisterPage() {
             注册像素北科账户
           </p>
         </header>
+
+        {/* OAuth binding notice */}
+        {oauthToken && oauthInfoLoaded && oauthInfo && (
+          <div
+            style={{
+              padding: '12px 16px', borderRadius: 10, marginBottom: 16,
+              border: '1px solid color-mix(in srgb, var(--color-primary) 30%, transparent)',
+              background: 'color-mix(in srgb, var(--color-primary) 8%, transparent)',
+              display: 'flex', alignItems: 'center', gap: 10,
+            }}
+          >
+            <Check style={{ width: 18, height: 18, color: 'var(--color-primary)', flexShrink: 0 }} />
+            <div>
+              <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-heading)', margin: 0 }}>
+                检测到第三方登录，注册后将自动绑定
+              </p>
+              <p style={{ fontSize: 12, color: 'var(--color-text-light)', margin: '4px 0 0' }}>
+                {oauthInfo.provider === 'github' && (
+                  <>
+                    <Github style={{ width: 12, height: 12, display: 'inline', verticalAlign: '-1px' }} />
+                    {' '}GitHub{oauthInfo.github_name ? `（${oauthInfo.github_name}）` : ''}
+                  </>
+                )}
+                {oauthInfo.provider === 'ustb_sso' && (
+                  <>
+                    北科大统一验证
+                    {oauthInfo.real_name ? `（${oauthInfo.real_name}` : ''}
+                    {oauthInfo.student_id ? `，${oauthInfo.student_id}）` : oauthInfo.real_name ? '）' : ''}
+                  </>
+                )}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* OAuth token expired/invalid notice */}
+        {oauthToken && oauthInfoLoaded && !oauthInfo && (
+          <div
+            style={{
+              padding: '12px 16px', borderRadius: 10, marginBottom: 16,
+              border: '1px solid color-mix(in srgb, #f59e0b 30%, transparent)',
+              background: 'color-mix(in srgb, #f59e0b 8%, transparent)',
+              display: 'flex', alignItems: 'center', gap: 10,
+            }}
+          >
+            <AlertCircle style={{ width: 18, height: 18, color: '#f59e0b', flexShrink: 0 }} />
+            <p style={{ fontSize: 13, color: 'var(--color-text-light)', margin: 0 }}>
+              第三方登录信息已过期，注册后将需要重新绑定
+            </p>
+          </div>
+        )}
 
         <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -207,5 +296,17 @@ export default function RegisterPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={
+      <div className="auth-shell">
+        <Loader2 className="w-6 h-6 animate-spin" style={{ color: 'var(--color-text-light)' }} />
+      </div>
+    }>
+      <RegisterInner />
+    </Suspense>
   );
 }

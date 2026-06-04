@@ -90,6 +90,39 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
     db.add(user)
     await db.flush()
 
+    # If an oauth_token was provided, auto-bind the third-party account
+    if req.oauth_token:
+        try:
+            from app.routers.oauth_login import _pending_oauth
+            import time as _time
+
+            pending = _pending_oauth.pop(req.oauth_token, None)
+            if pending and _time.time() <= pending.get("expires_at", 0):
+                provider = pending.get("provider", "")
+                if provider == "github":
+                    # Check if this GitHub account is already bound
+                    github_id = pending.get("github_id")
+                    if github_id:
+                        existing_bound = (
+                            await db.execute(select(User).where(User.github_id == github_id))
+                        ).scalar_one_or_none()
+                        if not existing_bound:
+                            user.github_id = github_id
+                            user.github_name = pending.get("github_name", "")
+                elif provider == "ustb_sso":
+                    student_id = pending.get("student_id")
+                    if student_id:
+                        existing_bound = (
+                            await db.execute(select(User).where(User.student_id == student_id))
+                        ).scalar_one_or_none()
+                        if not existing_bound:
+                            user.real_name = pending.get("real_name") or user.real_name
+                            user.student_id = student_id
+        except Exception as e:
+            # Don't fail registration if binding fails
+            import logging
+            logging.getLogger(__name__).warning("Failed to auto-bind OAuth during registration: %s", e)
+
     if invite:
         invite.used_count = (invite.used_count or 0) + 1
         if not invite.used_by:

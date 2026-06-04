@@ -11,6 +11,7 @@ class RegisterRequest(BaseModel):
     password: str = Field(min_length=8, max_length=128)
     invite_code: Optional[str] = None
     verification_code: Optional[str] = None
+    oauth_token: Optional[str] = None
 
 
 class LoginRequest(BaseModel):

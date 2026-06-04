@@ -9,6 +9,8 @@ export type User = {
   phone: string | null;
   real_name: string | null;
   student_id: string | null;
+  github_id: string | null;
+  github_name: string | null;
   user_group: 'super_admin' | 'admin' | 'teacher' | 'user';
   avatar_hash: string | null;
   email_verified: boolean;

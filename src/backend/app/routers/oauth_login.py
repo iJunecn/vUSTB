@@ -4,31 +4,47 @@ Ported from USTB-Official-Backend/app/routes/auth.py (Flask) to FastAPI.
 
 Endpoints:
 - GET /api/auth/oauth/{provider}         — start OAuth flow (generate state, redirect)
-- GET /api/auth/oauth/{provider}/callback — exchange code, create/login user, return JWT
+- GET /api/auth/oauth/{provider}/callback — exchange code, find/login user, redirect
+- GET /oauth/redirect                     — unified GitHub OAuth callback (bind/login)
+- POST /api/auth/oauth/bind-pending       — bind pending OAuth info after registration
 """
 from __future__ import annotations
 
 import html
 import logging
 import secrets
+import time
 from datetime import datetime, timezone
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
+from fastapi.responses import RedirectResponse, Response
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import get_db
+from app.deps import get_current_user
 from app.models import User, UserGroup
 from app.services.auth import create_jwt
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/auth/oauth", tags=["oauth_login"])
+
+# ---------------------------------------------------------------------------
+# Shared state stores (module-level, accessible by github_bind.py)
+# ---------------------------------------------------------------------------
+
+# OAuth state store: state -> {provider, purpose?, user_id?, code_verifier?, return_to?}
+_oauth_states: dict[str, dict] = {}
+
+# Pending OAuth data: oauth_token -> {provider, ..., expires_at}
+# Used when third-party login finds no bound user → redirect to register
+_pending_oauth: dict[str, dict] = {}
+
 
 # ---------------------------------------------------------------------------
 # Provider configuration
@@ -43,6 +59,7 @@ _OAUTH_PROVIDERS = {
         "authorize_url": "https://github.com/login/oauth/authorize",
         "token_url": "https://github.com/login/oauth/access_token",
         "user_url": "https://api.github.com/user",
+        "user_email_url": "https://api.github.com/user/emails",
         "scope": "read:user user:email",
         "supports_pkce": False,
     },
@@ -70,8 +87,6 @@ _OAUTH_PROVIDERS = {
     },
 }
 
-# In-memory state store (production should use Redis)
-_oauth_states: dict[str, dict] = {}  # state -> {provider, code_verifier}
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -141,6 +156,24 @@ async def _fetch_user_info(cfg: dict, access_token: str) -> dict:
         return resp.json()
 
 
+async def _fetch_github_user_email(access_token: str) -> str | None:
+    """Fetch the primary verified email from GitHub API."""
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                "https://api.github.com/user/emails",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+            if resp.status_code == 200:
+                emails = resp.json()
+                for e in emails:
+                    if e.get("primary") and e.get("verified"):
+                        return e.get("email")
+    except Exception:
+        pass
+    return None
+
+
 def _normalize_user_info(raw: dict, provider: str) -> dict:
     """Normalize provider-specific user info into a common schema."""
     if provider == "github":
@@ -172,52 +205,78 @@ def _normalize_user_info(raw: dict, provider: str) -> dict:
     }
 
 
-async def _find_or_create_user(
-    info: dict, db: AsyncSession
-) -> User:
-    """Find an existing user by OAuth identity or email, or create a new one."""
+async def _find_user_by_oauth(info: dict, db: AsyncSession) -> User | None:
+    """Find an existing user by OAuth identity (github_id). Returns None if not found."""
     provider = info["provider"]
     provider_uid = info["provider_uid"]
 
-    # Try to find by oauth_provider + oauth_uid columns if they exist on User
-    # Fallback: find by email
-    existing: User | None = None
+    if provider == "github":
+        # Look up by github_id
+        user = (
+            await db.execute(select(User).where(User.github_id == provider_uid))
+        ).scalar_one_or_none()
+        if user:
+            return user
 
-    # Try matching by email first
+        # Fallback: try matching by email
+        email = info.get("email", "")
+        if email:
+            user = (
+                await db.execute(select(User).where(User.email == email))
+            ).scalar_one_or_none()
+            if user:
+                # Auto-bind: link this GitHub account to the existing user
+                user.github_id = provider_uid
+                user.github_name = info.get("username", "")
+                await db.commit()
+                await db.refresh(user)
+                return user
+
+    # MUA / USTB vSkin: match by email
     email = info.get("email", "")
     if email:
-        existing = (
+        user = (
             await db.execute(select(User).where(User.email == email))
         ).scalar_one_or_none()
+        if user:
+            return user
 
-    if existing:
-        return existing
+    return None
 
-    # Create new user
-    username = info.get("username") or info.get("nickname") or f"{provider}_{provider_uid}"
-    # Ensure unique username
-    base_username = username
-    counter = 1
-    while True:
-        dup = (
-            await db.execute(select(User).where(User.username == username))
-        ).scalar_one_or_none()
-        if not dup:
-            break
-        username = f"{base_username}_{counter}"
-        counter += 1
 
-    user = User(
-        email=email or f"{provider}_{provider_uid}@oauth.local",
-        username=username,
-        password_hash="!",  # OAuth users have no password
-        user_group=UserGroup.USER,
-        email_verified=bool(email),
-    )
-    db.add(user)
-    await db.commit()
-    await db.refresh(user)
-    return user
+def _store_pending_oauth(info: dict, db: AsyncSession) -> str:
+    """Store pending OAuth info in memory and return an oauth_token for later binding."""
+    oauth_token = secrets.token_urlsafe(32)
+    provider = info["provider"]
+    pending: dict = {
+        "provider": provider,
+        "created_at": time.time(),
+        "expires_at": time.time() + 600,  # 10 minutes
+    }
+    if provider == "github":
+        pending["github_id"] = info["provider_uid"]
+        pending["github_name"] = info.get("username", "")
+        pending["email"] = info.get("email", "")
+    elif provider == "ustb_sso":
+        pending["real_name"] = info.get("real_name", "")
+        pending["student_id"] = info.get("student_id", "")
+
+    _pending_oauth[oauth_token] = pending
+    return oauth_token
+
+
+def _cleanup_expired_states() -> None:
+    """Clean up expired OAuth states and pending tokens."""
+    now = time.time()
+    # Clean up expired _oauth_states
+    expired = [k for k, v in _oauth_states.items() if v.get("expires_at", 0) < now]
+    for k in expired:
+        del _oauth_states[k]
+
+    # Clean up expired _pending_oauth
+    expired_pending = [k for k, v in _pending_oauth.items() if v.get("expires_at", 0) < now]
+    for k in expired_pending:
+        del _pending_oauth[k]
 
 
 # ---------------------------------------------------------------------------
@@ -250,8 +309,8 @@ async def oauth_login(
     if cfg.get("scope"):
         params["scope"] = cfg["scope"]
 
-    # Store state
-    state_data: dict = {"provider": provider}
+    # Store state with purpose=login
+    state_data: dict = {"provider": provider, "purpose": "login"}
     if code_verifier:
         state_data["code_verifier"] = code_verifier
     if return_to:
@@ -260,6 +319,122 @@ async def oauth_login(
 
     auth_url = f"{cfg['authorize_url']}?{urlencode(params)}"
     return RedirectResponse(url=auth_url)
+
+
+# ---------------------------------------------------------------------------
+# Unified GitHub OAuth callback: /oauth/redirect
+# ---------------------------------------------------------------------------
+
+
+@router.get("")
+async def oauth_redirect_empty():
+    """Catch /api/auth/oauth without provider — return error."""
+    raise HTTPException(status_code=400, detail="Missing provider in URL")
+
+
+# This route is mounted without the /api/auth/oauth prefix (see below)
+async def _handle_github_callback(
+    code: str | None,
+    state: str | None,
+    error: str | None,
+    db: AsyncSession,
+):
+    """Handle GitHub OAuth callback for both login and bind flows.
+
+    Dispatched from the /oauth/redirect endpoint and the /api/auth/oauth/github/callback endpoint.
+    """
+    _cleanup_expired_states()
+
+    if error:
+        logger.warning("GitHub OAuth error: %s", error)
+        frontend_url = settings.site_url
+        return RedirectResponse(url=f"{frontend_url}/login?oauth_error={error}")
+
+    if not code or not state:
+        return RedirectResponse(url=f"{settings.site_url}/login?oauth_error=missing_params")
+
+    stored = _oauth_states.pop(state, None)
+    if not stored:
+        return RedirectResponse(url=f"{settings.site_url}/login?oauth_error=invalid_state")
+
+    if time.time() > stored.get("expires_at", 0):
+        return RedirectResponse(url=f"{settings.site_url}/login?oauth_error=state_expired")
+
+    provider = stored.get("provider", "github")
+    purpose = stored.get("purpose", "login")
+    cfg = _get_provider(provider)
+
+    # Exchange code for token
+    code_verifier = stored.get("code_verifier")
+    access_token = await _exchange_code(cfg, code, code_verifier=code_verifier)
+
+    # Fetch user info
+    raw_user_info = await _fetch_user_info(cfg, access_token)
+    info = _normalize_user_info(raw_user_info, provider)
+
+    # For GitHub, also try to get primary email if not in user info
+    if provider == "github" and not info.get("email"):
+        email = await _fetch_github_user_email(access_token)
+        if email:
+            info["email"] = email
+
+    frontend_url = settings.site_url.rstrip("/")
+
+    # ── Bind flow ──────────────────────────────────────────────
+    if purpose == "bind":
+        user_id = stored.get("user_id")
+        if not user_id:
+            return RedirectResponse(url=f"{frontend_url}/dashboard/security?github_bind=error")
+
+        db_user = (
+            await db.execute(select(User).where(User.id == user_id))
+        ).scalar_one_or_none()
+        if not db_user:
+            return RedirectResponse(url=f"{frontend_url}/dashboard/security?github_bind=error")
+
+        # Check if this GitHub account is already bound to another user
+        github_id = info["provider_uid"]
+        existing_bound = (
+            await db.execute(select(User).where(User.github_id == github_id))
+        ).scalar_one_or_none()
+        if existing_bound and existing_bound.id != user_id:
+            return RedirectResponse(
+                url=f"{frontend_url}/dashboard/security?github_bind=error&msg=already_bound"
+            )
+
+        db_user.github_id = github_id
+        db_user.github_name = info.get("username", "")
+        await db.commit()
+
+        return RedirectResponse(url=f"{frontend_url}/dashboard/security?github_bind=success")
+
+    # ── Login flow ─────────────────────────────────────────────
+    user = await _find_user_by_oauth(info, db)
+
+    if user:
+        if user.is_banned:
+            return RedirectResponse(url=f"{frontend_url}/login?oauth_error=banned")
+
+        jwt_token = create_jwt(sub=user.id, extra={"provider": provider})
+        # Redirect to login page with token — the frontend will pick it up
+        return RedirectResponse(url=f"{frontend_url}/login?access_token={jwt_token}")
+
+    # No bound user found → store pending info and redirect to register
+    oauth_token = _store_pending_oauth(info, db)
+
+    # Build redirect URL with context info
+    redirect_params = {"oauth_token": oauth_token}
+    if provider == "github":
+        redirect_params["github_login"] = info.get("username", "")
+
+    return RedirectResponse(
+        url=f"{frontend_url}/register?{urlencode(redirect_params)}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Legacy callback endpoint (kept for MUA / USTB vSkin providers)
+# ---------------------------------------------------------------------------
 
 
 class OAuthCallbackResponse(BaseModel):
@@ -276,15 +451,18 @@ async def oauth_callback(
     error: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
 ):
-    """Handle the OAuth2 callback. Exchanges the code for a token, upserts the user, and returns a JWT."""
-    # Validate state
+    """Handle the OAuth2 callback. For GitHub, delegates to the unified handler."""
+    if provider == "github":
+        # Delegate to unified handler (which handles both login and bind)
+        return await _handle_github_callback(code, state, error, db)
+
+    # ── MUA / USTB vSkin callback ─────────────────────────────
     stored = _oauth_states.pop(state, None)
     if not stored:
         raise HTTPException(status_code=400, detail="Invalid or expired state parameter")
     if stored["provider"] != provider:
         raise HTTPException(status_code=400, detail="Provider mismatch")
 
-    # Check for OAuth error
     if error:
         raise HTTPException(status_code=400, detail=f"OAuth authorization failed: {error}")
 
@@ -293,20 +471,25 @@ async def oauth_callback(
 
     cfg = _get_provider(provider)
 
-    # Exchange code for token
     code_verifier = stored.get("code_verifier")
     access_token = await _exchange_code(cfg, code, code_verifier=code_verifier)
 
-    # Fetch user info
     raw_user_info = await _fetch_user_info(cfg, access_token)
     info = _normalize_user_info(raw_user_info, provider)
 
-    # Find or create user
-    user = await _find_or_create_user(info, db)
+    user = await _find_user_by_oauth(info, db)
+    if not user:
+        # For non-GitHub providers, also redirect to register
+        oauth_token = _store_pending_oauth(info, db)
+        frontend_url = settings.site_url.rstrip("/")
+        redirect_params = {"oauth_token": oauth_token}
+        return RedirectResponse(
+            url=f"{frontend_url}/register?{urlencode(redirect_params)}"
+        )
+
     if user.is_banned:
         raise HTTPException(status_code=403, detail="账号已被封禁")
 
-    # Issue JWT
     jwt_token = create_jwt(sub=user.id, extra={"provider": provider})
 
     return OAuthCallbackResponse(
@@ -314,3 +497,122 @@ async def oauth_callback(
         token_type="Bearer",
         user=user.to_dict(),
     )
+
+
+# ---------------------------------------------------------------------------
+# Bind pending OAuth info after registration
+# ---------------------------------------------------------------------------
+
+
+@router.post("/bind-pending")
+async def bind_pending_oauth(
+    body: dict = Body(...),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Bind pending third-party OAuth info to the current user after registration.
+
+    Called after the user registers with an oauth_token in the URL.
+    """
+    _cleanup_expired_states()
+
+    oauth_token = body.get("oauth_token", "")
+    if not oauth_token:
+        raise HTTPException(status_code=400, detail="缺少 oauth_token")
+
+    pending = _pending_oauth.pop(oauth_token, None)
+    if not pending:
+        raise HTTPException(status_code=400, detail="oauth_token 无效或已过期")
+
+    if time.time() > pending.get("expires_at", 0):
+        raise HTTPException(status_code=400, detail="oauth_token 已过期")
+
+    provider = pending["provider"]
+
+    db_user = (
+        await db.execute(select(User).where(User.id == user.id))
+    ).scalar_one_or_none()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+
+    if provider == "github":
+        github_id = pending.get("github_id")
+        if not github_id:
+            raise HTTPException(status_code=400, detail="缺少 GitHub ID")
+
+        # Check if this GitHub account is already bound to another user
+        existing_bound = (
+            await db.execute(select(User).where(User.github_id == github_id))
+        ).scalar_one_or_none()
+        if existing_bound and existing_bound.id != user.id:
+            raise HTTPException(status_code=400, detail="该 GitHub 账号已被其他用户绑定")
+
+        db_user.github_id = github_id
+        db_user.github_name = pending.get("github_name", "")
+        # If user's email is the OAuth placeholder, update it
+        if pending.get("email") and (not db_user.email or db_user.email.endswith("@oauth.local")):
+            # Check email uniqueness
+            email_dup = (
+                await db.execute(select(User).where(User.email == pending["email"], User.id != user.id))
+            ).scalar_one_or_none()
+            if not email_dup:
+                db_user.email = pending["email"]
+
+    elif provider == "ustb_sso":
+        real_name = pending.get("real_name")
+        student_id = pending.get("student_id")
+        if not student_id:
+            raise HTTPException(status_code=400, detail="缺少学号")
+
+        # Check if this student_id is already bound to another user
+        existing_bound = (
+            await db.execute(select(User).where(User.student_id == student_id))
+        ).scalar_one_or_none()
+        if existing_bound and existing_bound.id != user.id:
+            raise HTTPException(status_code=400, detail="该学号已被其他用户绑定")
+
+        if real_name:
+            db_user.real_name = real_name
+        if student_id:
+            db_user.student_id = student_id
+
+    await db.commit()
+
+    return {
+        "ok": True,
+        "message": f"已绑定 {provider} 账号",
+        "provider": provider,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Verify pending oauth_token (for register page to show context)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/pending-info")
+async def get_pending_oauth_info(
+    oauth_token: str = Query(...),
+):
+    """Get pending OAuth info without consuming it. Used by the register page to display context."""
+    _cleanup_expired_states()
+
+    pending = _pending_oauth.get(oauth_token)
+    if not pending:
+        raise HTTPException(status_code=404, detail="oauth_token 无效或已过期")
+
+    if time.time() > pending.get("expires_at", 0):
+        del _pending_oauth[oauth_token]
+        raise HTTPException(status_code=410, detail="oauth_token 已过期")
+
+    provider = pending["provider"]
+    result: dict = {"provider": provider}
+
+    if provider == "github":
+        result["github_name"] = pending.get("github_name", "")
+        result["email"] = pending.get("email", "")
+    elif provider == "ustb_sso":
+        result["real_name"] = pending.get("real_name", "")
+        result["student_id"] = pending.get("student_id", "")
+
+    return result

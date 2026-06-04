@@ -1,14 +1,17 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { Suspense, useEffect, useState, useCallback } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useUserStore } from '@/stores/user';
-import { Loader2, Lock, User as UserIcon, Mail, Phone, Shield, QrCode, Unlink, Check, X } from 'lucide-react';
+import { Loader2, Lock, User as UserIcon, Mail, Phone, Shield, QrCode, Unlink, Check, X, Github } from 'lucide-react';
 
 type Msg = { ok: boolean; text: string };
 
-export default function SecurityPage() {
+function SecurityPageInner() {
   const { user, hydrate } = useUserStore();
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
   // Account info form
   const [username, setUsername] = useState('');
@@ -34,6 +37,13 @@ export default function SecurityPage() {
   const [ssoError, setSsoError] = useState('');
   const [unbinding, setUnbinding] = useState(false);
 
+  // GitHub binding
+  const [githubBinding, setGithubBinding] = useState(false);
+  const [githubUnbinding, setGithubUnbinding] = useState(false);
+
+  // URL param messages (from OAuth redirect)
+  const [githubBindMsg, setGithubBindMsg] = useState<Msg | null>(null);
+
   useEffect(() => {
     if (user) {
       setUsername(user.username || '');
@@ -41,6 +51,23 @@ export default function SecurityPage() {
       setPhone(user.phone || '');
     }
   }, [user]);
+
+  // Check URL params for GitHub bind result
+  useEffect(() => {
+    const githubBind = searchParams.get('github_bind');
+    if (githubBind === 'success') {
+      setGithubBindMsg({ ok: true, text: 'GitHub 账号绑定成功' });
+      hydrate();
+      // Clean URL
+      router.replace('/dashboard/security', { scroll: false });
+    } else if (githubBind === 'error') {
+      const msg = searchParams.get('msg') === 'already_bound'
+        ? '该 GitHub 账号已被其他用户绑定'
+        : 'GitHub 账号绑定失败';
+      setGithubBindMsg({ ok: false, text: msg });
+      router.replace('/dashboard/security', { scroll: false });
+    }
+  }, [searchParams, hydrate, router]);
 
   async function saveInfo(e: React.FormEvent) {
     e.preventDefault();
@@ -123,7 +150,6 @@ export default function SecurityPage() {
           setSsoStatus('success');
           setSsoPolling(false);
           await hydrate();
-          // Close modal after a short delay
           setTimeout(() => {
             setShowQrModal(false);
             setSsoSessionId('');
@@ -136,7 +162,6 @@ export default function SecurityPage() {
           setSsoError(res.data.message || '认证失败');
           setSsoPolling(false);
         }
-        // 'waiting' → continue polling
       } catch (err: any) {
         if (err?.response?.status === 410) {
           setSsoStatus('expired');
@@ -161,14 +186,43 @@ export default function SecurityPage() {
     try {
       await api.post('/ustb-sso/unbind');
       await hydrate();
-    } catch (err: any) {
-      // Silently fail — user can try again
+    } catch {
     } finally {
       setUnbinding(false);
     }
   }
 
   const isSsoBound = !!(user?.real_name && user?.student_id);
+  const isGithubBound = !!user?.github_id;
+
+  // --- GitHub binding ---
+
+  async function startGithubBind() {
+    setGithubBinding(true);
+    try {
+      const res = await api.get('/github/auth-url');
+      const authUrl = res.data.auth_url;
+      // Redirect to GitHub authorization page
+      window.location.href = authUrl;
+    } catch (err: any) {
+      setGithubBindMsg({ ok: false, text: err?.response?.data?.detail || '获取授权链接失败' });
+    } finally {
+      setGithubBinding(false);
+    }
+  }
+
+  async function unbindGithub() {
+    setGithubUnbinding(true);
+    try {
+      await api.post('/github/unbind');
+      await hydrate();
+      setGithubBindMsg({ ok: true, text: '已解绑 GitHub 账号' });
+    } catch (err: any) {
+      setGithubBindMsg({ ok: false, text: err?.response?.data?.detail || '解绑失败' });
+    } finally {
+      setGithubUnbinding(false);
+    }
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 640 }}>
@@ -244,6 +298,12 @@ export default function SecurityPage() {
           <h2 style={{ fontSize: 16, fontWeight: 600, color: 'var(--color-heading)', margin: 0 }}>账号绑定</h2>
         </div>
 
+        {githubBindMsg && (
+          <p style={{ fontSize: 13, color: githubBindMsg.ok ? 'var(--color-primary)' : '#dc2626', margin: 0 }}>
+            {githubBindMsg.text}
+          </p>
+        )}
+
         {/* USTB SSO binding item */}
         <div
           style={{
@@ -300,6 +360,66 @@ export default function SecurityPage() {
               style={{ padding: '6px 14px', fontSize: 13 }}
             >
               {ssoLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <QrCode style={{ width: 14, height: 14 }} />}
+              绑定
+            </button>
+          )}
+        </div>
+
+        {/* GitHub binding item */}
+        <div
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '16px 20px', borderRadius: 10,
+            border: '1px solid var(--color-border)',
+            background: 'var(--color-background-soft)',
+            gap: 16, flexWrap: 'wrap',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+            <div
+              style={{
+                width: 40, height: 40, borderRadius: 8, flexShrink: 0,
+                background: 'color-mix(in srgb, #333 10%, transparent)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <Github style={{ width: 22, height: 22, color: 'var(--color-heading)' }} />
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-heading)', margin: 0 }}>
+                GitHub
+              </p>
+              {isGithubBound ? (
+                <p style={{ fontSize: 13, color: 'var(--color-text-light)', margin: '4px 0 0' }}>
+                  <Check style={{ width: 13, height: 13, display: 'inline', verticalAlign: '-2px', color: '#22c55e' }} />
+                  {' '}{user!.github_name}
+                </p>
+              ) : (
+                <p style={{ fontSize: 13, color: 'var(--color-text-light)', margin: '4px 0 0' }}>
+                  绑定你的 GitHub 账号
+                </p>
+              )}
+            </div>
+          </div>
+
+          {isGithubBound ? (
+            <button
+              onClick={unbindGithub}
+              disabled={githubUnbinding}
+              className="btn-ghost"
+              style={{ padding: '6px 14px', fontSize: 13, color: '#dc2626', borderColor: 'color-mix(in srgb, #dc2626 30%, transparent)' }}
+            >
+              {githubUnbinding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Unlink style={{ width: 14, height: 14 }} />}
+              解绑
+            </button>
+          ) : (
+            <button
+              onClick={startGithubBind}
+              disabled={githubBinding}
+              className="btn-primary"
+              style={{ padding: '6px 14px', fontSize: 13 }}
+            >
+              {githubBinding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Github style={{ width: 14, height: 14 }} />}
               绑定
             </button>
           )}
@@ -503,5 +623,17 @@ function Field({
       </span>
       {children}
     </label>
+  );
+}
+
+export default function SecurityPage() {
+  return (
+    <Suspense fallback={
+      <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
+        <Loader2 className="w-6 h-6 animate-spin" style={{ color: 'var(--color-text-light)' }} />
+      </div>
+    }>
+      <SecurityPageInner />
+    </Suspense>
   );
 }

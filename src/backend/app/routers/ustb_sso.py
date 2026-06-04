@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.deps import get_current_user
 from app.models import User
+from app.services.auth import create_jwt
 
 logger = logging.getLogger(__name__)
 
@@ -466,3 +467,178 @@ async def unbind_ustb_sso(
     await db.commit()
 
     return {"ok": True, "message": "已解绑北科大统一认证"}
+
+
+# ---------------------------------------------------------------------------
+# Login mode endpoints (no auth required)
+# ---------------------------------------------------------------------------
+
+# Login-mode SSO sessions (separate from bind-mode sessions)
+_ustb_sso_login_sessions: dict[str, dict] = {}
+
+
+def _cleanup_expired_login_sessions() -> None:
+    """清理过期的登录模式 SSO 会话。"""
+    now = time.time()
+    expired = [k for k, v in _ustb_sso_login_sessions.items() if v.get("expires_at", 0) < now]
+    for k in expired:
+        client = _ustb_sso_login_sessions[k].get("httpx_client")
+        if client:
+            try:
+                client.close()
+            except Exception:
+                pass
+        del _ustb_sso_login_sessions[k]
+
+
+@router.post("/login/init")
+async def login_sso_init():
+    """初始化 USTB SSO 登录会话（无需登录），返回二维码 URL。"""
+    _cleanup_expired_login_sessions()
+
+    try:
+        session_id, qr_url, _ = await asyncio.to_thread(_sso_init_sync)
+    except Exception as e:
+        logger.error("SSO login init failed: %s", e)
+        raise HTTPException(status_code=500, detail=f"初始化认证失败: {str(e)}")
+
+    # Move the session from _ustb_sso_sessions to _ustb_sso_login_sessions
+    # (init_sync puts it in _ustb_sso_sessions, we'll copy it)
+    session = _ustb_sso_sessions.pop(session_id, None)
+    if session:
+        session["user_id"] = None  # Login mode — no user_id yet
+        _ustb_sso_login_sessions[session_id] = session
+
+    return {
+        "session_id": session_id,
+        "qr_url": qr_url,
+    }
+
+
+@router.get("/login/poll")
+async def login_sso_poll(
+    session_id: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """轮询 USTB SSO 登录扫码状态（无需登录）。
+
+    返回：
+    - {status: "waiting"} — 等待扫码
+    - {status: "success", access_token: "jwt..."} — 登录成功（已绑定用户）
+    - {status: "unregistered", oauth_token: "xxx", real_name: "...", student_id: "..."} — 未绑定用户
+    - {status: "expired"} — 二维码过期
+    - {status: "error", message: "..."} — 错误
+    """
+    session = _ustb_sso_login_sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="会话不存在或已过期")
+
+    if time.time() > session.get("expires_at", 0):
+        client = session.get("httpx_client")
+        if client:
+            try:
+                client.close()
+            except Exception:
+                pass
+        del _ustb_sso_login_sessions[session_id]
+        raise HTTPException(status_code=410, detail="二维码已过期，请重新获取")
+
+    # If already completed, return cached result
+    if session.get("login_status") == "success":
+        return {
+            "status": "success",
+            "access_token": session.get("access_token"),
+        }
+    if session.get("login_status") == "unregistered":
+        return {
+            "status": "unregistered",
+            "oauth_token": session.get("oauth_token"),
+            "real_name": session.get("real_name"),
+            "student_id": session.get("student_id"),
+        }
+
+    try:
+        result = await asyncio.to_thread(_sso_poll_sync, session)
+    except Exception as e:
+        logger.error("SSO login poll failed: %s", e)
+        return {"status": "error", "message": str(e)}
+
+    if result.get("status") == "success":
+        real_name = result.get("real_name")
+        student_id = result.get("student_id")
+
+        # Try to find a user with this student_id
+        db_user = None
+        if student_id:
+            db_user = (
+                await db.execute(select(User).where(User.student_id == student_id))
+            ).scalar_one_or_none()
+
+        if db_user:
+            # Found a bound user → issue JWT
+            if db_user.is_banned:
+                return {"status": "error", "message": "账号已被封禁"}
+
+            jwt_token = create_jwt(sub=db_user.id, extra={"provider": "ustb_sso"})
+
+            # Cache result
+            session["login_status"] = "success"
+            session["access_token"] = jwt_token
+
+            # Close httpx client
+            client = session.get("httpx_client")
+            if client:
+                try:
+                    client.close()
+                except Exception:
+                    pass
+
+            return {
+                "status": "success",
+                "access_token": jwt_token,
+            }
+        else:
+            # No bound user found → store pending info
+            from app.routers.oauth_login import _pending_oauth
+            import secrets as _secrets
+
+            oauth_token = _secrets.token_urlsafe(32)
+            _pending_oauth[oauth_token] = {
+                "provider": "ustb_sso",
+                "created_at": time.time(),
+                "expires_at": time.time() + 600,
+                "real_name": real_name or "",
+                "student_id": student_id or "",
+            }
+
+            # Cache result
+            session["login_status"] = "unregistered"
+            session["oauth_token"] = oauth_token
+            session["real_name"] = real_name
+            session["student_id"] = student_id
+
+            # Close httpx client
+            client = session.get("httpx_client")
+            if client:
+                try:
+                    client.close()
+                except Exception:
+                    pass
+
+            return {
+                "status": "unregistered",
+                "oauth_token": oauth_token,
+                "real_name": real_name,
+                "student_id": student_id,
+            }
+
+    elif result.get("status") == "expired":
+        client = session.get("httpx_client")
+        if client:
+            try:
+                client.close()
+            except Exception:
+                pass
+        del _ustb_sso_login_sessions[session_id]
+
+    return result
