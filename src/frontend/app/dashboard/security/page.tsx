@@ -56,16 +56,21 @@ function SecurityPageInner() {
   useEffect(() => {
     const githubBind = searchParams.get('github_bind');
     if (githubBind === 'success') {
-      setGithubBindMsg({ ok: true, text: 'GitHub 账号绑定成功' });
-      hydrate();
-      // Clean URL
-      router.replace('/dashboard/security', { scroll: false });
+      // 刷新用户数据，确保拿到最新的 github_id / github_name
+      hydrate().then(() => {
+        setGithubBindMsg({ ok: true, text: 'GitHub 账号绑定成功' });
+        // 清理 URL 参数
+        router.replace('/dashboard/security', { scroll: false });
+        // 5 秒后自动清除消息
+        setTimeout(() => setGithubBindMsg(null), 5000);
+      });
     } else if (githubBind === 'error') {
       const msg = searchParams.get('msg') === 'already_bound'
         ? '该 GitHub 账号已被其他用户绑定'
         : 'GitHub 账号绑定失败';
       setGithubBindMsg({ ok: false, text: msg });
       router.replace('/dashboard/security', { scroll: false });
+      setTimeout(() => setGithubBindMsg(null), 5000);
     }
   }, [searchParams, hydrate, router]);
 
@@ -207,7 +212,7 @@ function SecurityPageInner() {
   }
 
   const isSsoBound = !!(user?.real_name && user?.student_id);
-  const isGithubBound = !!user?.github_id;
+  const isGithubBound = !!(user?.github_id);  // github_id 是字符串，如 "12345678"
 
   // --- GitHub binding ---
 

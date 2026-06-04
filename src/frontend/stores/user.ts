@@ -32,7 +32,6 @@ export const useUserStore = create<State>((set, get) => ({
   loading: false,
   loaded: false,
   hydrate: async () => {
-    if (get().loading) return;
     if (typeof window === 'undefined') return;
     const token = localStorage.getItem('vustb_token');
     if (!token) {

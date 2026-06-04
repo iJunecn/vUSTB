@@ -381,15 +381,20 @@ async def _handle_github_callback(
     if purpose == "bind":
         user_id = stored.get("user_id")
         if not user_id:
+            logger.warning("GitHub bind: no user_id in state")
             return RedirectResponse(url=f"{frontend_url}/dashboard/security?github_bind=error")
 
         db_user = (
             await db.execute(select(User).where(User.id == user_id))
         ).scalar_one_or_none()
         if not db_user:
+            logger.warning("GitHub bind: user %s not found in DB", user_id)
             return RedirectResponse(url=f"{frontend_url}/dashboard/security?github_bind=error")
 
         github_id = info["provider_uid"]
+        github_name = info.get("username", "")
+        logger.info("GitHub bind: user_id=%s, github_id=%s, github_name=%s", user_id, github_id, github_name)
+
         existing_bound = (
             await db.execute(select(User).where(User.github_id == github_id))
         ).scalar_one_or_none()
@@ -399,8 +404,11 @@ async def _handle_github_callback(
             )
 
         db_user.github_id = github_id
-        db_user.github_name = info.get("username", "")
+        db_user.github_name = github_name
         await db.commit()
+        # 验证写入
+        await db.refresh(db_user)
+        logger.info("GitHub bind committed: github_id=%s, github_name=%s", db_user.github_id, db_user.github_name)
 
         return RedirectResponse(url=f"{frontend_url}/dashboard/security?github_bind=success")
 

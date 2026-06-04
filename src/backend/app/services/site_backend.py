@@ -317,6 +317,8 @@ class SiteBackend:
             "phone": getattr(user, "phone", None),
             "real_name": getattr(user, "real_name", None),
             "student_id": getattr(user, "student_id", None),
+            "github_id": getattr(user, "github_id", None),
+            "github_name": getattr(user, "github_name", None),
             "avatar_hash": getattr(user, "avatar_hash", None),
             "avatar_url": self._avatar_url_from_hash(getattr(user, "avatar_hash", None)),
             "is_admin": bool(is_admin_group(user_group)),
