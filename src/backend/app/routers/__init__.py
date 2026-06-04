@@ -11,7 +11,7 @@ def register_routers(app: FastAPI) -> None:
         mc_servers, files, textures, admin,
         public, camera_presets, oauth_login,
         site_routes, microsoft, print_booking, article,
-        csl, remote_ygg, points,
+        csl, remote_ygg, points, ustb_sso,
     )
 
     app.include_router(site_auth.router)
@@ -33,6 +33,7 @@ def register_routers(app: FastAPI) -> None:
     app.include_router(print_booking.router)
     app.include_router(remote_ygg.router)
     app.include_router(points.router)
+    app.include_router(ustb_sso.router)
 
     # 动态 / 文章发布系统
     app.include_router(article.public_router)

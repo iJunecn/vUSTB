@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { api } from '@/lib/api';
 import { useUserStore } from '@/stores/user';
-import { Loader2, Lock, User as UserIcon, Mail, Phone, IdCard, BadgeCheck } from 'lucide-react';
+import { Loader2, Lock, User as UserIcon, Mail, Phone, Shield, QrCode, Unlink, Check, X } from 'lucide-react';
 
 type Msg = { ok: boolean; text: string };
 
@@ -14,8 +14,6 @@ export default function SecurityPage() {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [realName, setRealName] = useState('');
-  const [studentId, setStudentId] = useState('');
   const [savingInfo, setSavingInfo] = useState(false);
   const [infoMsg, setInfoMsg] = useState<Msg | null>(null);
 
@@ -26,13 +24,21 @@ export default function SecurityPage() {
   const [savingPwd, setSavingPwd] = useState(false);
   const [pwdMsg, setPwdMsg] = useState<Msg | null>(null);
 
+  // USTB SSO binding
+  const [showQrModal, setShowQrModal] = useState(false);
+  const [qrUrl, setQrUrl] = useState('');
+  const [ssoSessionId, setSsoSessionId] = useState('');
+  const [ssoLoading, setSsoLoading] = useState(false);
+  const [ssoPolling, setSsoPolling] = useState(false);
+  const [ssoStatus, setSsoStatus] = useState<'waiting' | 'success' | 'expired' | 'error'>('waiting');
+  const [ssoError, setSsoError] = useState('');
+  const [unbinding, setUnbinding] = useState(false);
+
   useEffect(() => {
     if (user) {
       setUsername(user.username || '');
       setEmail(user.email || '');
       setPhone(user.phone || '');
-      setRealName(user.real_name || '');
-      setStudentId(user.student_id || '');
     }
   }, [user]);
 
@@ -53,8 +59,6 @@ export default function SecurityPage() {
         username: username.trim(),
         email: email.trim(),
         phone: phone.trim(),
-        real_name: realName.trim() || null,
-        student_id: studentId.trim() || null,
       });
       setInfoMsg({ ok: true, text: '账号信息已更新' });
       await hydrate();
@@ -88,6 +92,83 @@ export default function SecurityPage() {
       setSavingPwd(false);
     }
   }
+
+  // --- USTB SSO binding ---
+
+  async function startSsoBind() {
+    setSsoLoading(true);
+    setSsoError('');
+    setSsoStatus('waiting');
+    try {
+      const res = await api.post('/ustb-sso/init');
+      setQrUrl(res.data.qr_url);
+      setSsoSessionId(res.data.session_id);
+      setShowQrModal(true);
+      setSsoPolling(true);
+    } catch (err: any) {
+      setSsoError(err?.response?.data?.detail || '初始化认证失败');
+    } finally {
+      setSsoLoading(false);
+    }
+  }
+
+  // Polling effect
+  useEffect(() => {
+    if (!ssoPolling || !ssoSessionId) return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await api.get('/ustb-sso/poll', { params: { session_id: ssoSessionId } });
+        const status = res.data.status;
+        if (status === 'success') {
+          setSsoStatus('success');
+          setSsoPolling(false);
+          await hydrate();
+          // Close modal after a short delay
+          setTimeout(() => {
+            setShowQrModal(false);
+            setSsoSessionId('');
+          }, 1500);
+        } else if (status === 'expired') {
+          setSsoStatus('expired');
+          setSsoPolling(false);
+        } else if (status === 'error') {
+          setSsoStatus('error');
+          setSsoError(res.data.message || '认证失败');
+          setSsoPolling(false);
+        }
+        // 'waiting' → continue polling
+      } catch (err: any) {
+        if (err?.response?.status === 410) {
+          setSsoStatus('expired');
+          setSsoPolling(false);
+        }
+      }
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [ssoPolling, ssoSessionId, hydrate]);
+
+  const closeQrModal = useCallback(() => {
+    setShowQrModal(false);
+    setSsoPolling(false);
+    setSsoSessionId('');
+    setQrUrl('');
+    setSsoStatus('waiting');
+    setSsoError('');
+  }, []);
+
+  async function unbindSso() {
+    setUnbinding(true);
+    try {
+      await api.post('/ustb-sso/unbind');
+      await hydrate();
+    } catch (err: any) {
+      // Silently fail — user can try again
+    } finally {
+      setUnbinding(false);
+    }
+  }
+
+  const isSsoBound = !!(user?.real_name && user?.student_id);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 640 }}>
@@ -143,34 +224,6 @@ export default function SecurityPage() {
           </Field>
         </div>
 
-        <div style={{ height: 1, background: 'var(--color-border)', margin: '4px 0' }} />
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <BadgeCheck style={{ width: 18, height: 18, color: 'var(--color-text-light)' }} />
-          <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-heading)', margin: 0 }}>备选信息（选填）</h3>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
-          <Field icon={<IdCard className="w-4 h-4" />} label="姓名">
-            <input
-              value={realName}
-              onChange={(e) => setRealName(e.target.value)}
-              className="input"
-              maxLength={64}
-              placeholder="如：张三"
-            />
-          </Field>
-          <Field icon={<IdCard className="w-4 h-4" />} label="学工号">
-            <input
-              value={studentId}
-              onChange={(e) => setStudentId(e.target.value)}
-              className="input"
-              maxLength={32}
-              placeholder="如：U202412345"
-            />
-          </Field>
-        </div>
-
         {infoMsg && (
           <p style={{ fontSize: 13, color: infoMsg.ok ? 'var(--color-primary)' : '#dc2626', margin: 0 }}>
             {infoMsg.text}
@@ -183,6 +236,75 @@ export default function SecurityPage() {
           </button>
         </div>
       </form>
+
+      {/* Account binding */}
+      <div className="surface-card" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <Shield style={{ width: 20, height: 20, color: 'var(--color-primary)' }} />
+          <h2 style={{ fontSize: 16, fontWeight: 600, color: 'var(--color-heading)', margin: 0 }}>账号绑定</h2>
+        </div>
+
+        {/* USTB SSO binding item */}
+        <div
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '16px 20px', borderRadius: 10,
+            border: '1px solid var(--color-border)',
+            background: 'var(--color-background-soft)',
+            gap: 16, flexWrap: 'wrap',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+            <div
+              style={{
+                width: 40, height: 40, borderRadius: 8, flexShrink: 0,
+                background: 'color-mix(in srgb, var(--color-primary) 10%, transparent)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 18, fontWeight: 700, color: 'var(--color-primary)',
+              }}
+            >
+              U
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-heading)', margin: 0 }}>
+                北京科技大学统一验证登录
+              </p>
+              {isSsoBound ? (
+                <p style={{ fontSize: 13, color: 'var(--color-text-light)', margin: '4px 0 0' }}>
+                  <Check style={{ width: 13, height: 13, display: 'inline', verticalAlign: '-2px', color: '#22c55e' }} />
+                  {' '}{user.real_name}（{user.student_id}）
+                </p>
+              ) : (
+                <p style={{ fontSize: 13, color: 'var(--color-text-light)', margin: '4px 0 0' }}>
+                  微信扫码绑定，可自动获取姓名和学号
+                </p>
+              )}
+            </div>
+          </div>
+
+          {isSsoBound ? (
+            <button
+              onClick={unbindSso}
+              disabled={unbinding}
+              className="btn-ghost"
+              style={{ padding: '6px 14px', fontSize: 13, color: '#dc2626', borderColor: 'color-mix(in srgb, #dc2626 30%, transparent)' }}
+            >
+              {unbinding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Unlink style={{ width: 14, height: 14 }} />}
+              解绑
+            </button>
+          ) : (
+            <button
+              onClick={startSsoBind}
+              disabled={ssoLoading}
+              className="btn-primary"
+              style={{ padding: '6px 14px', fontSize: 13 }}
+            >
+              {ssoLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <QrCode style={{ width: 14, height: 14 }} />}
+              绑定
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* Password form */}
       <form onSubmit={changePassword} className="surface-card" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -239,6 +361,124 @@ export default function SecurityPage() {
           </button>
         </div>
       </form>
+
+      {/* QR Code Modal */}
+      {showQrModal && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)',
+          }}
+          onClick={closeQrModal}
+        >
+          <div
+            className="surface-card"
+            style={{ width: '90%', maxWidth: 400, padding: 24, textAlign: 'center' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <h3 style={{ fontSize: 18, fontWeight: 600, color: 'var(--color-heading)', margin: 0 }}>
+                绑定北科大统一验证
+              </h3>
+              <button
+                onClick={closeQrModal}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  color: 'var(--color-text-light)', padding: 4,
+                }}
+              >
+                <X style={{ width: 18, height: 18 }} />
+              </button>
+            </div>
+
+            <p style={{ fontSize: 14, color: 'var(--color-text-light)', marginBottom: 20 }}>
+              请使用微信扫描下方二维码完成认证
+            </p>
+
+            {ssoStatus === 'waiting' && qrUrl && (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={qrUrl}
+                  alt="USTB SSO QR Code"
+                  style={{
+                    width: 200, height: 200, borderRadius: 12,
+                    border: '1px solid var(--color-border)',
+                    background: '#fff',
+                  }}
+                />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--color-text-light)' }}>
+                  {ssoPolling && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {ssoPolling ? '等待扫码中...' : '加载中...'}
+                </div>
+              </div>
+            )}
+
+            {ssoStatus === 'success' && (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+                <div
+                  style={{
+                    width: 56, height: 56, borderRadius: '50%',
+                    background: 'color-mix(in srgb, #22c55e 15%, transparent)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}
+                >
+                  <Check style={{ width: 28, height: 28, color: '#22c55e' }} />
+                </div>
+                <p style={{ fontSize: 16, fontWeight: 600, color: 'var(--color-heading)', margin: 0 }}>
+                  绑定成功
+                </p>
+                <p style={{ fontSize: 13, color: 'var(--color-text-light)', margin: 0 }}>
+                  已获取您的姓名和学号
+                </p>
+              </div>
+            )}
+
+            {ssoStatus === 'expired' && (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+                <p style={{ fontSize: 14, color: '#ef4444', margin: 0 }}>
+                  二维码已过期，请重新获取
+                </p>
+                <button
+                  onClick={() => {
+                    closeQrModal();
+                    startSsoBind();
+                  }}
+                  className="btn-primary"
+                  style={{ padding: '8px 16px', fontSize: 13 }}
+                >
+                  重新获取
+                </button>
+              </div>
+            )}
+
+            {ssoStatus === 'error' && (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+                <p style={{ fontSize: 14, color: '#ef4444', margin: 0 }}>
+                  {ssoError || '认证失败，请重试'}
+                </p>
+                <button
+                  onClick={() => {
+                    closeQrModal();
+                    startSsoBind();
+                  }}
+                  className="btn-primary"
+                  style={{ padding: '8px 16px', fontSize: 13 }}
+                >
+                  重新获取
+                </button>
+              </div>
+            )}
+
+            {ssoError && ssoStatus === 'waiting' && (
+              <p style={{ fontSize: 13, color: '#ef4444', marginTop: 12 }}>
+                {ssoError}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
