@@ -14,12 +14,11 @@ import html
 import logging
 import secrets
 import time
-from datetime import datetime, timezone
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
-from fastapi.responses import RedirectResponse, Response
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,7 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.database import get_db
 from app.deps import get_current_user
-from app.models import User, UserGroup
+from app.models import User
 from app.services.auth import create_jwt
 
 logger = logging.getLogger(__name__)
@@ -326,13 +325,7 @@ async def oauth_login(
 # ---------------------------------------------------------------------------
 
 
-@router.get("")
-async def oauth_redirect_empty():
-    """Catch /api/auth/oauth without provider — return error."""
-    raise HTTPException(status_code=400, detail="Missing provider in URL")
-
-
-# This route is mounted without the /api/auth/oauth prefix (see below)
+# _handle_github_callback is called from the /oauth/redirect endpoint
 async def _handle_github_callback(
     code: str | None,
     state: str | None,
