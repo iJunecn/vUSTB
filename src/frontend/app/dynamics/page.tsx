@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
-import { Calendar, Eye, Pin, Search, ArrowRight } from 'lucide-react';
+import { Calendar, Eye, Pin, Search, ArrowRight, Rss } from 'lucide-react';
 
 type Category = {
   id: number;
@@ -71,9 +71,34 @@ export default function DynamicsPage() {
         {/* Header */}
         <div style={{ marginBottom: 32 }}>
           <p className="section-kicker" style={{ marginBottom: 8 }}>DYNAMICS</p>
-          <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--color-heading)', margin: 0 }}>
-            动态
-          </h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--color-heading)', margin: 0 }}>
+              动态
+            </h1>
+            <a
+              href="/api/articles/rss"
+              target="_blank"
+              rel="noreferrer"
+              title="RSS 订阅"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                padding: '4px 10px',
+                borderRadius: 6,
+                fontSize: 12,
+                fontWeight: 500,
+                background: 'color-mix(in srgb, var(--color-primary) 10%, transparent)',
+                color: 'var(--color-primary)',
+                border: '1px solid color-mix(in srgb, var(--color-primary) 20%, transparent)',
+                textDecoration: 'none',
+                transition: 'background 0.2s',
+              }}
+            >
+              <Rss style={{ width: 14, height: 14 }} />
+              RSS
+            </a>
+          </div>
           <p style={{ fontSize: 14, color: 'var(--color-text-light)', marginTop: 8 }}>
             像素北科团队发布的最新动态与文章
           </p>

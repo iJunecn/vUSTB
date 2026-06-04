@@ -1,6 +1,6 @@
 """动态 / 文章发布系统 API。
 
-公开路由：文章列表、文章详情、分类列表
+公开路由：文章列表、文章详情、分类列表、RSS 订阅源
 管理员路由：文章 CRUD、分类 CRUD、媒体上传
 """
 from __future__ import annotations
@@ -9,8 +9,10 @@ import os
 import uuid
 from datetime import datetime, timezone
 from typing import Any
+from xml.sax.saxutils import escape as xml_escape
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Query
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func, desc, asc
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,7 +21,7 @@ from sqlalchemy.orm import selectinload
 from app.config import settings
 from app.database import get_db
 from app.deps import get_current_admin, get_current_user
-from app.models import User
+from app.models import User, SiteSetting
 from app.models.article import Article, ArticleCategory, ArticleMedia
 
 # ========== 公开路由 ==========
@@ -193,6 +195,112 @@ async def count_articles(db: AsyncSession = Depends(get_db)):
         select(func.count(Article.id)).where(Article.created_at <= datetime.now(timezone.utc))
     )).scalar() or 0
     return {"count": cnt}
+
+
+@public_router.get("/rss", response_class=Response)
+async def rss_feed(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """公开：RSS 2.0 订阅源，返回最近 20 篇已发布文章。"""
+    # 解析站点 URL（与 Yggdrasil/OAuth 同样的 3 级推断逻辑）
+    _DEFAULT = "http://localhost"
+    base_url = _DEFAULT
+    # 1. 数据库 public_url
+    row = (await db.execute(
+        select(SiteSetting).where(SiteSetting.key == "public_url")
+    )).scalar_one_or_none()
+    if row and row.value:
+        url = str(row.value).rstrip("/")
+        if url and url != _DEFAULT:
+            base_url = url
+        else:
+            base_url = _DEFAULT
+    # 2. SITE_URL 环境变量
+    if base_url == _DEFAULT:
+        configured = (settings.site_url or "").rstrip("/")
+        if configured and configured != _DEFAULT:
+            base_url = configured
+    # 3. 请求头推断
+    if base_url == _DEFAULT:
+        proto = (request.headers.get("x-forwarded-proto") or
+                 request.headers.get("x-forwarded-scheme") or
+                 request.url.scheme)
+        host = (request.headers.get("x-forwarded-host") or
+                request.headers.get("host"))
+        if not host and request.url.hostname:
+            host = request.url.hostname
+            if request.url.port and request.url.port not in (80, 443):
+                host = f"{host}:{request.url.port}"
+        if host:
+            base_url = f"{proto}://{host}"
+
+    # 站点名称
+    site_name_row = (await db.execute(
+        select(SiteSetting).where(SiteSetting.key == "site_name")
+    )).scalar_one_or_none()
+    site_name = site_name_row.value if site_name_row else settings.site_name
+
+    # 查询最近 20 篇已发布文章
+    q = (
+        select(Article)
+        .options(selectinload(Article.category))
+        .where(Article.created_at <= datetime.now(timezone.utc))
+        .order_by(Article.is_pinned.desc(), Article.pin_order.asc(), Article.created_at.desc())
+        .limit(20)
+    )
+    rows = (await db.execute(q)).scalars().all()
+
+    def _rfc822(dt: datetime | None) -> str:
+        """datetime → RFC 822 格式（RSS pubDate 要求）。"""
+        if not dt:
+            return ""
+        from email.utils import formatdate
+        from time import mktime
+        return formatdate(timeval=mktime(dt.timetuple()), localtime=False, usegmt=True)
+
+    def _article_link(a: Article) -> str:
+        slug = a.seo_slug or str(a.id)
+        return f"{base_url}/dynamics/{slug}"
+
+    # 构建 RSS XML
+    items_xml = ""
+    for a in rows:
+        link = _article_link(a)
+        title = xml_escape(a.title)
+        description = xml_escape(a.summary or "")
+        pub_date = _rfc822(a.created_at)
+        guid = f"{base_url}/dynamics/{a.id}"
+        category_xml = ""
+        if a.category:
+            category_xml = f"    <category>{xml_escape(a.category.name)}</category>\n"
+
+        items_xml += f"""    <item>
+      <title>{title}</title>
+      <link>{link}</link>
+      <description>{description}</description>
+      <guid>{guid}</guid>
+      <pubDate>{pub_date}</pubDate>
+{category_xml}    </item>
+"""
+
+    rss_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>{xml_escape(site_name)}</title>
+    <link>{base_url}/dynamics</link>
+    <description>{xml_escape(site_name)} 动态 RSS 订阅源</description>
+    <language>zh-CN</language>
+    <atom:link href="{base_url}/api/articles/rss" rel="self" type="application/rss+xml" />
+    <lastBuildDate>{_rfc822(datetime.now(timezone.utc))}</lastBuildDate>
+{items_xml}  </channel>
+</rss>"""
+
+    return Response(
+        content=rss_xml,
+        media_type="application/rss+xml; charset=utf-8",
+        headers={"Cache-Control": "public, max-age=300"},
+    )
 
 
 @public_router.get("/{article_id}", response_model=ArticleDetailOut)

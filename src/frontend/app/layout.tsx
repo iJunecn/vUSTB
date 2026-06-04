@@ -19,6 +19,11 @@ export const metadata: Metadata = {
     shortcut: '/img/logo.webp',
     apple: '/img/logo.webp',
   },
+  alternates: {
+    types: {
+      'application/rss+xml': '/api/articles/rss',
+    },
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
