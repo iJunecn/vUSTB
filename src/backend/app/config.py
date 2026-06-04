@@ -33,8 +33,8 @@ class Settings(BaseSettings):
     )
 
     site_name: str = "像素北科"
-    site_url: str = "http://localhost"
-    api_url: str = "http://localhost/skinapi"
+    site_url: str = "https://www.ustb.world"
+    api_url: str = "https://www.ustb.world/skinapi"
     environment: str = "development"
 
     database_url: str = "postgresql+asyncpg://vustb:vustb@postgres:5432/vustb"
