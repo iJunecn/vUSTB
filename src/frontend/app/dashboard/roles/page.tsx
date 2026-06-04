@@ -1,8 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { rawApi } from '@/lib/api';
+import { toast } from 'sonner';
+import { ConfirmDialog, ConfirmOptions } from '@/components/ui/confirm-dialog';
 import { Loader2, Plus, Trash2, Shirt, X, Link2, Check, Globe, Coins } from 'lucide-react';
 import { SkinViewer } from '@/components/skin/SkinViewer';
 import { SkinAvatar } from '@/components/skin/SkinAvatar';
@@ -52,6 +54,21 @@ export default function RolesPage() {
   const [remoteProfiles, setRemoteProfiles] = useState<Array<{id: string; name: string}>>([]);
   const [remoteLoading, setRemoteLoading] = useState(false);
   const [remoteImporting, setRemoteImporting] = useState(false);
+
+  // Confirm dialog state
+  const [confirmState, setConfirmState] = useState<{ open: boolean; options: ConfirmOptions; onConfirm: () => void }>({
+    open: false, options: { message: '' }, onConfirm: () => {},
+  });
+
+  const showConfirm = useCallback((options: ConfirmOptions): Promise<boolean> => {
+    return new Promise((resolve) => {
+      setConfirmState({
+        open: true,
+        options,
+        onConfirm: () => { setConfirmState((s) => ({ ...s, open: false })); resolve(true); },
+      });
+    });
+  }, []);
 
   async function refresh() {
     setLoading(true);
@@ -144,21 +161,54 @@ export default function RolesPage() {
   }
 
   async function removePlayer(id: number) {
-    if (!confirm('删除该角色？皮肤绑定将被清除。')) return;
-    await rawApi.delete(`/api/players/${id}`);
-    await refresh();
+    const ok = await showConfirm({
+      title: '删除角色',
+      message: '删除该角色？皮肤绑定将被清除。',
+      confirmText: '删除',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await rawApi.delete(`/api/players/${id}`);
+      toast.success('角色已删除');
+      await refresh();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || '删除失败');
+    }
   }
 
   async function clearSkin(playerId: number) {
-    if (!confirm('确定要清除该角色的皮肤吗？')) return;
-    await rawApi.post(`/api/players/${playerId}/bind`, { clear_skin: true });
-    await refresh();
+    const ok = await showConfirm({
+      title: '清除皮肤',
+      message: '确定要清除该角色的皮肤吗？',
+      confirmText: '清除',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await rawApi.post(`/api/players/${playerId}/bind`, { clear_skin: true });
+      toast.success('皮肤已清除');
+      await refresh();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || '清除失败');
+    }
   }
 
   async function clearCape(playerId: number) {
-    if (!confirm('确定要清除该角色的披风吗？')) return;
-    await rawApi.post(`/api/players/${playerId}/bind`, { clear_cape: true });
-    await refresh();
+    const ok = await showConfirm({
+      title: '清除披风',
+      message: '确定要清除该角色的披风吗？',
+      confirmText: '清除',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await rawApi.post(`/api/players/${playerId}/bind`, { clear_cape: true });
+      toast.success('披风已清除');
+      await refresh();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || '清除失败');
+    }
   }
 
   async function startMicrosoftAuth() {
@@ -609,6 +659,14 @@ export default function RolesPage() {
           </div>
         </div>
       )}
+
+      {/* Confirm Dialog */}
+      <ConfirmDialog
+        open={confirmState.open}
+        onConfirm={confirmState.onConfirm}
+        onCancel={() => setConfirmState((s) => ({ ...s, open: false }))}
+        {...confirmState.options}
+      />
     </div>
   );
 }

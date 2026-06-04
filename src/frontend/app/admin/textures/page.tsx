@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { api } from '@/lib/api';
+import { toast } from 'sonner';
+import { ConfirmDialog, ConfirmOptions } from '@/components/ui/confirm-dialog';
 import { SkinPreview } from '@/components/skin/SkinViewer';
 import { CapeViewer } from '@/components/skin/CapeViewer';
 import { Loader2, Search, Image, RefreshCw, Edit3, Trash2, X, Eye, EyeOff } from 'lucide-react';
@@ -28,6 +30,21 @@ export default function AdminTexturesPage() {
   // Preview dialog
   const [previewItem, setPreviewItem] = useState<AdminTexture | null>(null);
   const [editNote, setEditNote] = useState('');
+
+  // Confirm dialog state
+  const [confirmState, setConfirmState] = useState<{ open: boolean; options: ConfirmOptions; onConfirm: () => void }>({
+    open: false, options: { message: '' }, onConfirm: () => {},
+  });
+
+  const showConfirm = useCallback((options: ConfirmOptions): Promise<boolean> => {
+    return new Promise((resolve) => {
+      setConfirmState({
+        open: true,
+        options,
+        onConfirm: () => { setConfirmState((s) => ({ ...s, open: false })); resolve(true); },
+      });
+    });
+  }, []);
 
   const fetchTextures = useCallback(async () => {
     setLoading(true);
@@ -69,7 +86,7 @@ export default function AdminTexturesPage() {
       previewItem.name = newName;
       fetchTextures();
     } catch (err: any) {
-      alert(err?.response?.data?.detail || '更新名称失败');
+      toast.error(err?.response?.data?.detail || '更新名称失败');
     }
   }
 
@@ -80,32 +97,48 @@ export default function AdminTexturesPage() {
       previewItem.model = newModel;
       fetchTextures();
     } catch (err: any) {
-      alert(err?.response?.data?.detail || '更新模型失败');
+      toast.error(err?.response?.data?.detail || '更新模型失败');
     }
   }
 
   async function updateIsPublic(newValue: boolean) {
     if (!previewItem) return;
     if (previewItem.is_public === newValue) return;
-    if (!newValue && !confirm('取消公开后，该材质将不会出现在公共皮肤库中。确定取消公开？')) return;
+    if (!newValue) {
+      const ok = await showConfirm({
+        title: '取消公开',
+        message: '取消公开后，该材质将不会出现在公共皮肤库中。确定取消公开？',
+        confirmText: '确定',
+        danger: true,
+      });
+      if (!ok) return;
+    }
     try {
       await api.patch(`/admin/textures/${previewItem.hash}`, { is_public: newValue });
       previewItem.is_public = newValue;
       fetchTextures();
+      toast.success(newValue ? '已设为公开' : '已取消公开');
     } catch (err: any) {
-      alert(err?.response?.data?.detail || '操作失败');
+      toast.error(err?.response?.data?.detail || '操作失败');
     }
   }
 
   async function forceDelete() {
     if (!previewItem) return;
-    if (!confirm('强制下架将从所有用户的衣柜中移除该材质，并从皮肤库中彻底删除。此操作不可撤销！确定继续？')) return;
+    const ok = await showConfirm({
+      title: '强制下架',
+      message: '强制下架将从所有用户的衣柜中移除该材质，并从皮肤库中彻底删除。此操作不可撤销！',
+      confirmText: '强制下架',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await api.delete(`/admin/textures/${previewItem.hash}`, { params: { force: true, type: previewItem.type } });
       setPreviewItem(null);
+      toast.success('材质已下架');
       fetchTextures();
     } catch (err: any) {
-      alert(err?.response?.data?.detail || '删除失败');
+      toast.error(err?.response?.data?.detail || '删除失败');
     }
   }
 
@@ -331,6 +364,14 @@ export default function AdminTexturesPage() {
           </div>
         </div>
       )}
+
+      {/* Confirm Dialog */}
+      <ConfirmDialog
+        open={confirmState.open}
+        onConfirm={confirmState.onConfirm}
+        onCancel={() => setConfirmState((s) => ({ ...s, open: false }))}
+        {...confirmState.options}
+      />
     </div>
   );
 }

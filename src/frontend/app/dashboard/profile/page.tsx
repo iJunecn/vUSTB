@@ -3,6 +3,7 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { useUserStore } from '@/stores/user';
 import { rawApi } from '@/lib/api';
+import { toast } from 'sonner';
 import { Upload, Loader2, UserCircle, ShieldAlert, Check, Trash2 } from 'lucide-react';
 import { SkinAvatar } from '@/components/skin/SkinAvatar';
 
@@ -105,7 +106,7 @@ export default function ProfilePage() {
       localStorage.removeItem('vustb_token');
       window.location.href = '/';
     } catch (err: any) {
-      alert(err?.response?.data?.detail || '注销失败');
+      toast.error(err?.response?.data?.detail || '注销失败');
     } finally {
       setDeleting(false);
     }
@@ -118,7 +119,7 @@ export default function ProfilePage() {
       await hydrate();
       setShowAvatarPicker(false);
     } catch (err: any) {
-      alert(err?.response?.data?.detail || '设置头像失败');
+      toast.error(err?.response?.data?.detail || '设置头像失败');
     } finally {
       setSettingAvatar(false);
     }

@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUserStore } from '@/stores/user';
 import { rawApi } from '@/lib/api';
+import { toast } from 'sonner';
+import { ConfirmDialog, ConfirmOptions } from '@/components/ui/confirm-dialog';
 import {
   Printer, CalendarCheck, CheckCircle2, XCircle, Clock, Play,
   FileDown, Trash2, PauseCircle, PlayCircle, Loader2, Plus, Users,
@@ -104,6 +106,21 @@ export default function AdminPrintPage() {
   const [reportFrom, setReportFrom] = useState('');
   const [reportTo, setReportTo] = useState('');
 
+  // Confirm dialog state
+  const [confirmState, setConfirmState] = useState<{ open: boolean; options: ConfirmOptions; onConfirm: () => void }>({
+    open: false, options: { message: '' }, onConfirm: () => {},
+  });
+
+  const showConfirm = useCallback((options: ConfirmOptions): Promise<boolean> => {
+    return new Promise((resolve) => {
+      setConfirmState({
+        open: true,
+        options,
+        onConfirm: () => { setConfirmState((s) => ({ ...s, open: false })); resolve(true); },
+      });
+    });
+  }, []);
+
   useEffect(() => { hydrate(); }, [hydrate]);
 
   useEffect(() => {
@@ -145,7 +162,7 @@ export default function AdminPrintPage() {
       else if (action === 'complete') await rawApi.post(`/api/print/bookings/${id}/complete`);
       loadData();
     } catch (err: any) {
-      alert(err?.response?.data?.detail || '操作失败');
+      toast.error(err?.response?.data?.detail || '操作失败');
     }
   };
 
@@ -159,9 +176,10 @@ export default function AdminPrintPage() {
       });
       setPrinterForm({ name: '', location: '', model: '' });
       setShowPrinterForm(false);
+      toast.success('打印机已创建');
       loadData();
     } catch (err: any) {
-      alert(err?.response?.data?.detail || '创建失败');
+      toast.error(err?.response?.data?.detail || '创建失败');
     }
   };
 
@@ -170,22 +188,29 @@ export default function AdminPrintPage() {
       await rawApi.put(`/api/print/printers/${p.id}`, { is_paused: !p.is_paused });
       loadData();
     } catch (err: any) {
-      alert(err?.response?.data?.detail || '操作失败');
+      toast.error(err?.response?.data?.detail || '操作失败');
     }
   };
 
   const handleDeletePrinter = async (id: number) => {
-    if (!confirm('确认删除此打印机？')) return;
+    const ok = await showConfirm({
+      title: '删除打印机',
+      message: '确认删除此打印机？',
+      confirmText: '删除',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await rawApi.delete(`/api/print/printers/${id}`);
+      toast.success('打印机已删除');
       loadData();
     } catch (err: any) {
-      alert(err?.response?.data?.detail || '删除失败');
+      toast.error(err?.response?.data?.detail || '删除失败');
     }
   };
 
   const handleExport = async () => {
-    if (!reportFrom || !reportTo) { alert('请选择日期范围'); return; }
+    if (!reportFrom || !reportTo) { toast.warning('请选择日期范围'); return; }
     try {
       const r = await rawApi.get('/api/print/admin/reports/export', {
         params: { date_from: reportFrom, date_to: reportTo },
@@ -198,7 +223,7 @@ export default function AdminPrintPage() {
       a.click();
       URL.revokeObjectURL(url);
     } catch (err: any) {
-      alert('导出失败');
+      toast.error('导出失败');
     }
   };
 
@@ -207,26 +232,34 @@ export default function AdminPrintPage() {
       await rawApi.post(`/api/admin/users/${userId}/set-group`, { user_group: newGroup });
       loadData();
     } catch (err: any) {
-      alert(err?.response?.data?.detail || '操作失败');
+      toast.error(err?.response?.data?.detail || '操作失败');
     }
   };
 
   const handleGenerateReport = async () => {
     try {
       await rawApi.post('/api/print/admin/reports/generate');
+      toast.success('周报已生成');
       loadData();
     } catch (err: any) {
-      alert(err?.response?.data?.detail || '生成失败');
+      toast.error(err?.response?.data?.detail || '生成失败');
     }
   };
 
   const handleDeleteReport = async (id: number) => {
-    if (!confirm('确认删除此周报记录？')) return;
+    const ok = await showConfirm({
+      title: '删除周报',
+      message: '确认删除此周报记录？',
+      confirmText: '删除',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await rawApi.delete(`/api/print/admin/reports/${id}`);
+      toast.success('周报已删除');
       loadData();
     } catch (err: any) {
-      alert(err?.response?.data?.detail || '删除失败');
+      toast.error(err?.response?.data?.detail || '删除失败');
     }
   };
 
@@ -466,7 +499,7 @@ export default function AdminPrintPage() {
                         </button>
                       )}
                       {user.user_group === 'super_admin' && (
-                        <button onClick={() => { if (confirm('确认删除？')) handleAction('delete', b.id); }} style={smallBtnStyle('#ef4444')}>
+                        <button onClick={() => { showConfirm({ title: '删除预约', message: '确认删除？', confirmText: '删除', danger: true }).then(ok => { if (ok) handleAction('delete', b.id); }); }} style={smallBtnStyle('#ef4444')}>
                           <Trash2 style={{ width: 12, height: 12 }} /> 删除
                         </button>
                       )}
@@ -526,7 +559,7 @@ export default function AdminPrintPage() {
                                 <button
                                   onClick={() => {
                                     const newGroup = u.user_group === 'user' ? 'admin' : 'user';
-                                    if (confirm(`确认将 ${u.username} 设为 ${USER_GROUP_LABELS[newGroup]?.label || newGroup}？`)) {
+                                    if (await showConfirm({ title: '修改用户组', message: `确认将 ${u.username} 设为 ${USER_GROUP_LABELS[newGroup]?.label || newGroup}？`, confirmText: '确定' })) {
                                       handleSetUserGroup(u.id, newGroup);
                                     }
                                   }}
@@ -632,7 +665,7 @@ export default function AdminPrintPage() {
                                   a.download = `print_report_${r.start_date}_to_${r.end_date}.xlsx`;
                                   a.click();
                                   URL.revokeObjectURL(url);
-                                }).catch(() => alert('导出失败'));
+                                }).catch(() => toast.error('导出失败'));
                               }}
                               style={{ fontSize: 11, padding: '3px 8px', borderRadius: 4, border: '1px solid #22c55e', background: 'transparent', color: '#22c55e', cursor: 'pointer', marginRight: 4 }}
                             >
@@ -657,6 +690,14 @@ export default function AdminPrintPage() {
           )}
         </>
       )}
+
+      {/* Confirm Dialog */}
+      <ConfirmDialog
+        open={confirmState.open}
+        onConfirm={confirmState.onConfirm}
+        onCancel={() => setConfirmState((s) => ({ ...s, open: false }))}
+        {...confirmState.options}
+      />
     </div>
   );
 }

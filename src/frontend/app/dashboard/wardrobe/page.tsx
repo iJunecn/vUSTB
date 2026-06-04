@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { rawApi } from '@/lib/api';
+import { toast } from 'sonner';
+import { ConfirmDialog, ConfirmOptions } from '@/components/ui/confirm-dialog';
 import { Loader2, Upload, Trash2, Eye, Pencil, ToggleLeft, ToggleRight, Shirt, UserCircle } from 'lucide-react';
 import { SkinPreview, SkinViewer } from '@/components/skin/SkinViewer';
 import { CapeViewer } from '@/components/skin/CapeViewer';
@@ -47,6 +49,21 @@ export default function WardrobePage() {
   const [isApplying, setIsApplying] = useState(false);
   const [settingAvatar, setSettingAvatar] = useState(false);
 
+  // Confirm dialog state
+  const [confirmState, setConfirmState] = useState<{ open: boolean; options: ConfirmOptions; onConfirm: () => void }>({
+    open: false, options: { message: '' }, onConfirm: () => {},
+  });
+
+  const showConfirm = useCallback((options: ConfirmOptions): Promise<boolean> => {
+    return new Promise((resolve) => {
+      setConfirmState({
+        open: true,
+        options,
+        onConfirm: () => { setConfirmState((s) => ({ ...s, open: false })); resolve(true); },
+      });
+    });
+  }, []);
+
   async function refresh() {
     setLoading(true);
     try {
@@ -79,7 +96,7 @@ export default function WardrobePage() {
       await rawApi.post('/api/me/textures', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       await refresh();
     } catch (err: any) {
-      alert(err?.response?.data?.detail || '上传失败');
+      toast.error(err?.response?.data?.detail || '上传失败');
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = '';
@@ -118,7 +135,7 @@ export default function WardrobePage() {
       ));
       setDetailTex((prev) => prev ? { ...prev, name: editNote.trim() } : prev);
     } catch {
-      alert('更新备注失败');
+      toast.error('更新备注失败');
     }
   }
 
@@ -131,7 +148,7 @@ export default function WardrobePage() {
       ));
       setDetailTex((prev) => prev ? { ...prev, model: editModel } : prev);
     } catch {
-      alert('切换模型失败');
+      toast.error('切换模型失败');
     }
   }
 
@@ -144,14 +161,14 @@ export default function WardrobePage() {
       ));
       setDetailTex((prev) => prev ? { ...prev, is_public: editPublic } : prev);
     } catch {
-      alert('更新公开状态失败');
+      toast.error('更新公开状态失败');
       setEditPublic(!editPublic);
     }
   }
 
   async function doApply() {
     if (!detailTex || !applyPlayerId) {
-      alert('请选择角色');
+      toast.warning('请选择角色');
       return;
     }
     setIsApplying(true);
@@ -160,10 +177,10 @@ export default function WardrobePage() {
         profile_id: applyPlayerId,
         texture_type: detailTex.type,
       });
-      alert('已应用到角色');
+      toast.success('已应用到角色');
       await refresh();
     } catch (err: any) {
-      alert(err?.response?.data?.detail || '应用失败');
+      toast.error(err?.response?.data?.detail || '应用失败');
     } finally {
       setIsApplying(false);
     }
@@ -174,9 +191,9 @@ export default function WardrobePage() {
     setSettingAvatar(true);
     try {
       await rawApi.post('/api/me/avatar/from-texture', { hash: detailTex.hash });
-      alert('头像已更新');
+      toast.success('头像已更新');
     } catch (err: any) {
-      alert(err?.response?.data?.detail || '设置头像失败');
+      toast.error(err?.response?.data?.detail || '设置头像失败');
     } finally {
       setSettingAvatar(false);
     }
@@ -184,14 +201,21 @@ export default function WardrobePage() {
 
   async function confirmDelete() {
     if (!detailTex) return;
-    if (!confirm('确定要从衣柜中删除此纹理吗？此操作不可撤销。')) return;
+    const ok = await showConfirm({
+      title: '删除纹理',
+      message: '确定要从衣柜中删除此纹理吗？此操作不可撤销。',
+      confirmText: '删除',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await rawApi.delete(`/api/me/textures/${detailTex.hash}/${detailTex.type}`);
       setDetailOpen(false);
       setDetailTex(null);
+      toast.success('纹理已删除');
       await refresh();
     } catch {
-      alert('删除失败');
+      toast.error('删除失败');
     }
   }
 
@@ -490,6 +514,14 @@ export default function WardrobePage() {
           </div>
         </div>
       )}
+
+      {/* Confirm Dialog */}
+      <ConfirmDialog
+        open={confirmState.open}
+        onConfirm={confirmState.onConfirm}
+        onCancel={() => setConfirmState((s) => ({ ...s, open: false }))}
+        {...confirmState.options}
+      />
     </div>
   );
 }

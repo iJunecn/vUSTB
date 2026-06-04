@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { rawApi } from '@/lib/api';
+import { toast } from 'sonner';
 import { Loader2, Bookmark, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useUserStore } from '@/stores/user';
 import { SkinPreview } from '@/components/skin/SkinViewer';
@@ -48,14 +49,14 @@ export default function SkinLibraryPage() {
 
   async function collect(hash: string) {
     if (!user) {
-      alert('请先登录');
+      toast.warning('请先登录');
       return;
     }
     try {
       await rawApi.post(`/api/me/textures/${hash}/add`);
-      alert('已加入衣柜');
+      toast.success('已加入衣柜');
     } catch (err: any) {
-      alert(err?.response?.data?.detail || '操作失败');
+      toast.error(err?.response?.data?.detail || '操作失败');
     }
   }
 

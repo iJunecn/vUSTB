@@ -1,7 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { api } from '@/lib/api';
+import { toast } from 'sonner';
+import { ConfirmDialog, ConfirmOptions } from '@/components/ui/confirm-dialog';
 import { Loader2, Plus, Trash2, RefreshCw } from 'lucide-react';
 
 type Server = {
@@ -26,6 +28,21 @@ export default function AdminServersPage() {
   const [draft, setDraft] = useState<Omit<Server, 'id'>>({ ...EMPTY });
   const [creating, setCreating] = useState(false);
 
+  // Confirm dialog state
+  const [confirmState, setConfirmState] = useState<{ open: boolean; options: ConfirmOptions; onConfirm: () => void }>({
+    open: false, options: { message: '' }, onConfirm: () => {},
+  });
+
+  const showConfirm = useCallback((options: ConfirmOptions): Promise<boolean> => {
+    return new Promise((resolve) => {
+      setConfirmState({
+        open: true,
+        options,
+        onConfirm: () => { setConfirmState((s) => ({ ...s, open: false })); resolve(true); },
+      });
+    });
+  }, []);
+
   async function refresh() {
     setLoading(true);
     try {
@@ -46,7 +63,7 @@ export default function AdminServersPage() {
       setDraft({ ...EMPTY });
       await refresh();
     } catch (err: any) {
-      alert(err?.response?.data?.detail || '创建失败');
+      toast.error(err?.response?.data?.detail || '创建失败');
     } finally {
       setCreating(false);
     }
@@ -58,14 +75,29 @@ export default function AdminServersPage() {
   }
 
   async function remove(id: number) {
-    if (!confirm('删除该服务器?')) return;
-    await api.delete(`/mc-servers/${id}`);
-    await refresh();
+    const ok = await showConfirm({
+      title: '删除服务器',
+      message: '删除该服务器？',
+      confirmText: '删除',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await api.delete(`/mc-servers/${id}`);
+      toast.success('服务器已删除');
+      await refresh();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || '删除失败');
+    }
   }
 
   async function refreshStatus(id: number) {
-    await api.post(`/mc-servers/${id}/refresh`);
-    alert('已触发刷新');
+    try {
+      await api.post(`/mc-servers/${id}/refresh`);
+      toast.success('已触发刷新');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || '刷新失败');
+    }
   }
 
   return (
@@ -121,6 +153,14 @@ export default function AdminServersPage() {
           {items.length === 0 && <p className="text-muted-foreground">还没有添加任何服务器。</p>}
         </div>
       )}
+
+      {/* Confirm Dialog */}
+      <ConfirmDialog
+        open={confirmState.open}
+        onConfirm={confirmState.onConfirm}
+        onCancel={() => setConfirmState((s) => ({ ...s, open: false }))}
+        {...confirmState.options}
+      />
     </div>
   );
 }

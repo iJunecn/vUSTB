@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { api } from '@/lib/api';
+import { toast } from 'sonner';
+import { ConfirmDialog, ConfirmOptions } from '@/components/ui/confirm-dialog';
 import { SkinPreview } from '@/components/skin/SkinViewer';
 import { Loader2, Search, Users, RefreshCw, Edit3, Trash2, X, UserCircle } from 'lucide-react';
 
@@ -24,6 +26,21 @@ export default function AdminProfilesPage() {
   // Preview dialog
   const [previewItem, setPreviewItem] = useState<AdminProfile | null>(null);
   const [editName, setEditName] = useState('');
+
+  // Confirm dialog state
+  const [confirmState, setConfirmState] = useState<{ open: boolean; options: ConfirmOptions; onConfirm: () => void }>({
+    open: false, options: { message: '' }, onConfirm: () => {},
+  });
+
+  const showConfirm = useCallback((options: ConfirmOptions): Promise<boolean> => {
+    return new Promise((resolve) => {
+      setConfirmState({
+        open: true,
+        options,
+        onConfirm: () => { setConfirmState((s) => ({ ...s, open: false })); resolve(true); },
+      });
+    });
+  }, []);
 
   const fetchProfiles = useCallback(async () => {
     setLoading(true);
@@ -65,8 +82,8 @@ export default function AdminProfilesPage() {
       previewItem.name = newName;
       fetchProfiles();
     } catch (err: any) {
-      if (err?.response?.status === 409) alert('角色名已存在，请使用其他名称');
-      else alert(err?.response?.data?.detail || '更新角色名失败');
+      if (err?.response?.status === 409) toast.error('角色名已存在，请使用其他名称');
+      else toast.error(err?.response?.data?.detail || '更新角色名失败');
       setEditName(previewItem.name);
     }
   }
@@ -76,9 +93,10 @@ export default function AdminProfilesPage() {
     try {
       await api.patch(`/admin/profiles/${previewItem.id}/skin`, { hash: null });
       previewItem.skin_hash = null;
+      toast.success('皮肤已清除');
       fetchProfiles();
     } catch (err: any) {
-      alert(err?.response?.data?.detail || '清除失败');
+      toast.error(err?.response?.data?.detail || '清除失败');
     }
   }
 
@@ -87,21 +105,29 @@ export default function AdminProfilesPage() {
     try {
       await api.patch(`/admin/profiles/${previewItem.id}/cape`, { hash: null });
       previewItem.cape_hash = null;
+      toast.success('披风已清除');
       fetchProfiles();
     } catch (err: any) {
-      alert(err?.response?.data?.detail || '清除失败');
+      toast.error(err?.response?.data?.detail || '清除失败');
     }
   }
 
   async function deleteProfile() {
     if (!previewItem) return;
-    if (!confirm('确定删除此角色？此操作不可撤销。')) return;
+    const ok = await showConfirm({
+      title: '删除角色',
+      message: '确定删除此角色？此操作不可撤销。',
+      confirmText: '删除',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await api.delete(`/admin/profiles/${previewItem.id}`);
       setPreviewItem(null);
+      toast.success('角色已删除');
       fetchProfiles();
     } catch (err: any) {
-      alert(err?.response?.data?.detail || '删除失败');
+      toast.error(err?.response?.data?.detail || '删除失败');
     }
   }
 
@@ -317,6 +343,14 @@ export default function AdminProfilesPage() {
           </div>
         </div>
       )}
+
+      {/* Confirm Dialog */}
+      <ConfirmDialog
+        open={confirmState.open}
+        onConfirm={confirmState.onConfirm}
+        onCancel={() => setConfirmState((s) => ({ ...s, open: false }))}
+        {...confirmState.options}
+      />
     </div>
   );
 }

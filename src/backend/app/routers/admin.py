@@ -21,7 +21,7 @@ from app.deps import get_current_admin, get_current_super_admin, get_current_use
 from app.models import (
     User, UserGroup, InviteCode, OAuthApp, SiteSetting, Carousel, FallbackEndpoint,
     PointAccount, PointTransaction, PointType, PointReason,
-    Player,
+    Texture, Player,
 )
 from app.services.admin_backend import admin_backend
 from app.services.oauth_backend import oauth_backend
@@ -191,6 +191,58 @@ async def delete_user(
     u = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
     if not u:
         raise HTTPException(status_code=404, detail="not found")
+
+    # Clean up related records that lack CASCADE on FK
+    from app.models import PointAccount, PointTransaction, Booking, AccessToken, DeviceCode
+    from app.models import Article, ArticleMedia
+
+    # Delete point transactions & account
+    pt_rows = (await db.execute(
+        select(PointTransaction).where(PointTransaction.user_id == user_id)
+    )).scalars().all()
+    for pt in pt_rows:
+        await db.delete(pt)
+    pa = (await db.execute(
+        select(PointAccount).where(PointAccount.user_id == user_id)
+    )).scalar_one_or_none()
+    if pa:
+        await db.delete(pa)
+
+    # Nullify article author references (keep articles, remove author link)
+    art_rows = (await db.execute(
+        select(Article).where(Article.author_id == user_id)
+    )).scalars().all()
+    for a in art_rows:
+        a.author_id = None
+
+    # Nullify article media uploader references
+    media_rows = (await db.execute(
+        select(ArticleMedia).where(ArticleMedia.uploader_id == user_id)
+    )).scalars().all()
+    for m in media_rows:
+        m.uploader_id = None
+
+    # Delete bookings
+    booking_rows = (await db.execute(
+        select(Booking).where(Booking.user_id == user_id)
+    )).scalars().all()
+    for b in booking_rows:
+        await db.delete(b)
+
+    # Delete OAuth access tokens
+    token_rows = (await db.execute(
+        select(AccessToken).where(AccessToken.user_id == user_id)
+    )).scalars().all()
+    for t in token_rows:
+        await db.delete(t)
+
+    # Nullify device code user references
+    dc_rows = (await db.execute(
+        select(DeviceCode).where(DeviceCode.user_id == user_id)
+    )).scalars().all()
+    for dc in dc_rows:
+        dc.user_id = None
+
     await db.delete(u)
     await db.commit()
     return {"ok": True}

@@ -1,8 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { api } from '@/lib/api';
 import { useUserStore } from '@/stores/user';
+import { toast } from 'sonner';
+import { ConfirmDialog, ConfirmOptions } from '@/components/ui/confirm-dialog';
 import { Loader2, Plus, Trash2, Copy, Check, Shield } from 'lucide-react';
 
 type Invite = {
@@ -34,6 +36,21 @@ export default function AdminInvitesPage() {
   const [targetGroup, setTargetGroup] = useState<string>('');
   const [creating, setCreating] = useState(false);
   const [copiedId, setCopiedId] = useState<number | null>(null);
+
+  // Confirm dialog state
+  const [confirmState, setConfirmState] = useState<{ open: boolean; options: ConfirmOptions; onConfirm: () => void }>({
+    open: false, options: { message: '' }, onConfirm: () => {},
+  });
+
+  const showConfirm = useCallback((options: ConfirmOptions): Promise<boolean> => {
+    return new Promise((resolve) => {
+      setConfirmState({
+        open: true,
+        options,
+        onConfirm: () => { setConfirmState((s) => ({ ...s, open: false })); resolve(true); },
+      });
+    });
+  }, []);
 
   // 根据当前用户身份决定可选的 target_group
   const targetGroupOptions = (() => {
@@ -77,16 +94,27 @@ export default function AdminInvitesPage() {
       });
       await refresh();
     } catch (err: any) {
-      alert(err?.response?.data?.detail || '创建失败');
+      toast.error(err?.response?.data?.detail || '创建失败');
     } finally {
       setCreating(false);
     }
   }
 
   async function remove(id: number) {
-    if (!confirm('删除该邀请码?')) return;
-    await api.delete(`/admin/invites/${id}`);
-    await refresh();
+    const ok = await showConfirm({
+      title: '删除邀请码',
+      message: '删除该邀请码？',
+      confirmText: '删除',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await api.delete(`/admin/invites/${id}`);
+      toast.success('邀请码已删除');
+      await refresh();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || '删除失败');
+    }
   }
 
   function copy(item: Invite) {
@@ -198,6 +226,14 @@ export default function AdminInvitesPage() {
           </table>
         </div>
       )}
+
+      {/* Confirm Dialog */}
+      <ConfirmDialog
+        open={confirmState.open}
+        onConfirm={confirmState.onConfirm}
+        onCancel={() => setConfirmState((s) => ({ ...s, open: false }))}
+        {...confirmState.options}
+      />
     </div>
   );
 }

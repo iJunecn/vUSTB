@@ -1,7 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { api } from '@/lib/api';
+import { toast } from 'sonner';
+import { ConfirmDialog, ConfirmOptions } from '@/components/ui/confirm-dialog';
 import { Loader2, Plus, Trash2, RefreshCw, Copy, Check } from 'lucide-react';
 
 type OAuthApp = {
@@ -28,6 +30,21 @@ export default function AdminOAuthAppsPage() {
   });
   const [creating, setCreating] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
+
+  // Confirm dialog state
+  const [confirmState, setConfirmState] = useState<{ open: boolean; options: ConfirmOptions; onConfirm: () => void }>({
+    open: false, options: { message: '' }, onConfirm: () => {},
+  });
+
+  const showConfirm = useCallback((options: ConfirmOptions): Promise<boolean> => {
+    return new Promise((resolve) => {
+      setConfirmState({
+        open: true,
+        options,
+        onConfirm: () => { setConfirmState((s) => ({ ...s, open: false })); resolve(true); },
+      });
+    });
+  }, []);
 
   async function refresh() {
     setLoading(true);
@@ -59,9 +76,20 @@ export default function AdminOAuthAppsPage() {
   }
 
   async function remove(id: number) {
-    if (!confirm('删除该 OAuth 应用?')) return;
-    await api.delete(`/admin/oauth-apps/${id}`);
-    await refresh();
+    const ok = await showConfirm({
+      title: '删除 OAuth 应用',
+      message: '删除该 OAuth 应用？此操作不可撤销。',
+      confirmText: '删除',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await api.delete(`/admin/oauth-apps/${id}`);
+      toast.success('OAuth 应用已删除');
+      await refresh();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || '删除失败');
+    }
   }
 
   function copy(key: string, val: string) {
@@ -180,6 +208,14 @@ export default function AdminOAuthAppsPage() {
           {items.length === 0 && <p style={{ color: 'var(--color-text-light)' }}>还没有任何 OAuth 应用。</p>}
         </div>
       )}
+
+      {/* Confirm Dialog */}
+      <ConfirmDialog
+        open={confirmState.open}
+        onConfirm={confirmState.onConfirm}
+        onCancel={() => setConfirmState((s) => ({ ...s, open: false }))}
+        {...confirmState.options}
+      />
     </div>
   );
 }

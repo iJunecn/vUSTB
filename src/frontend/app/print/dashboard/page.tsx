@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUserStore } from '@/stores/user';
 import { rawApi } from '@/lib/api';
+import { toast } from 'sonner';
+import { ConfirmDialog, ConfirmOptions } from '@/components/ui/confirm-dialog';
 import {
   ChevronLeft, ChevronRight, CalendarCheck, XCircle, Play,
   Clock, CheckCircle2, AlertCircle, Loader2, X, Save, Trash2, Shield,
@@ -75,6 +77,21 @@ export default function PrintDashboard() {
   const [detailBooking, setDetailBooking] = useState<Booking | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [showSsoModal, setShowSsoModal] = useState(false);
+
+  // Confirm dialog state
+  const [confirmState, setConfirmState] = useState<{ open: boolean; options: ConfirmOptions; onConfirm: () => void }>({
+    open: false, options: { message: '' }, onConfirm: () => {},
+  });
+
+  const showConfirm = useCallback((options: ConfirmOptions): Promise<boolean> => {
+    return new Promise((resolve) => {
+      setConfirmState({
+        open: true,
+        options,
+        onConfirm: () => { setConfirmState((s) => ({ ...s, open: false })); resolve(true); },
+      });
+    });
+  }, []);
   const [editForm, setEditForm] = useState({
     weight: 0,
     file_name: '',
@@ -156,7 +173,7 @@ export default function PrintDashboard() {
       }
       loadData();
     } catch (err: any) {
-      alert(err?.response?.data?.detail || '操作失败');
+      toast.error(err?.response?.data?.detail || '操作失败');
     }
   };
 
@@ -174,7 +191,7 @@ export default function PrintDashboard() {
         purpose: b.purpose || '',
       });
     } catch {
-      alert('加载失败');
+      toast.error('加载失败');
     }
     setDetailLoading(false);
   };
@@ -194,7 +211,7 @@ export default function PrintDashboard() {
       closeDetail();
       loadData();
     } catch (err: any) {
-      alert(err?.response?.data?.detail || '保存失败');
+      toast.error(err?.response?.data?.detail || '保存失败');
     }
   };
 
@@ -302,7 +319,7 @@ export default function PrintDashboard() {
                                 签到
                               </button>
                               <button
-                                onClick={(e) => { e.stopPropagation(); if (confirm('确定取消？')) handleAction('cancel', b.id); }}
+                                onClick={(e) => { e.stopPropagation(); showConfirm({ title: '取消预约', message: '确定取消？', confirmText: '取消预约', danger: true }).then(ok => { if (ok) handleAction('cancel', b.id); }); }}
                                 style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, border: '1px solid #ef4444', background: 'transparent', color: '#ef4444', cursor: 'pointer' }}
                               >
                                 取消
@@ -312,7 +329,7 @@ export default function PrintDashboard() {
                           {isMyBooking && b.status === 'pending' && (
                             <div style={{ marginTop: 4 }}>
                               <button
-                                onClick={(e) => { e.stopPropagation(); if (confirm('确定取消？')) handleAction('cancel', b.id); }}
+                                onClick={(e) => { e.stopPropagation(); showConfirm({ title: '取消预约', message: '确定取消？', confirmText: '取消预约', danger: true }).then(ok => { if (ok) handleAction('cancel', b.id); }); }}
                                 style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, border: '1px solid #ef4444', background: 'transparent', color: '#ef4444', cursor: 'pointer' }}
                               >
                                 取消
@@ -392,11 +409,11 @@ export default function PrintDashboard() {
                     {b.status === 'booked' && (
                       <>
                         <button onClick={() => handleAction('checkin', b.id)} className="btn-primary" style={{ fontSize: 12, padding: '4px 10px' }}>签到</button>
-                        <button onClick={() => { if (confirm('确定取消？')) handleAction('cancel', b.id); }} className="btn-ghost" style={{ fontSize: 12, padding: '4px 10px', color: '#ef4444' }}>取消</button>
+                        <button onClick={() => { showConfirm({ title: '取消预约', message: '确定取消？', confirmText: '取消预约', danger: true }).then(ok => { if (ok) handleAction('cancel', b.id); }); }} className="btn-ghost" style={{ fontSize: 12, padding: '4px 10px', color: '#ef4444' }}>取消</button>
                       </>
                     )}
                     {b.status === 'pending' && (
-                      <button onClick={() => { if (confirm('确定取消？')) handleAction('cancel', b.id); }} className="btn-ghost" style={{ fontSize: 12, padding: '4px 10px', color: '#ef4444' }}>取消</button>
+                      <button onClick={() => { showConfirm({ title: '取消预约', message: '确定取消？', confirmText: '取消预约', danger: true }).then(ok => { if (ok) handleAction('cancel', b.id); }); }} className="btn-ghost" style={{ fontSize: 12, padding: '4px 10px', color: '#ef4444' }}>取消</button>
                     )}
                     {b.status === 'running' && canManage && (
                       <button onClick={async () => { await rawApi.post(`/api/print/bookings/${b.id}/complete`); loadData(); }} className="btn-primary" style={{ fontSize: 12, padding: '4px 10px' }}>完成</button>
@@ -516,7 +533,8 @@ export default function PrintDashboard() {
                 <>
                   <button
                     onClick={async () => {
-                      if (confirm('确定取消该预约？')) {
+                      const ok = await showConfirm({ title: '取消预约', message: '确定取消该预约？', confirmText: '取消预约', danger: true });
+                      if (ok) {
                         await handleAction('cancel', detailBooking.id);
                         closeDetail();
                       }
@@ -577,8 +595,10 @@ export default function PrintDashboard() {
               {canManage && user.user_group === 'super_admin' && (
                 <button
                   onClick={async () => {
-                    if (confirm('确认删除此预约？')) {
+                    const ok = await showConfirm({ title: '删除预约', message: '确认删除此预约？此操作不可撤销。', confirmText: '删除', danger: true });
+                    if (ok) {
                       await rawApi.delete(`/api/print/admin/bookings/${detailBooking.id}`);
+                      toast.success('预约已删除');
                       closeDetail();
                       loadData();
                     }
@@ -632,6 +652,14 @@ export default function PrintDashboard() {
           </div>
         </div>
       )}
+
+      {/* Confirm Dialog */}
+      <ConfirmDialog
+        open={confirmState.open}
+        onConfirm={confirmState.onConfirm}
+        onCancel={() => setConfirmState((s) => ({ ...s, open: false }))}
+        {...confirmState.options}
+      />
 
     </div>
   );

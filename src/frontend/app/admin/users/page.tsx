@@ -1,8 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { api } from '@/lib/api';
 import { useUserStore } from '@/stores/user';
+import { toast } from 'sonner';
+import { ConfirmDialog, ConfirmOptions } from '@/components/ui/confirm-dialog';
 import { Loader2, Ban, ShieldCheck, Trash2, Coins, UserPlus, X, Check } from 'lucide-react';
 
 type AdminUser = {
@@ -43,6 +45,21 @@ export default function AdminUsersPage() {
   const [createForm, setCreateForm] = useState({ email: '', username: '', phone: '', password: '', user_group: 'user' });
   const [createSaving, setCreateSaving] = useState(false);
 
+  // Confirm dialog state
+  const [confirmState, setConfirmState] = useState<{ open: boolean; options: ConfirmOptions; onConfirm: () => void }>({
+    open: false, options: { message: '' }, onConfirm: () => {},
+  });
+
+  const showConfirm = useCallback((options: ConfirmOptions): Promise<boolean> => {
+    return new Promise((resolve) => {
+      setConfirmState({
+        open: true,
+        options,
+        onConfirm: () => { setConfirmState((s) => ({ ...s, open: false })); resolve(true); },
+      });
+    });
+  }, []);
+
   async function refresh() {
     setLoading(true);
     try {
@@ -62,17 +79,24 @@ export default function AdminUsersPage() {
       await api.put(`/admin/users/${id}`, body);
       await refresh();
     } catch (err: any) {
-      alert(err?.response?.data?.detail || '更新失败');
+      toast.error(err?.response?.data?.detail || '更新失败');
     }
   }
 
   async function remove(id: number) {
-    if (!confirm('彻底删除该用户?该操作不可逆。')) return;
+    const ok = await showConfirm({
+      title: '删除用户',
+      message: '彻底删除该用户？该操作不可逆。',
+      confirmText: '删除',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await api.delete(`/admin/users/${id}`);
+      toast.success('用户已删除');
       await refresh();
     } catch (err: any) {
-      alert(err?.response?.data?.detail || '删除失败');
+      toast.error(err?.response?.data?.detail || '删除失败');
     }
   }
 
@@ -101,9 +125,10 @@ export default function AdminUsersPage() {
         pixel_points: pointsPixel,
         shell_points: pointsShell,
       });
+      toast.success('积分已更新');
       setPointsModalUser(null);
     } catch (err: any) {
-      alert(err?.response?.data?.detail || '设置积分失败');
+      toast.error(err?.response?.data?.detail || '设置积分失败');
     } finally {
       setPointsSaving(false);
     }
@@ -115,9 +140,10 @@ export default function AdminUsersPage() {
       await api.post('/admin/users', createForm);
       setCreateModalOpen(false);
       setCreateForm({ email: '', username: '', phone: '', password: '', user_group: 'user' });
+      toast.success('用户已创建');
       await refresh();
     } catch (err: any) {
-      alert(err?.response?.data?.detail || '创建用户失败');
+      toast.error(err?.response?.data?.detail || '创建用户失败');
     } finally {
       setCreateSaving(false);
     }
@@ -361,6 +387,14 @@ export default function AdminUsersPage() {
           </div>
         </div>
       )}
+
+      {/* Confirm Dialog */}
+      <ConfirmDialog
+        open={confirmState.open}
+        onConfirm={confirmState.onConfirm}
+        onCancel={() => setConfirmState((s) => ({ ...s, open: false }))}
+        {...confirmState.options}
+      />
     </div>
   );
 }
