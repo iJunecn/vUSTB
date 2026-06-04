@@ -198,8 +198,6 @@ export default function ServersPage() {
                         )}
                         {/* Metrics row */}
                         <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--color-text-light)', flexWrap: 'wrap' }}>
-                          <span>玩家 {mainStatus.players_online ?? '—'}/{mainStatus.players_max ?? '—'}</span>
-                          <span>延迟 {mainStatus.connect_ms ?? '—'}ms</span>
                           {group.versionOverride && <span>{group.versionOverride}</span>}
                           {group.themeOverride && <span>主题：{group.themeOverride}</span>}
                           {!group.versionOverride && !group.themeOverride && mainStatus.version && (

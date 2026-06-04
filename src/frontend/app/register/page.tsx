@@ -23,6 +23,14 @@ function RegisterInner() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [countdown, setCountdown] = useState(0);
+
+  // Countdown timer for resend
+  useEffect(() => {
+    if (countdown <= 0) return;
+    const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [countdown]);
 
   // OAuth token info
   const oauthToken = searchParams.get('oauth_token') || '';
@@ -56,6 +64,7 @@ function RegisterInner() {
     try {
       await api.post('/auth/send-verification-code', { email, purpose: 'register' });
       setSentCode(true);
+      setCountdown(60);
       setNotice('验证码已发送，请查收邮件。');
     } catch (err: any) {
       setError(err?.response?.data?.detail || '发送失败');
@@ -63,6 +72,8 @@ function RegisterInner() {
       setSending(false);
     }
   }
+
+  const ALLOWED_SUFFIXES = ['xs.ustb.edu.cn', 'ustb.edu.cn', 'ustb.world', 'qq.com'];
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -78,6 +89,16 @@ function RegisterInner() {
       setError('两次输入的密码不一致');
       return;
     }
+    if (!verificationCode || verificationCode.length !== 6) {
+      setError('请输入 6 位邮箱验证码');
+      return;
+    }
+    // 校验邮箱后缀
+    const domain = email.split('@')[1]?.toLowerCase();
+    if (!domain || !ALLOWED_SUFFIXES.some(s => domain === s || domain.endsWith('.' + s))) {
+      setError('仅支持 @xs.ustb.edu.cn、@ustb.edu.cn、@ustb.world、@qq.com 邮箱注册');
+      return;
+    }
     setError(null);
     setLoading(true);
     try {
@@ -86,7 +107,7 @@ function RegisterInner() {
         username,
         phone,
         password,
-        verification_code: verificationCode || undefined,
+        verification_code: verificationCode,
         invite_code: inviteCode || undefined,
         oauth_token: oauthToken || undefined,
       });
@@ -183,8 +204,9 @@ function RegisterInner() {
               onChange={(e) => setEmail(e.target.value)}
               className="input"
               autoComplete="email"
-              placeholder="your@email.com"
+              placeholder="@xs.ustb.edu.cn / @ustb.edu.cn / @ustb.world / @qq.com"
             />
+            <p style={{ fontSize: 11, color: 'var(--color-text-light)', margin: '2px 0 0' }}>仅支持 @xs.ustb.edu.cn、@ustb.edu.cn、@ustb.world、@qq.com 邮箱注册</p>
           </label>
 
           <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -246,22 +268,25 @@ function RegisterInner() {
 
           <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <span style={{ fontSize: '14px', fontWeight: 500, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              邮箱验证码（可选）
+              邮箱验证码（必填）
               <button
                 type="button"
                 onClick={sendCode}
-                disabled={sending}
-                style={{ fontSize: '12px', color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, opacity: sending ? 0.5 : 1 }}
+                disabled={sending || countdown > 0}
+                style={{ fontSize: '12px', color: 'var(--color-primary)', background: 'none', border: 'none', cursor: (sending || countdown > 0) ? 'not-allowed' : 'pointer', padding: 0, opacity: (sending || countdown > 0) ? 0.5 : 1 }}
               >
-                {sending ? '发送中...' : sentCode ? '重新发送' : '获取验证码'}
+                {sending ? '发送中...' : countdown > 0 ? `${countdown}s 后重发` : sentCode ? '重新发送' : '获取验证码'}
               </button>
             </span>
             <input
               type="text"
+              required
+              minLength={6}
+              maxLength={6}
               value={verificationCode}
               onChange={(e) => setVerificationCode(e.target.value)}
               className="input"
-              placeholder="输入邮箱验证码"
+              placeholder="6 位数字验证码"
             />
           </label>
 

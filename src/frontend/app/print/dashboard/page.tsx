@@ -6,7 +6,7 @@ import { useUserStore } from '@/stores/user';
 import { rawApi } from '@/lib/api';
 import {
   ChevronLeft, ChevronRight, CalendarCheck, XCircle, Play,
-  Clock, CheckCircle2, AlertCircle, Loader2, X, Save, Trash2,
+  Clock, CheckCircle2, AlertCircle, Loader2, X, Save, Trash2, Shield,
 } from 'lucide-react';
 
 type Booking = {
@@ -33,10 +33,11 @@ type Booking = {
 type PrinterInfo = {
   id: number;
   name: string;
+  model: string | null;
   is_paused: boolean;
 };
 
-const SLOT_LABELS: Record<string, string> = { AM: '上午 (08:00-11:30)', PM: '下午 (13:30-17:00)' };
+const SLOT_LABELS: Record<string, string> = { AM: '白天 (00:00-11:59)', PM: '下午 (12:00-23:59)' };
 const STATUS_MAP: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
   pending: { label: '待审批', color: '#f59e0b', icon: <Clock style={{ width: 14, height: 14 }} /> },
   booked: { label: '已预约', color: '#3b82f6', icon: <CalendarCheck style={{ width: 14, height: 14 }} /> },
@@ -73,6 +74,7 @@ export default function PrintDashboard() {
   // Detail modal state
   const [detailBooking, setDetailBooking] = useState<Booking | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [showSsoModal, setShowSsoModal] = useState(false);
   const [editForm, setEditForm] = useState({
     weight: 0,
     file_name: '',
@@ -132,6 +134,14 @@ export default function PrintDashboard() {
   }
 
   const canManage = user && ['super_admin', 'admin', 'teacher'].includes(user.user_group);
+
+  const handleNewBooking = (params?: string) => {
+    if (!user?.real_name || !user?.student_id) {
+      setShowSsoModal(true);
+      return;
+    }
+    router.push(params ? `/print/booking?${params}` : '/print/booking');
+  };
 
   const handleAction = async (action: string, bookingId: number, extra?: any) => {
     try {
@@ -210,11 +220,11 @@ export default function PrintDashboard() {
               }}
             >
               <option value="">全部打印机</option>
-              {printers.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              {printers.map((p) => <option key={p.id} value={p.id}>{p.model ? `${p.name} (${p.model})` : p.name}</option>)}
             </select>
           )}
           <button
-            onClick={() => router.push('/print/booking')}
+            onClick={() => handleNewBooking()}
             className="btn-primary"
             style={{ fontSize: 13, padding: '6px 14px', display: 'flex', alignItems: 'center', gap: 6 }}
           >
@@ -329,7 +339,7 @@ export default function PrintDashboard() {
                       ) : (
                         !isPast && (
                           <button
-                            onClick={() => router.push(`/print/booking?date=${d}&slot=${slot}`)}
+                            onClick={() => handleNewBooking(`date=${d}&slot=${slot}`)}
                             style={{
                               padding: '4px 10px', borderRadius: 6, fontSize: 11,
                               border: '1px dashed var(--color-border)', background: 'transparent',
@@ -579,6 +589,45 @@ export default function PrintDashboard() {
                   <Trash2 style={{ width: 14, height: 14 }} /> 删除
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SSO binding required modal */}
+      {showSsoModal && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 110, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+          onClick={(e) => { if (e.target === e.currentTarget) setShowSsoModal(false); }}
+        >
+          <div style={{ background: 'var(--color-card-background)', borderRadius: 16, maxWidth: 400, width: '100%', boxShadow: '0 16px 48px rgba(0,0,0,0.2)', animation: 'slideUp 0.3s ease-out', padding: 24, textAlign: 'center' }}>
+            <div style={{
+              width: 56, height: 56, borderRadius: 14,
+              background: 'color-mix(in srgb, #3b82f6 10%, transparent)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              margin: '0 auto 16px',
+            }}>
+              <Shield style={{ width: 28, height: 28, color: '#3b82f6' }} />
+            </div>
+            <h3 style={{ margin: '0 0 8px', fontSize: 18, fontWeight: 700, color: 'var(--color-heading)' }}>需要绑定北科大统一验证</h3>
+            <p style={{ fontSize: 14, color: 'var(--color-text-light)', margin: '0 0 20px', lineHeight: 1.6 }}>
+              创建打印预约前，请先绑定「北京科技大学统一验证登录」，以获取您的姓名和学号信息。
+            </p>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+              <button
+                onClick={() => setShowSsoModal(false)}
+                className="btn-ghost"
+                style={{ padding: '8px 20px', fontSize: 13 }}
+              >
+                取消
+              </button>
+              <button
+                onClick={() => { setShowSsoModal(false); router.push('/dashboard/security'); }}
+                className="btn-primary"
+                style={{ padding: '8px 20px', fontSize: 13 }}
+              >
+                前往绑定
+              </button>
             </div>
           </div>
         </div>

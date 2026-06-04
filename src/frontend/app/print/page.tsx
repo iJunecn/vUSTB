@@ -106,7 +106,7 @@ export default function PrintHomePage() {
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <Printer style={{ width: 22, height: 22, color: 'var(--color-primary)' }} />
-                      <span style={{ fontWeight: 600, color: 'var(--color-heading)' }}>{p.name}</span>
+                      <span style={{ fontWeight: 600, color: 'var(--color-heading)' }}>{p.model ? `${p.name} (${p.model})` : p.name}</span>
                     </div>
                     <span
                       style={{
@@ -119,7 +119,6 @@ export default function PrintHomePage() {
                     </span>
                   </div>
                   {p.location && <p style={{ fontSize: 13, color: 'var(--color-text-light)', margin: 0 }}>位置：{p.location}</p>}
-                  {p.model && <p style={{ fontSize: 13, color: 'var(--color-text-light)', margin: 0 }}>型号：{p.model}</p>}
                   <p style={{ fontSize: 12, color: 'var(--color-text-light)', margin: 0 }}>
                     {st?.status_class === 'idle' ? '当前设备空闲，欢迎预约' : '请根据预约时间表合理安排'}
                   </p>

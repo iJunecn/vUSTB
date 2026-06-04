@@ -137,9 +137,9 @@ async def printer_status(printer_id: int, db: AsyncSession = Depends(get_db)):
         css_class = "paused"
     else:
         current_slot = None
-        if "08:00" <= current_time <= "11:30":
+        if "00:00" <= current_time <= "11:59":
             current_slot = SlotType.AM
-        elif "13:30" <= current_time <= "17:00":
+        elif "12:00" <= current_time <= "23:59":
             current_slot = SlotType.PM
 
         if current_slot:
@@ -259,6 +259,13 @@ async def create_booking(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    # 检查是否绑定北京科技大学统一验证登录
+    if not user.real_name or not user.student_id:
+        raise HTTPException(
+            status_code=403,
+            detail="请先绑定北京科技大学统一验证登录后再创建预约",
+        )
+
     # 检查打印机是否暂停
     if body.printer_id:
         printer = (await db.execute(select(Printer3D).where(Printer3D.id == body.printer_id))).scalar_one_or_none()
@@ -474,7 +481,7 @@ async def checkin_booking(
         raise HTTPException(status_code=403, detail="无法操作")
 
     if not _can_manage_printer(user):
-        start_clock = "08:00" if booking.slot_type == SlotType.AM else "13:30"
+        start_clock = "00:00" if booking.slot_type == SlotType.AM else "12:00"
         start_moment = datetime.strptime(f"{booking.date} {start_clock}", "%Y-%m-%d %H:%M")
         start_moment = start_moment.replace(tzinfo=timezone(timedelta(hours=8)))
         if datetime.now(timezone(timedelta(hours=8))) < start_moment:

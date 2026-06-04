@@ -12,6 +12,7 @@ from app.database import get_db
 from app.deps import get_current_user
 from app.models import User, UserGroup, VerificationCode, InviteCode
 from app.services.auth import create_jwt, hash_password, verify_password
+from app.config import settings
 from app.utils.schemas import (
     LoginRequest, LoginResponse, RegisterRequest,
     ResetPasswordRequest, SendVerificationRequest, ChangePasswordRequest,
@@ -38,6 +39,33 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=400, detail="用户名仅支持英文字母和数字")
     if not PHONE_RE.match(req.phone):
         raise HTTPException(status_code=400, detail="手机号格式不正确")
+
+    # 注册邮箱后缀校验
+    allowed_suffixes = [s.strip().lower() for s in settings.register_email_suffixes.split(",") if s.strip()]
+    if allowed_suffixes:
+        if "@" not in req.email:
+            raise HTTPException(status_code=400, detail="邮箱格式不正确")
+        domain = req.email.split("@", 1)[1].strip().lower()
+        if not any(domain == s or domain.endswith("." + s) for s in allowed_suffixes):
+            raise HTTPException(
+                status_code=400,
+                detail=f"仅支持以下邮箱后缀注册：{', '.join('@' + s for s in allowed_suffixes)}",
+            )
+
+    # 邮箱验证码校验（必须）
+    if settings.require_email_verify:
+        if not req.verification_code:
+            raise HTTPException(status_code=400, detail="注册需要邮箱验证码")
+        vc = (await db.execute(
+            select(VerificationCode).where(
+                VerificationCode.email == req.email,
+                VerificationCode.type == "register",
+            ).order_by(VerificationCode.id.desc())
+        )).scalar_one_or_none()
+        if not vc or vc.expires_at < _now_ms() or str(vc.code) != str(req.verification_code):
+            raise HTTPException(status_code=400, detail="验证码无效或已过期")
+        # 验证通过后删除验证码
+        await db.delete(vc)
 
     existing = (await db.execute(
         select(User).where(or_(
@@ -131,7 +159,7 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
     await db.commit()
     await db.refresh(user)
 
-    token = create_jwt(user.id, {"group": user.user_group.value})
+    token = create_jwt(user.id, {"group": user.user_group.value}, expire_minutes=settings.auth_expire_hours * 60)
     return LoginResponse(access_token=token, user=user.to_dict())
 
 
@@ -152,7 +180,7 @@ async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=401, detail="账号或密码错误")
     if user.is_banned:
         raise HTTPException(status_code=403, detail="账号已被封禁")
-    token = create_jwt(user.id, {"group": user.user_group.value})
+    token = create_jwt(user.id, {"group": user.user_group.value}, expire_minutes=settings.auth_expire_hours * 60)
     return LoginResponse(access_token=token, user=user.to_dict())
 
 
@@ -160,6 +188,19 @@ async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
 async def send_verification_code(req: SendVerificationRequest, db: AsyncSession = Depends(get_db)):
     if req.purpose not in ("register", "reset"):
         raise HTTPException(status_code=400, detail="非法用途")
+
+    # 注册时校验邮箱后缀
+    if req.purpose == "register":
+        allowed_suffixes = [s.strip().lower() for s in settings.register_email_suffixes.split(",") if s.strip()]
+        if allowed_suffixes:
+            if "@" not in req.email:
+                raise HTTPException(status_code=400, detail="邮箱格式不正确")
+            domain = req.email.split("@", 1)[1].strip().lower()
+            if not any(domain == s or domain.endswith("." + s) for s in allowed_suffixes):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"仅支持以下邮箱后缀注册：{', '.join('@' + s for s in allowed_suffixes)}",
+                )
 
     code = _generate_code()
     # 同一邮箱 + 用途 上 upsert，避免堆积
@@ -182,8 +223,14 @@ async def send_verification_code(req: SendVerificationRequest, db: AsyncSession 
             created_at=_now_ms(),
         ))
     await db.commit()
-    # 真实环境通过 aiosmtplib 发送；当前返回提示，便于开发联调
-    return {"ok": True, "message": "验证码已发送（开发环境请通过日志/数据库查询）"}
+
+    # 实际发送邮件
+    from app.utils.email_utils import email_sender
+    sent = await email_sender.send_verification_code(db, req.email, code, req.purpose)
+    if not sent:
+        raise HTTPException(status_code=500, detail="验证码邮件发送失败，请稍后重试")
+
+    return {"ok": True, "message": "验证码已发送，请查收邮件"}
 
 
 @router.post("/reset-password")

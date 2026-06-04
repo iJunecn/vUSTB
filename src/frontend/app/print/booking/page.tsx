@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import { useUserStore } from '@/stores/user';
 import { rawApi } from '@/lib/api';
-import { Loader2, CalendarCheck, X, AlertCircle } from 'lucide-react';
+import { Loader2, CalendarCheck, X, AlertCircle, Shield } from 'lucide-react';
 
 export default function PrintBookingPageWrapper() {
   return (
@@ -22,6 +22,7 @@ export default function PrintBookingPageWrapper() {
 type PrinterInfo = {
   id: number;
   name: string;
+  model: string | null;
   is_paused: boolean;
 };
 
@@ -47,6 +48,7 @@ function PrintBookingPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [showInsufficientModal, setShowInsufficientModal] = useState(false);
+  const [showSsoModal, setShowSsoModal] = useState(false);
 
   useEffect(() => { hydrate(); }, [hydrate]);
 
@@ -79,6 +81,12 @@ function PrintBookingPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    // Check USTB SSO binding before creating booking
+    if (!user?.real_name || !user?.student_id) {
+      setShowSsoModal(true);
+      return;
+    }
 
     if (shellCost > shellPoints) {
       setShowInsufficientModal(true);
@@ -149,7 +157,7 @@ function PrintBookingPage() {
               <option value="">请选择打印机</option>
               {printers.map((p) => (
                 <option key={p.id} value={p.id} disabled={p.is_paused}>
-                  {p.name}{p.is_paused ? ' (暂停中)' : ''}
+                  {p.model ? `${p.name} (${p.model})` : p.name}{p.is_paused ? ' (暂停中)' : ''}
                 </option>
               ))}
             </select>
@@ -179,8 +187,8 @@ function PrintBookingPage() {
             className="input"
           >
             <option value="">请选择时段</option>
-            <option value="AM">上午 (08:00-11:30)</option>
-            <option value="PM">下午 (13:30-17:00)</option>
+            <option value="AM">白天 (00:00-11:59)</option>
+            <option value="PM">下午 (12:00-23:59)</option>
           </select>
         </label>
 
@@ -292,6 +300,45 @@ function PrintBookingPage() {
                 style={{ padding: '8px 20px', fontSize: 13 }}
               >
                 前往充值
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SSO binding required modal */}
+      {showSsoModal && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 110, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+          onClick={(e) => { if (e.target === e.currentTarget) setShowSsoModal(false); }}
+        >
+          <div style={{ background: 'var(--color-card-background)', borderRadius: 16, maxWidth: 400, width: '100%', boxShadow: '0 16px 48px rgba(0,0,0,0.2)', animation: 'slideUp 0.3s ease-out', padding: 24, textAlign: 'center' }}>
+            <div style={{
+              width: 56, height: 56, borderRadius: 14,
+              background: 'color-mix(in srgb, #3b82f6 10%, transparent)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              margin: '0 auto 16px',
+            }}>
+              <Shield style={{ width: 28, height: 28, color: '#3b82f6' }} />
+            </div>
+            <h3 style={{ margin: '0 0 8px', fontSize: 18, fontWeight: 700, color: 'var(--color-heading)' }}>需要绑定北科大统一验证</h3>
+            <p style={{ fontSize: 14, color: 'var(--color-text-light)', margin: '0 0 20px', lineHeight: 1.6 }}>
+              创建打印预约前，请先绑定「北京科技大学统一验证登录」，以获取您的姓名和学号信息。
+            </p>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+              <button
+                onClick={() => setShowSsoModal(false)}
+                className="btn-ghost"
+                style={{ padding: '8px 20px', fontSize: 13 }}
+              >
+                取消
+              </button>
+              <button
+                onClick={() => { setShowSsoModal(false); router.push('/dashboard/security'); }}
+                className="btn-primary"
+                style={{ padding: '8px 20px', fontSize: 13 }}
+              >
+                前往绑定
               </button>
             </div>
           </div>

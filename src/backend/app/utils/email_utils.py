@@ -1,36 +1,30 @@
-"""邮件发送工具 — 从 vSkin 搬运，适配 SQLAlchemy + SiteSetting 表。"""
+"""邮件发送工具 — 硬编码 SMTP 配置（与 GitHub/爱发电同模式）。"""
 import aiosmtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.header import Header
 from email.utils import formataddr, parseaddr
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.models import SiteSetting
+from app.config import settings
 
 
 class EmailSender:
-    """邮件发送服务，配置从数据库 SiteSetting 表读取。"""
+    """邮件发送服务，配置从 config.py 硬编码值读取。"""
 
-    async def _get_settings(self, db: AsyncSession):
-        rows = (await db.execute(select(SiteSetting))).scalars().all()
-        s = {r.key: r.value for r in rows}
+    def _get_settings(self) -> dict:
         return {
-            "host": s.get("smtp_host", ""),
-            "port": int(s.get("smtp_port", "465")),
-            "user": s.get("smtp_user", ""),
-            "password": s.get("smtp_password", ""),
-            "ssl": s.get("smtp_ssl", "true") == "true",
-            "sender": s.get("smtp_sender", ""),
-            "enabled": s.get("email_verify_enabled", "false") == "true",
-            "site_title": s.get("site_title", s.get("site_name", "皮肤站")),
-            "email_template_html": s.get("email_template_html", ""),
-            "email_verify_ttl": int(s.get("email_verify_ttl", "300")),
+            "host": settings.smtp_host,
+            "port": settings.smtp_port,
+            "user": settings.smtp_user,
+            "password": settings.smtp_password,
+            "ssl": settings.smtp_use_tls,
+            "sender": settings.smtp_from,
+            "enabled": settings.email_verify_enabled,
+            "site_title": settings.site_name,
         }
 
     def _default_template(self) -> str:
+        """像素北科风格邮件模板 — 蓝白现代风格，顶部 LOGO + 名称居中。"""
         return """
 <!DOCTYPE html>
 <html lang="zh-CN">
@@ -39,32 +33,40 @@ class EmailSender:
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{{site_title}} 邮件验证</title>
   </head>
-  <body style="margin:0; padding:0; background:#f4f7fb; font-family:'Microsoft YaHei UI','PingFang SC',sans-serif;">
-    <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f7fb; padding:24px 12px;">
+  <body style="margin:0; padding:0; background:#eef3f9; font-family:'Microsoft YaHei UI','PingFang SC','Helvetica Neue',sans-serif;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#eef3f9; padding:32px 12px;">
       <tr>
         <td align="center">
-          <table width="640" cellpadding="0" cellspacing="0" style="background:#ffffff; border-radius:16px; overflow:hidden; box-shadow:0 10px 30px rgba(35,64,95,0.12);">
+          <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff; border-radius:20px; overflow:hidden; box-shadow:0 8px 32px rgba(30,64,110,0.10);">
+            <!-- 顶部品牌区 -->
             <tr>
-              <td style="background:linear-gradient(135deg,#2f78ba,#4f9ad8); padding:24px 32px; color:#ffffff;">
-                <div style="font-size:18px; font-weight:700; letter-spacing:0.5px;">{{site_title}}</div>
-                <div style="font-size:14px; opacity:0.9; margin-top:6px;">{{action_title}}</div>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:28px 32px 8px; color:#1f2a36;">
-                <h2 style="margin:0 0 12px; font-size:22px;">您好，</h2>
-                <p style="margin:0 0 16px; font-size:14px; line-height:1.7; color:#4a5a6a;">
-                  您正在进行 <strong>{{action_title}}</strong> 操作，请使用以下验证码完成验证：
-                </p>
-                <div style="background:#f1f6fc; border:1px solid #d7e4f2; border-radius:12px; padding:16px; text-align:center;">
-                  <span style="font-size:28px; letter-spacing:6px; color:#2f78ba; font-weight:700;">{{code}}</span>
+              <td style="background:linear-gradient(135deg,#1a56db,#3b82f6); padding:36px 32px 28px; text-align:center;">
+                <div style="margin-bottom:10px;">
+                  <span style="display:inline-block; width:48px; height:48px; line-height:48px; background:#ffffff; border-radius:12px; font-size:22px; font-weight:800; color:#1a56db; text-align:center; vertical-align:middle;">像</span>
                 </div>
-                <p style="margin:16px 0 0; font-size:13px; color:#6a7b8c;">验证码有效期约 {{ttl_minutes}} 分钟，请尽快完成验证。</p>
-                <p style="margin:10px 0 0; font-size:12px; color:#9aa7b4;">如果这不是您本人操作，请忽略此邮件。</p>
+                <div style="font-size:22px; font-weight:700; color:#ffffff; letter-spacing:1.5px;">像素北科</div>
+                <div style="font-size:13px; color:rgba(255,255,255,0.85); margin-top:6px;">vUSTB · 北京科技大学元宇宙体素工作坊</div>
               </td>
             </tr>
+            <!-- 正文区 -->
             <tr>
-              <td style="padding:16px 32px 28px; color:#9aa7b4; font-size:12px;">此邮件由 {{site_title}} 自动发送，请勿直接回复。</td>
+              <td style="padding:32px 36px 12px; color:#1e293b;">
+                <h2 style="margin:0 0 14px; font-size:20px; font-weight:600;">您好，</h2>
+                <p style="margin:0 0 18px; font-size:14px; line-height:1.8; color:#475569;">
+                  您正在进行 <strong style="color:#1a56db;">{{action_title}}</strong> 操作，请使用以下验证码完成验证：
+                </p>
+                <div style="background:#f0f5ff; border:2px solid #bfdbfe; border-radius:14px; padding:18px 24px; text-align:center;">
+                  <span style="font-size:32px; letter-spacing:8px; color:#1a56db; font-weight:700; font-family:'Courier New',monospace;">{{code}}</span>
+                </div>
+                <p style="margin:18px 0 0; font-size:13px; color:#64748b;">验证码有效期约 {{ttl_minutes}} 分钟，请尽快完成验证。</p>
+                <p style="margin:10px 0 0; font-size:12px; color:#94a3b8;">如果这不是您本人操作，请忽略此邮件。</p>
+              </td>
+            </tr>
+            <!-- 底部 -->
+            <tr>
+              <td style="padding:18px 36px 28px; color:#94a3b8; font-size:12px; border-top:1px solid #e2e8f0;">
+                此邮件由 像素北科 自动发送，请勿直接回复。
+              </td>
             </tr>
           </table>
         </td>
@@ -80,8 +82,8 @@ class EmailSender:
             html = html.replace("{{" + key + "}}", str(value))
         return html
 
-    async def send_verification_code(self, db: AsyncSession, to_email: str, code: str, type: str):
-        s = await self._get_settings(db)
+    async def send_verification_code(self, db, to_email: str, code: str, type: str):
+        s = self._get_settings()
         if not s["enabled"]:
             return False
 
@@ -89,8 +91,8 @@ class EmailSender:
             print("SMTP host not configured.")
             return False
 
-        site_title = str(s["site_title"] or "皮肤站")
-        ttl_minutes = max(1, round(s["email_verify_ttl"] / 60))
+        site_title = str(s["site_title"] or "像素北科")
+        ttl_minutes = 10  # 验证码有效期 10 分钟
 
         if type == "register":
             action_title = "注册验证"
@@ -101,7 +103,7 @@ class EmailSender:
         else:
             return False
 
-        template = s["email_template_html"] or self._default_template()
+        template = self._default_template()
         body = self._render_template(
             template,
             {
@@ -114,9 +116,8 @@ class EmailSender:
         )
 
         message = MIMEMultipart()
-        sender_name, sender_addr = parseaddr(s["sender"])
-        if not sender_addr and s["user"]:
-            sender_addr = s["user"]
+        sender_name = s["sender"] or site_title
+        sender_addr = s["user"]
 
         if sender_name:
             message["From"] = formataddr((Header(sender_name, "utf-8").encode(), sender_addr))

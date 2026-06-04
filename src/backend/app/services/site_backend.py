@@ -53,7 +53,33 @@ class SiteBackend:
 
     # ========== Settings helpers ==========
 
+    # 硬编码设置映射 — 这些值不可通过管理面板修改
+    _HARDCODED_SETTINGS: dict[str, str] = {}
+
+    def _get_hardcoded_setting(self, key: str) -> str | None:
+        """返回硬编码的设置值，如果没有则返回 None。"""
+        from app.config import settings as cfg
+        _HARDCODED = {
+            "smtp_host": cfg.smtp_host,
+            "smtp_port": str(cfg.smtp_port),
+            "smtp_user": cfg.smtp_user,
+            "smtp_password": cfg.smtp_password,
+            "smtp_from": cfg.smtp_from,
+            "smtp_ssl": "true" if cfg.smtp_use_tls else "false",
+            "email_verify_enabled": "true" if cfg.email_verify_enabled else "false",
+            "require_email_verify": "true" if cfg.require_email_verify else "false",
+            "allow_password_reset": "true" if cfg.allow_password_reset else "false",
+            "register_email_suffixes": cfg.register_email_suffixes,
+            "jwt_expire_seconds": str(cfg.auth_expire_hours * 3600),
+            "jwt_refresh_expire_seconds": str(cfg.auth_expire_hours * 3600),
+        }
+        return _HARDCODED.get(key)
+
     async def _get_setting(self, db: AsyncSession, key: str, default: str = "") -> str:
+        # 优先返回硬编码值
+        hardcoded = self._get_hardcoded_setting(key)
+        if hardcoded is not None:
+            return hardcoded
         row = (await db.execute(
             select(SiteSetting).where(SiteSetting.key == key)
         )).scalar_one_or_none()
@@ -167,7 +193,7 @@ class SiteBackend:
         if not verify_password(password, user.password_hash):
             raise HTTPException(status_code=401, detail="Invalid credentials")
 
-        expire_minutes = int(await self._get_setting(db, "jwt_expire_days", "7")) * 24 * 60
+        expire_minutes = settings.auth_expire_hours * 60  # 硬编码 72 小时
         token = create_jwt(str(user.id), extra={"user_group": user_group, "is_admin": is_admin_group(user_group)}, expire_minutes=expire_minutes)
 
         return {"token": token, "user_id": str(user.id)}
