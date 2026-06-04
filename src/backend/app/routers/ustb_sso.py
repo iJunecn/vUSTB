@@ -1,19 +1,16 @@
 """USTB 统一验证登录绑定 — 微信扫码认证，获取姓名和学号。
 
-基于 USTB-SSO 库 (https://pypi.org/project/USTB-SSO/) 的正确认证流程实现。
+基于 USTB-SSO 库 + byyt.ustb.edu.cn 用户信息 API。
 
-核心流程（参考库的 QrAuthProcedure）：
-1. GET authenticate  → 获取 lck（登录上下文）
-2. POST queryAuthMethods → 获取认证方法 + userName（学号）
-3. POST getMicroQr → 获取微信二维码参数
-4. GET qrpage → 获取 sid
-5. 前端展示二维码，轮询 GET sis.ustb.edu.cn/connect/state
-6. 扫码成功 → 获取 pass_code
-7. GET return_url + params → 获取认证重定向页面
-8. 从页面解析 actionType/locationValue → GET locationValue 完成认证
-9. 从最终页面提取用户信息（姓名、学号）
+核心流程：
+1. 使用 USTB-SSO 库的 QrAuthProcedure 初始化认证（BYYT 预设）
+2. 生成二维码，前端轮询扫码状态
+3. 扫码成功后，complete_auth 完成认证
+4. 通过 byyt.ustb.edu.cn/user/me API 获取用户姓名和学号
 
-重要发现：queryAuthMethods 响应中的 userName 字段就是学号！
+使用 BYYT_USTB_EDU_CN 预设（entity_id=YW2025006），
+因为 chat.ustb.edu.cn 从 Docker 容器内不可访问，
+而 byyt.ustb.edu.cn 是公网可访问的，认证回调不会超时。
 
 ⚠️ 多 worker 注意：gunicorn 多进程不共享内存，所有会话数据必须存 Redis。
 """
@@ -41,7 +38,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/ustb-sso", tags=["ustb_sso"])
 
 # ---------------------------------------------------------------------------
-# SSO 常量 URL（来自 USTB-SSO 库 _procedure.py）
+# SSO 常量 — 使用 BYYT_USTB_EDU_CN 预设（公网可访问）
 # ---------------------------------------------------------------------------
 _SSO_AUTH_ENTRY = "https://sso.ustb.edu.cn/idp/authCenter/authenticate"
 _SSO_QUERY_AUTH_METHODS = "https://sso.ustb.edu.cn/idp/authn/queryAuthMethods"
@@ -50,13 +47,13 @@ _SIS_QR_PAGE = "https://sis.ustb.edu.cn/connect/qrpage"
 _SIS_QR_IMG = "https://sis.ustb.edu.cn/connect/qrimg"
 _SIS_QR_STATE = "https://sis.ustb.edu.cn/connect/state"
 
-# 使用预设参数 (CHAT_USTB_EDU_CN)
-_ENTITY_ID = "YW2025007"
-_REDIRECT_URI = (
-    "http://chat.ustb.edu.cn/common/actionCasLogin"
-    "?redirect_url=http%3A%2F%2Fchat.ustb.edu.cn%2Fpage%2Fsite%2FnewPc%3Flogin_return%3Dtrue"
-)
-_STATE = "ustb"
+# BYYT 预测参数（公网可访问，Docker 容器可以正常回调）
+_ENTITY_ID = "YW2025006"
+_REDIRECT_URI = "https://byyt.ustb.edu.cn/oauth/login/code"
+_STATE = "null"
+
+# byyt 用户信息 API
+_BYYT_USER_INFO = "https://byyt.ustb.edu.cn/user/me"
 
 # 超时
 _SESSION_TIMEOUT = 180  # 3 分钟
@@ -101,32 +98,26 @@ def _create_client_with_cookies(cookies: list[dict] | None = None) -> httpx.Clie
 
 
 async def _save_bind_session(session_id: str, data: dict) -> None:
-    """保存绑定模式会话到 Redis，TTL = _SESSION_TIMEOUT。"""
     await set_json(f"{_BIND_KEY_PREFIX}{session_id}", data, ex=_SESSION_TIMEOUT)
 
 
 async def _load_bind_session(session_id: str) -> dict | None:
-    """从 Redis 读取绑定模式会话。"""
     return await get_json(f"{_BIND_KEY_PREFIX}{session_id}")
 
 
 async def _delete_bind_session(session_id: str) -> None:
-    """删除绑定模式会话。"""
     await delete(f"{_BIND_KEY_PREFIX}{session_id}")
 
 
 async def _save_login_session(session_id: str, data: dict) -> None:
-    """保存登录模式会话到 Redis，TTL = _SESSION_TIMEOUT。"""
     await set_json(f"{_LOGIN_KEY_PREFIX}{session_id}", data, ex=_SESSION_TIMEOUT)
 
 
 async def _load_login_session(session_id: str) -> dict | None:
-    """从 Redis 读取登录模式会话。"""
     return await get_json(f"{_LOGIN_KEY_PREFIX}{session_id}")
 
 
 async def _delete_login_session(session_id: str) -> None:
-    """删除登录模式会话。"""
     await delete(f"{_LOGIN_KEY_PREFIX}{session_id}")
 
 
@@ -139,11 +130,10 @@ def _sso_init_sync() -> tuple[str, str, list[dict], dict]:
     """同步执行 SSO 初始化流程。
 
     返回 (session_id, qr_url, cookies, session_data)。
-    注意：不再返回 httpx.Client，而是返回序列化的 cookies。
     """
     client = httpx.Client(timeout=_HTTP_TIMEOUT, follow_redirects=False)
 
-    # Step 1: 获取 lck（与库 _retrieve_auth_entry 一致）
+    # Step 1: 获取 lck
     logger.debug("SSO init step 1: GET authenticate")
     try:
         rsp = client.get(
@@ -195,7 +185,7 @@ def _sso_init_sync() -> tuple[str, str, list[dict], dict]:
     user_name = data.get("userName", "")
     logger.debug("SSO init step 2 done: userName=%s", user_name or "(empty)")
 
-    # Step 3: 获取微信二维码参数（与库 use_wechat_auth 一致）
+    # Step 3: 获取微信二维码参数
     logger.debug("SSO init step 3: POST getMicroQr")
     try:
         rsp = client.post(
@@ -217,7 +207,7 @@ def _sso_init_sync() -> tuple[str, str, list[dict], dict]:
         raise RuntimeError(f"Missing key in QR info response: {e}") from e
     logger.debug("SSO init step 3 done: appId=%s", app_id)
 
-    # Step 4: 获取 sid（与库 use_qr_code 一致）
+    # Step 4: 获取 sid
     logger.debug("SSO init step 4: GET qrpage")
     try:
         rsp = client.get(
@@ -241,10 +231,8 @@ def _sso_init_sync() -> tuple[str, str, list[dict], dict]:
     sid = match.group(1)
     logger.debug("SSO init step 4 done: sid=%s...%s", sid[:4], sid[-4:])
 
-    # 提取 cookies（用于后续 complete_auth）
+    # 提取 cookies
     cookies = _serialize_cookies(client)
-
-    # 关闭 client（不再需要保持连接）
     client.close()
 
     session_id = secrets.token_urlsafe(32)
@@ -310,8 +298,11 @@ def _sso_poll_sync(session: dict) -> dict:
 
 
 def _sso_complete_auth_sync(session: dict, pass_code: str) -> dict:
-    """完成 SSO 认证流程，获取用户姓名和学号。"""
-    # 从 session 中恢复 cookies 创建 httpx.Client
+    """完成 SSO 认证流程，获取用户姓名和学号。
+
+    使用 BYYT 预设，return_url 指向 byyt.ustb.edu.cn（公网可访问），
+    认证完成后通过 byyt.ustb.edu.cn/user/me API 获取用户信息。
+    """
     cookies = session.get("cookies", [])
     client = _create_client_with_cookies(cookies)
 
@@ -319,7 +310,6 @@ def _sso_complete_auth_sync(session: dict, pass_code: str) -> dict:
         app_id = session["app_id"]
         return_url = session["return_url"]
         random_token = session["random_token"]
-        user_name_from_auth = session.get("user_name", "")
 
         # 1. 构建 SIS 认证参数
         params = {
@@ -337,40 +327,19 @@ def _sso_complete_auth_sync(session: dict, pass_code: str) -> dict:
         if not return_url:
             raise RuntimeError("Return URL not available")
 
-        # 2. 访问 return_url（使用较长超时）
+        # 2. 访问 return_url 完成 SSO 认证（byyt.ustb.edu.cn 公网可访问）
         logger.debug("SSO complete: GET return_url with params")
         try:
             rsp = client.get(return_url, params=params, follow_redirects=True, timeout=_COMPLETE_TIMEOUT)
         except httpx.TimeoutException as e:
-            logger.warning("SSO complete: return_url timed out, trying API fallback")
-            # return_url 超时，跳过 HTML 解析，直接尝试 API 获取用户信息
-            real_name, student_id = _extract_user_info_from_apis(client)
-            if not student_id and user_name_from_auth:
-                student_id = user_name_from_auth
-                logger.debug("SSO complete: using userName as student_id: %s", student_id)
-            if real_name or student_id:
-                return {"real_name": real_name or "", "student_id": student_id or ""}
-            raise RuntimeError("访问认证回调超时，且无法从 API 获取用户信息") from e
+            raise RuntimeError("访问认证回调超时，请稍后重试") from e
         except Exception as e:
             raise RuntimeError(f"访问认证回调失败: {e}") from e
 
         text = rsp.text if hasattr(rsp, "text") else ""
         logger.debug("SSO complete: return_url response status=%d, length=%d", rsp.status_code, len(text))
 
-        # 3. 认证成功后，立即尝试通过 SSO API 获取用户信息
-        # （此时 client 已携带认证后的 cookies，可能可以直接拿到用户信息）
-        real_name = None
-        student_id = None
-        api_name, api_sid = _extract_user_info_from_apis(client)
-        if api_name and api_sid:
-            logger.info("SSO complete: got user info from API directly: real_name=%s, student_id=%s", api_name, api_sid)
-            return {"real_name": api_name, "student_id": api_sid}
-        if api_sid:
-            student_id = api_sid
-        if api_name:
-            real_name = api_name
-
-        # 4. 解析 actionType 和 locationValue
+        # 3. 解析 actionType 和 locationValue（与 USTB-SSO 库 _complete_auth 一致）
         action_type_match = re.search(r'var actionType\s*=\s*"([^"]+)"', text)
         location_value_match = re.search(r'var locationValue\s*=\s*"([^"]+)"', text)
 
@@ -382,26 +351,39 @@ def _sso_complete_auth_sync(session: dict, pass_code: str) -> dict:
             if action_type.upper() == "GET" and location_value:
                 try:
                     final_rsp = client.get(location_value, follow_redirects=True, timeout=_COMPLETE_TIMEOUT)
-                    final_text = final_rsp.text if hasattr(final_rsp, "text") else ""
-                    logger.debug("SSO complete: locationValue response status=%d, length=%d", final_rsp.status_code, len(final_text))
-                    real_name, student_id = _extract_user_info(final_text, client)
+                    logger.debug("SSO complete: locationValue response status=%d", final_rsp.status_code)
                 except Exception as e:
-                    logger.warning("Failed to follow locationValue: %s, trying API fallback", e)
-                    # locationValue 超时，直接尝试 API
-                    real_name, student_id = _extract_user_info_from_apis(client)
+                    logger.warning("Failed to follow locationValue: %s", e)
         else:
-            logger.warning("SSO complete: actionType/locationValue not found in response (HTML length=%d)", len(text))
+            logger.warning("SSO complete: actionType/locationValue not found (HTML length=%d)", len(text))
 
-        # 5. 从认证响应页面提取
+        # 4. 认证完成，通过 byyt.ustb.edu.cn/user/me 获取用户信息
+        real_name = None
+        student_id = None
+
+        try:
+            info_rsp = client.post(_BYYT_USER_INFO, timeout=_HTTP_TIMEOUT)
+            if info_rsp.status_code == 200:
+                payload = info_rsp.json()
+                if isinstance(payload, dict):
+                    real_name = str(payload.get("xm", "")).strip() or None
+                    student_id = str(payload.get("yhdm", "")).strip() or None
+                    logger.info("SSO complete: byyt user info: real_name=%s, student_id=%s", real_name, student_id)
+        except Exception as e:
+            logger.warning("byyt.ustb.edu.cn/user/me request failed: %s", e)
+
+        # 5. HTML 页面解析兜底
         if not real_name or not student_id:
-            name2, sid2 = _extract_user_info(text, client)
+            name2, sid2 = _extract_user_info_from_html(text)
             real_name = real_name or name2
             student_id = student_id or sid2
 
-        # 6. 兜底：userName 作为学号
-        if not student_id and user_name_from_auth:
-            student_id = user_name_from_auth
-            logger.debug("SSO complete: using userName as student_id: %s", student_id)
+        # 6. userName 作为学号兜底
+        if not student_id:
+            user_name_from_auth = session.get("user_name", "")
+            if user_name_from_auth:
+                student_id = user_name_from_auth
+                logger.debug("SSO complete: using userName as student_id: %s", student_id)
 
         if real_name and student_id:
             return {"real_name": real_name, "student_id": student_id}
@@ -417,181 +399,33 @@ def _sso_complete_auth_sync(session: dict, pass_code: str) -> dict:
         client.close()
 
 
-def _extract_user_info(text: str, client: httpx.Client) -> tuple[str | None, str | None]:
-    """从认证完成页面的 HTML 中提取用户姓名和学号。"""
+def _extract_user_info_from_html(text: str) -> tuple[str | None, str | None]:
+    """从认证完成页面的 HTML 中提取用户姓名和学号（兜底方案）。"""
     real_name = None
     student_id = None
 
-    for pattern_name, pattern in [
-        ("realName", r'"realName"\s*:\s*"([^"]+)"'),
-        ("name", r'"name"\s*:\s*"([^"]+)"'),
-        ("userName", r'"userName"\s*:\s*"([^"]+)"'),
-        ("nickname", r'"nickname"\s*:\s*"([^"]+)"'),
-        ("displayName", r'"displayName"\s*:\s*"([^"]+)"'),
+    for pattern in [
+        r'"realName"\s*:\s*"([^"]+)"',
+        r'"name"\s*:\s*"([^"]+)"',
+        r'"userName"\s*:\s*"([^"]+)"',
+        r'"xm"\s*:\s*"([^"]+)"',
     ]:
         if not real_name:
             m = re.search(pattern, text)
             if m:
                 real_name = unescape(m.group(1))
 
-    for pattern_id, pattern in [
-        ("usercode", r'"usercode"\s*:\s*"([^"]+)"'),
-        ("studentId", r'"studentId"\s*:\s*"([^"]+)"'),
-        ("uid", r'"uid"\s*:\s*"(\d+)"'),
-        ("userName_num", r'"userName"\s*:\s*"(\d+)"'),
-        ("loginName", r'"loginName"\s*:\s*"(\d+)"'),
-        ("xh", r'"xh"\s*:\s*"(\d+)"'),
+    for pattern in [
+        r'"usercode"\s*:\s*"([^"]+)"',
+        r'"studentId"\s*:\s*"([^"]+)"',
+        r'"yhdm"\s*:\s*"([^"]+)"',
+        r'"uid"\s*:\s*"(\d+)"',
     ]:
         if not student_id:
             m = re.search(pattern, text)
             if m:
                 student_id = m.group(1)
 
-    if real_name and student_id:
-        logger.debug("Extracted user info from HTML: real_name=%s, student_id=%s", real_name, student_id)
-        return real_name, student_id
-
-    # 方法 2: 微校园 API
-    if not real_name or not student_id:
-        try:
-            info_rsp = client.get("https://xis.ustb.edu.cn/api/user/info", timeout=_HTTP_TIMEOUT, follow_redirects=True)
-            if info_rsp.status_code == 200:
-                try:
-                    info_data = info_rsp.json()
-                    if isinstance(info_data, dict):
-                        d = info_data.get("data", info_data)
-                        if isinstance(d, dict):
-                            real_name = real_name or d.get("name") or d.get("realName") or d.get("userName")
-                            student_id = student_id or d.get("usercode") or d.get("studentId") or d.get("uid")
-                            if real_name and student_id:
-                                return real_name, student_id
-                except Exception:
-                    pass
-        except Exception as e:
-            logger.debug("xis.ustb.edu.cn user info request failed: %s", e)
-
-    # 方法 3: SSO 个人信息
-    if not real_name or not student_id:
-        try:
-            profile_rsp = client.get("https://sso.ustb.edu.cn/idp/userCenter/getUserInfo", timeout=_HTTP_TIMEOUT)
-            if profile_rsp.status_code == 200:
-                try:
-                    profile_data = profile_rsp.json()
-                    if isinstance(profile_data, dict):
-                        d = profile_data.get("data", profile_data)
-                        if isinstance(d, dict):
-                            real_name = real_name or d.get("name") or d.get("realName")
-                            student_id = student_id or d.get("usercode") or d.get("userName")
-                            if real_name and student_id:
-                                return real_name, student_id
-                except Exception:
-                    pass
-        except Exception as e:
-            logger.debug("SSO user info request failed: %s", e)
-
-    # 方法 4: chat.ustb.edu.cn
-    if not real_name or not student_id:
-        try:
-            chat_rsp = client.get("http://chat.ustb.edu.cn/api/user/info", timeout=_HTTP_TIMEOUT, follow_redirects=True)
-            if chat_rsp.status_code == 200:
-                try:
-                    chat_data = chat_rsp.json()
-                    if isinstance(chat_data, dict):
-                        d = chat_data.get("data", chat_data)
-                        if isinstance(d, dict):
-                            real_name = real_name or d.get("name") or d.get("realName") or d.get("userName")
-                            student_id = student_id or d.get("usercode") or d.get("studentId") or d.get("uid")
-                except Exception:
-                    pass
-        except Exception as e:
-            logger.debug("chat.ustb.edu.cn user info request failed: %s", e)
-
-    if real_name or student_id:
-        logger.debug("Extracted partial: real_name=%s, student_id=%s", real_name, student_id)
-    else:
-        logger.warning("Failed to extract user info from any source")
-
-    return real_name, student_id
-
-
-def _extract_user_info_from_apis(client: httpx.Client) -> tuple[str | None, str | None]:
-    """直接通过 API 获取用户信息（不依赖 HTML 页面解析）。
-
-    在 locationValue 不可达/超时时作为兜底方案。
-    认证完成后 SSO cookies 应已生效，可访问用户信息 API。
-    """
-    real_name = None
-    student_id = None
-
-    # 方法 1: SSO 个人信息（最可靠）
-    try:
-        profile_rsp = client.get(
-            "https://sso.ustb.edu.cn/idp/userCenter/getUserInfo",
-            timeout=_COMPLETE_TIMEOUT,
-        )
-        if profile_rsp.status_code == 200:
-            try:
-                profile_data = profile_rsp.json()
-                if isinstance(profile_data, dict):
-                    d = profile_data.get("data", profile_data)
-                    if isinstance(d, dict):
-                        real_name = d.get("name") or d.get("realName") or d.get("userName")
-                        student_id = d.get("usercode") or d.get("userName") or d.get("uid")
-                        if real_name or student_id:
-                            logger.debug("Got user info from SSO API: real_name=%s, student_id=%s", real_name, student_id)
-                            return real_name, student_id
-            except Exception:
-                pass
-    except Exception as e:
-        logger.debug("SSO user info API failed: %s", e)
-
-    # 方法 2: 微校园 API
-    try:
-        info_rsp = client.get(
-            "https://xis.ustb.edu.cn/api/user/info",
-            timeout=_COMPLETE_TIMEOUT,
-            follow_redirects=True,
-        )
-        if info_rsp.status_code == 200:
-            try:
-                info_data = info_rsp.json()
-                if isinstance(info_data, dict):
-                    d = info_data.get("data", info_data)
-                    if isinstance(d, dict):
-                        real_name = d.get("name") or d.get("realName") or d.get("userName")
-                        student_id = d.get("usercode") or d.get("studentId") or d.get("uid")
-                        if real_name or student_id:
-                            logger.debug("Got user info from xis API: real_name=%s, student_id=%s", real_name, student_id)
-                            return real_name, student_id
-            except Exception:
-                pass
-    except Exception as e:
-        logger.debug("xis user info API failed: %s", e)
-
-    # 方法 3: chat.ustb.edu.cn
-    try:
-        chat_rsp = client.get(
-            "http://chat.ustb.edu.cn/api/user/info",
-            timeout=_COMPLETE_TIMEOUT,
-            follow_redirects=True,
-        )
-        if chat_rsp.status_code == 200:
-            try:
-                chat_data = chat_rsp.json()
-                if isinstance(chat_data, dict):
-                    d = chat_data.get("data", chat_data)
-                    if isinstance(d, dict):
-                        real_name = d.get("name") or d.get("realName") or d.get("userName")
-                        student_id = d.get("usercode") or d.get("studentId") or d.get("uid")
-                        if real_name or student_id:
-                            logger.debug("Got user info from chat API: real_name=%s, student_id=%s", real_name, student_id)
-                            return real_name, student_id
-            except Exception:
-                pass
-    except Exception as e:
-        logger.debug("chat user info API failed: %s", e)
-
-    logger.warning("Failed to extract user info from any API")
     return real_name, student_id
 
 
@@ -639,7 +473,7 @@ async def poll_sso_status(
         await _delete_bind_session(session_id)
         raise HTTPException(status_code=410, detail="二维码已过期，请重新获取")
 
-    # 认证完成中，返回 waiting（防止竞态：另一个 poll 正在 complete_auth）
+    # 认证完成中，返回 waiting（防止竞态）
     if session.get("status") == "completing":
         return {"status": "waiting", "message": "认证完成中..."}
 
@@ -651,7 +485,7 @@ async def poll_sso_status(
             "student_id": session.get("student_id"),
         }
 
-    # 认证已尝试但失败，返回缓存的错误（防止无限重试）
+    # 认证已尝试但失败（防止无限重试）
     if session.get("status") == "failed":
         return {"status": "error", "message": session.get("error_message", "认证失败，请重新获取二维码")}
 
@@ -663,7 +497,6 @@ async def poll_sso_status(
         result = await asyncio.to_thread(_sso_poll_sync, session)
     except Exception as e:
         logger.error("SSO poll failed: %s", e)
-        # 认证过程中出错，标记为 failed 防止无限重试
         session["status"] = "failed"
         session["error_message"] = str(e)
         await _save_bind_session(session_id, session)
@@ -693,13 +526,11 @@ async def poll_sso_status(
         return result
 
     else:
-        # error — 标记为 failed 防止无限重试
         if result.get("status") == "error":
             session["status"] = "failed"
             session["error_message"] = result.get("message", "认证失败")
             await _save_bind_session(session_id, session)
         else:
-            # waiting — 二维码尚未被扫描
             session["status"] = "waiting"
             await _save_bind_session(session_id, session)
 
@@ -762,11 +593,9 @@ async def login_sso_poll(
         await _delete_login_session(session_id)
         raise HTTPException(status_code=410, detail="二维码已过期，请重新获取")
 
-    # 认证完成中
     if session.get("status") == "completing":
         return {"status": "waiting", "message": "认证完成中..."}
 
-    # 已完成，返回缓存结果
     if session.get("login_status") == "success":
         return {
             "status": "success",
@@ -780,11 +609,9 @@ async def login_sso_poll(
             "student_id": session.get("student_id"),
         }
 
-    # 认证已尝试但失败，返回缓存的错误
     if session.get("status") == "failed":
         return {"status": "error", "message": session.get("error_message", "认证失败，请重新获取二维码")}
 
-    # 标记为 completing 后再执行
     session["status"] = "completing"
     await _save_login_session(session_id, session)
 
@@ -826,7 +653,6 @@ async def login_sso_poll(
                 "access_token": jwt_token,
             }
         else:
-            # 存储到 Redis 的 pending_oauth
             from app.routers.oauth_login import store_pending_oauth
             oauth_token = secrets.token_urlsafe(32)
             await store_pending_oauth(oauth_token, {
@@ -856,13 +682,11 @@ async def login_sso_poll(
         return result
 
     else:
-        # error — 标记为 failed 防止无限重试
         if result.get("status") == "error":
             session["status"] = "failed"
             session["error_message"] = result.get("message", "认证失败")
             await _save_login_session(session_id, session)
         else:
-            # waiting — 二维码尚未被扫描
             session["status"] = "waiting"
             await _save_login_session(session_id, session)
 

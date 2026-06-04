@@ -231,6 +231,8 @@ function SecurityPageInner() {
       await api.post('/github/unbind');
       await hydrate();
       setGithubBindMsg({ ok: true, text: '已解绑 GitHub 账号' });
+      // 引导用户去 GitHub 撤销应用授权
+      window.open('https://github.com/settings/applications', '_blank');
     } catch (err: any) {
       setGithubBindMsg({ ok: false, text: err?.response?.data?.detail || '解绑失败' });
     } finally {
@@ -357,15 +359,27 @@ function SecurityPageInner() {
           </div>
 
           {isSsoBound ? (
-            <button
-              onClick={unbindSso}
-              disabled={unbinding}
-              className="btn-ghost"
-              style={{ padding: '6px 14px', fontSize: 13, color: '#dc2626', borderColor: 'color-mix(in srgb, #dc2626 30%, transparent)' }}
-            >
-              {unbinding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Unlink style={{ width: 14, height: 14 }} />}
-              解绑
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span
+                style={{
+                  padding: '6px 14px', fontSize: 13, borderRadius: 6,
+                  background: 'color-mix(in srgb, var(--color-text-light) 10%, transparent)',
+                  color: 'var(--color-text-light)', fontWeight: 500,
+                }}
+              >
+                <Check style={{ width: 13, height: 13, display: 'inline', verticalAlign: '-2px', color: '#22c55e' }} />
+                {' '}已绑定
+              </span>
+              <button
+                onClick={unbindSso}
+                disabled={unbinding}
+                className="btn-ghost"
+                style={{ padding: '6px 14px', fontSize: 13, color: '#dc2626', borderColor: 'color-mix(in srgb, #dc2626 30%, transparent)' }}
+              >
+                {unbinding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Unlink style={{ width: 14, height: 14 }} />}
+                解绑
+              </button>
+            </div>
           ) : (
             <button
               onClick={startSsoBind}
