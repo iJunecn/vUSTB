@@ -21,6 +21,15 @@
         reverse_proxy backend:8000
     }
 
+    # OAuth 前端页面（精确匹配）→ Next.js
+    # path 以 * 结尾表示精确匹配（含可选尾斜杠），不会匹配子路径
+    # 例如 /oauth/device* 匹配 /oauth/device 和 /oauth/device/，但不匹配 /oauth/device/code
+    @oauthFrontendPages path /oauth/authorize* /oauth/device* /oauth/device-callback*
+    handle @oauthFrontendPages {
+        reverse_proxy frontend:3000
+    }
+
+    # OAuth API → 后端（token、device/code、device/approve 等）
     handle /oauth/* {
         reverse_proxy backend:8000
     }
