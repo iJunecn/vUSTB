@@ -1341,7 +1341,32 @@ async def create_oauth_app_v2(
 ):
     client_name = body.get("client_name", "")
     redirect_uri = body.get("redirect_uri", "")
-    return await oauth_backend.create_app(db, client_name, redirect_uri)
+    description = body.get("description", "")
+    set_as_device_shared_client = bool(body.get("set_as_device_shared_client", False))
+    return await oauth_backend.create_app(db, client_name, redirect_uri, description, set_as_device_shared_client)
+
+
+@router.put("/oauth/apps/{app_id}")
+async def update_oauth_app_v2(
+    app_id: int,
+    body: dict = Body(...),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_admin),
+):
+    client_name = body.get("client_name", "")
+    redirect_uri = body.get("redirect_uri", "")
+    description = body.get("description")
+    set_as_device_shared_client = body.get("set_as_device_shared_client")
+    return await oauth_backend.update_app(db, app_id, client_name, redirect_uri, description, set_as_device_shared_client)
+
+
+@router.post("/oauth/apps/{app_id}/reset-secret")
+async def reset_oauth_app_secret_v2(
+    app_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_admin),
+):
+    return await oauth_backend.reset_app_secret(db, app_id)
 
 
 @router.delete("/oauth/apps/{app_id}")
@@ -1352,8 +1377,19 @@ async def delete_oauth_app_v2(app_id: int, db: AsyncSession = Depends(get_db), _
 
 @router.get("/oauth/meta")
 async def get_oauth_meta(db: AsyncSession = Depends(get_db), _: User = Depends(get_current_admin)):
-    """返回 OAuth 支持的 scopes 和配置信息"""
-    return {
-        "supported_scopes": oauth_backend.SUPPORTED_SCOPES,
-        "apps": await oauth_backend.list_apps(db),
-    }
+    """返回 OAuth 支持的 scopes、端点 URL 和设备流设置"""
+    return await oauth_backend.admin_meta(db)
+
+
+@router.get("/oauth/device-settings")
+async def get_oauth_device_settings(db: AsyncSession = Depends(get_db), _: User = Depends(get_current_admin)):
+    return await oauth_backend.get_admin_device_settings(db)
+
+
+@router.post("/oauth/device-settings")
+async def save_oauth_device_settings(
+    body: dict = Body(...),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_admin),
+):
+    return await oauth_backend.save_admin_device_settings(db, body)

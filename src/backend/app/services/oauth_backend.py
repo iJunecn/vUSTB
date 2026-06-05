@@ -72,6 +72,123 @@ class OAuthBackend:
         site_url = self._site_url()
         return f"{site_url}/device" if site_url else "/device"
 
+    # ====== Device flow settings ======
+
+    async def _device_default_redirect_uri(self, db: AsyncSession) -> str:
+        return await self._get_setting(db, "oauth_device_default_redirect_uri", "https://www.ustb.world/oauth/device-callback")
+
+    async def _device_expires_in(self, db: AsyncSession) -> int:
+        raw = await self._get_setting(db, "oauth_device_expires_in", "")
+        try:
+            return max(300, int(raw)) if raw else 900
+        except (TypeError, ValueError):
+            return 900
+
+    async def _device_interval(self, db: AsyncSession) -> int:
+        raw = await self._get_setting(db, "oauth_device_interval", "")
+        try:
+            return max(5, int(raw)) if raw else 5
+        except (TypeError, ValueError):
+            return 5
+
+    def _parse_shared_client_ids(self, value) -> list[int]:
+        if value in (None, ""):
+            return []
+        if isinstance(value, (list, tuple, set)):
+            chunks = list(value)
+        else:
+            chunks = str(value).split(",")
+        result: list[int] = []
+        for chunk in chunks:
+            try:
+                final = int(str(chunk).strip())
+            except (TypeError, ValueError):
+                continue
+            if final > 0 and final not in result:
+                result.append(final)
+        return result
+
+    async def _shared_client_ids(self, db: AsyncSession) -> list[int]:
+        value = await self._get_setting(db, "oauth_device_shared_client_ids", "")
+        final = self._parse_shared_client_ids(value)
+        if final:
+            return final
+        legacy_value = await self._get_setting(db, "oauth_device_shared_client_id", "")
+        final = self._parse_shared_client_ids(legacy_value)
+        return final
+
+    async def _set_shared_client_ids(self, db: AsyncSession, app_ids: list[int]):
+        final_ids = self._parse_shared_client_ids(app_ids)
+        payload = ",".join(str(app_id) for app_id in final_ids)
+        legacy = str(final_ids[0]) if final_ids else ""
+        await self._set_setting(db, "oauth_device_shared_client_ids", payload)
+        await self._set_setting(db, "oauth_device_shared_client_id", legacy)
+
+    async def _add_shared_client_id(self, db: AsyncSession, app_id: int):
+        shared_client_ids = await self._shared_client_ids(db)
+        if int(app_id) not in shared_client_ids:
+            shared_client_ids.append(int(app_id))
+            await self._set_shared_client_ids(db, shared_client_ids)
+
+    async def _remove_shared_client_id(self, db: AsyncSession, app_id: int):
+        shared_client_ids = [item for item in await self._shared_client_ids(db) if int(item) != int(app_id)]
+        await self._set_shared_client_ids(db, shared_client_ids)
+
+    async def get_admin_device_settings(self, db: AsyncSession) -> dict:
+        shared_client_ids = await self._shared_client_ids(db)
+        return {
+            "shared_client_id": shared_client_ids[0] if shared_client_ids else None,
+            "shared_client_ids": shared_client_ids,
+            "expires_in": await self._device_expires_in(db),
+            "interval": await self._device_interval(db),
+            "default_redirect_uri": await self._device_default_redirect_uri(db),
+        }
+
+    async def save_admin_device_settings(self, db: AsyncSession, body: dict) -> dict:
+        shared_client_ids = body.get("shared_client_ids", None)
+        if shared_client_ids is None:
+            legacy_shared_client_id = body.get("shared_client_id")
+            if legacy_shared_client_id in (None, ""):
+                final_shared_client_ids: list[int] = []
+            else:
+                final_shared_client_ids = self._parse_shared_client_ids([legacy_shared_client_id])
+        else:
+            final_shared_client_ids = self._parse_shared_client_ids(shared_client_ids)
+
+        for app_id in final_shared_client_ids:
+            app = (await db.execute(select(OAuthApp).where(OAuthApp.app_id == app_id))).scalar_one_or_none()
+            if not app:
+                raise HTTPException(status_code=404, detail="oauth app not found")
+
+        await self._set_shared_client_ids(db, final_shared_client_ids)
+
+        expires_in = body.get("expires_in")
+        if expires_in is not None:
+            try:
+                expires_final = max(300, int(expires_in))
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail="expires_in invalid")
+            await self._set_setting(db, "oauth_device_expires_in", str(expires_final))
+
+        interval = body.get("interval")
+        if interval is not None:
+            try:
+                interval_final = max(5, int(interval))
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail="interval invalid")
+            await self._set_setting(db, "oauth_device_interval", str(interval_final))
+
+        default_redirect_uri = body.get("default_redirect_uri")
+        if default_redirect_uri is not None:
+            await self._set_setting(
+                db,
+                "oauth_device_default_redirect_uri",
+                self._normalize_redirect_uri(default_redirect_uri),
+            )
+
+        await db.commit()
+        return await self.get_admin_device_settings(db)
+
     # ====== Scope helpers ======
 
     def _parse_scope(self, scope: str, default_scope: str = "userinfo", allowed_scopes: set[str] | None = None) -> tuple[str, list[str]]:
@@ -175,33 +292,86 @@ class OAuthBackend:
 
     async def list_apps(self, db: AsyncSession) -> list[dict]:
         rows = (await db.execute(select(OAuthApp).order_by(OAuthApp.app_id.asc()))).scalars().all()
+        shared_client_ids = set(await self._shared_client_ids(db))
+        default_redirect_uri = await self._device_default_redirect_uri(db)
         return [
             {
                 "app_id": r.app_id,
                 "client_name": r.client_name,
+                "description": r.description,
                 "redirect_uri": r.redirect_uri,
+                "is_device_shared": int(r.app_id) in shared_client_ids,
+                "can_use_for_device_flow": True,
+                "recommended_device_redirect_uri": default_redirect_uri,
                 "created_at": r.created_at,
                 "updated_at": r.updated_at,
             }
             for r in rows
         ]
 
-    async def create_app(self, db: AsyncSession, client_name: str, redirect_uri: str) -> dict:
+    async def create_app(self, db: AsyncSession, client_name: str, redirect_uri: str, description: str = "", set_as_device_shared_client: bool = False) -> dict:
         final_name = (client_name or "").strip()
         final_redirect_uri = self._normalize_redirect_uri(redirect_uri)
         secret = self._make_secret()
+        now = int(time.time() * 1000)
         app = OAuthApp(
             client_name=final_name,
             client_secret_hash=self._hash_secret(secret),
             redirect_uri=final_redirect_uri,
+            description=description or None,
+            is_device_shared=set_as_device_shared_client,
+            created_at=now,
+            updated_at=now,
         )
         db.add(app)
         await db.commit()
         await db.refresh(app)
+
+        if set_as_device_shared_client:
+            await self._add_shared_client_id(db, app.app_id)
+
         return {
             "app_id": app.app_id,
             "client_name": final_name,
+            "description": description or None,
             "redirect_uri": final_redirect_uri,
+            "client_secret": secret,
+            "client_secret_masked": self._mask_secret(secret),
+            "is_device_shared": set_as_device_shared_client,
+        }
+
+    async def update_app(self, db: AsyncSession, app_id: int, client_name: str, redirect_uri: str, description: str | None = None, set_as_device_shared_client: bool | None = None) -> dict:
+        app = (await db.execute(select(OAuthApp).where(OAuthApp.app_id == app_id))).scalar_one_or_none()
+        if not app:
+            raise HTTPException(status_code=404, detail="oauth app not found")
+        final_name = (client_name or "").strip()
+        final_redirect_uri = self._normalize_redirect_uri(redirect_uri)
+        now = int(time.time() * 1000)
+        app.client_name = final_name
+        app.redirect_uri = final_redirect_uri
+        app.updated_at = now
+        if description is not None:
+            app.description = description or None
+        if set_as_device_shared_client is True:
+            app.is_device_shared = True
+            await self._add_shared_client_id(db, app_id)
+        elif set_as_device_shared_client is False:
+            app.is_device_shared = False
+            await self._remove_shared_client_id(db, app_id)
+        await db.commit()
+        return {"ok": True}
+
+    async def reset_app_secret(self, db: AsyncSession, app_id: int) -> dict:
+        app = (await db.execute(select(OAuthApp).where(OAuthApp.app_id == app_id))).scalar_one_or_none()
+        if not app:
+            raise HTTPException(status_code=404, detail="oauth app not found")
+        secret = self._make_secret()
+        now = int(time.time() * 1000)
+        app.client_secret_hash = self._hash_secret(secret)
+        app.updated_at = now
+        await db.commit()
+        return {
+            "app_id": app_id,
             "client_secret": secret,
             "client_secret_masked": self._mask_secret(secret),
         }
@@ -210,15 +380,33 @@ class OAuthBackend:
         app = (await db.execute(select(OAuthApp).where(OAuthApp.app_id == app_id))).scalar_one_or_none()
         if not app:
             raise HTTPException(status_code=404, detail="oauth app not found")
+        await self._remove_shared_client_id(db, app_id)
         await db.delete(app)
         await db.commit()
+
+    # ====== Admin meta ======
+
+    async def admin_meta(self, db: AsyncSession) -> dict:
+        site_url = self._site_url()
+        api_url = self._api_url()
+        device_settings = await self.get_admin_device_settings(db)
+        return {
+            "authorize_endpoint": f"{site_url}/oauth/authorize" if site_url else "/oauth/authorize",
+            "token_endpoint": f"{api_url}/oauth/token" if api_url else "/oauth/token",
+            "device_authorization_endpoint": f"{api_url}/oauth/device/code" if api_url else "/oauth/device/code",
+            "jwks_uri": f"{api_url}/oauth/jwks" if api_url else "/oauth/jwks",
+            "openid_configuration_url": f"{api_url}/.well-known/openid-configuration" if api_url else "/.well-known/openid-configuration",
+            "verification_uri": f"{site_url}/device" if site_url else "/device",
+            "userinfo_endpoint": f"{api_url}/oauth/userinfo" if api_url else "/oauth/userinfo",
+            "supported_scopes": self.SUPPORTED_SCOPES,
+            "device_settings": device_settings,
+        }
 
     # ====== OpenID Configuration ======
 
     async def openid_configuration(self, db: AsyncSession) -> dict:
         issuer = self._issuer()
-        shared_client_ids_str = await self._get_setting(db, "oauth_device_shared_client_ids", "")
-        shared_client_ids = [s.strip() for s in shared_client_ids_str.split(",") if s.strip()] if shared_client_ids_str else []
+        shared_client_ids = await self._shared_client_ids(db)
 
         payload = {
             "issuer": issuer,
@@ -236,8 +424,8 @@ class OAuthBackend:
             "scopes_supported": list(self.SUPPORTED_SCOPES.keys()),
         }
         if shared_client_ids:
-            payload["shared_client_id"] = shared_client_ids[0]
-            payload["shared_client_ids"] = shared_client_ids
+            payload["shared_client_id"] = str(shared_client_ids[0])
+            payload["shared_client_ids"] = [str(s) for s in shared_client_ids]
         return payload
 
     def jwks(self) -> dict:
@@ -394,8 +582,8 @@ class OAuthBackend:
 
     async def create_device_authorization(self, db: AsyncSession, client_id: int, scope: str) -> dict:
         normalized_scope, _ = self._parse_scope(scope, default_scope=self.DEVICE_DEFAULT_SCOPE, allowed_scopes=self.DEVICE_SCOPE_KEYS)
-        expires_in = 900
-        interval = 5
+        expires_in = await self._device_expires_in(db)
+        interval = await self._device_interval(db)
         device_code = self._make_device_code()
         user_code = self._make_user_code()
         expires_at = int(time.time() * 1000) + expires_in * 1000

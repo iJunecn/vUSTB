@@ -6,12 +6,24 @@ import { rawApi } from '@/lib/api';
 import { useUserStore } from '@/stores/user';
 import { Loader2, Shield } from 'lucide-react';
 
+type AuthorizePreview = {
+  app_id: number;
+  client_name: string;
+  requester_name: string;
+  site_name: string;
+  redirect_uri: string;
+  state: string;
+  scope: string;
+  scope_items: { key: string; label: string; description: string }[];
+};
+
 function AuthorizeInner() {
   const router = useRouter();
   const params = useSearchParams();
   const { user, loaded, hydrate } = useUserStore();
   const [approving, setApproving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<AuthorizePreview | null>(null);
 
   const client_id = params.get('client_id') || '';
   const redirect_uri = params.get('redirect_uri') || '';
@@ -28,6 +40,14 @@ function AuthorizeInner() {
       router.replace(`/login?next=${next}`);
     }
   }, [loaded, user, router]);
+
+  // Fetch authorize preview to show app name and scope details
+  useEffect(() => {
+    if (!client_id || !redirect_uri) return;
+    rawApi.get<AuthorizePreview>('/oauth/authorize/check', {
+      params: { client_id, redirect_uri, state, scope },
+    }).then((r) => setPreview(r.data)).catch(() => {});
+  }, [client_id, redirect_uri, state, scope]);
 
   async function approve() {
     setApproving(true);
@@ -51,6 +71,9 @@ function AuthorizeInner() {
     );
   }
 
+  const displayName = preview?.requester_name || preview?.client_name || `应用 #${client_id}`;
+  const scopeItems = preview?.scope_items || scope.split(/\s+/).filter(Boolean).map((s) => ({ key: s, label: s, description: '' }));
+
   return (
     <div className="auth-shell">
       <div className="auth-panel">
@@ -71,7 +94,7 @@ function AuthorizeInner() {
             第三方应用申请授权
           </h1>
           <p style={{ fontSize: '14px', color: 'var(--color-text-light)', margin: 0 }}>
-            client_id <code style={{ color: 'var(--color-text)', fontWeight: 600 }}>{client_id || '?'}</code> 想要访问你的像素北科账户
+            <strong style={{ color: 'var(--color-text)' }}>{displayName}</strong> 想要访问你的 {preview?.site_name || '像素北科'} 账户
           </p>
         </header>
 
@@ -87,16 +110,22 @@ function AuthorizeInner() {
             将授权以下权限
           </p>
           <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            {scope.split(/\s+/).filter(Boolean).map((s) => (
-              <li key={s} style={{ fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-text)' }}>
+            {scopeItems.map((s) => (
+              <li key={s.key} style={{ fontSize: '14px', display: 'flex', alignItems: 'flex-start', gap: '8px', color: 'var(--color-text)' }}>
                 <span style={{
                   width: '6px',
                   height: '6px',
                   borderRadius: '50%',
                   background: 'var(--color-primary)',
                   flexShrink: 0,
+                  marginTop: '7px',
                 }} />
-                {s}
+                <div>
+                  <span style={{ fontWeight: 500 }}>{s.label}</span>
+                  {s.description && (
+                    <span style={{ marginLeft: 6, fontSize: '12px', color: 'var(--color-text-light)' }}>{s.description}</span>
+                  )}
+                </div>
               </li>
             ))}
           </ul>
