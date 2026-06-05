@@ -75,7 +75,7 @@ class OAuthBackend:
     # ====== Device flow settings ======
 
     async def _device_default_redirect_uri(self, db: AsyncSession) -> str:
-        return await self._get_setting(db, "oauth_device_default_redirect_uri", "https://oauth.ustb.world/")
+        return await self._get_setting(db, "oauth_device_default_redirect_uri", "https://www.ustb.world/oauth/device-callback")
 
     async def _device_expires_in(self, db: AsyncSession) -> int:
         raw = await self._get_setting(db, "oauth_device_expires_in", "")
