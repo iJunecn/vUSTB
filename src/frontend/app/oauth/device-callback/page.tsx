@@ -1,16 +1,9 @@
 'use client';
 
-import { useEffect } from 'react';
+import { Suspense, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 
-/**
- * Redirect /oauth/device-callback?user_code=XXX → /oauth/device?user_code=XXX
- *
- * Some OAuth clients hard-code the callback path as "device-callback"
- * instead of reading `verification_uri_complete` from the device code response.
- * This page bridges that gap by forwarding to the real device verification page.
- */
-export default function DeviceCallbackRedirect() {
+function DeviceCallbackInner() {
   const params = useSearchParams();
   const router = useRouter();
 
@@ -21,4 +14,19 @@ export default function DeviceCallbackRedirect() {
   }, [params, router]);
 
   return null;
+}
+
+/**
+ * Redirect /oauth/device-callback?user_code=XXX → /oauth/device?user_code=XXX
+ *
+ * Some OAuth clients hard-code the callback path as "device-callback"
+ * instead of reading `verification_uri_complete` from the device code response.
+ * This page bridges that gap by forwarding to the real device verification page.
+ */
+export default function DeviceCallbackRedirect() {
+  return (
+    <Suspense>
+      <DeviceCallbackInner />
+    </Suspense>
+  );
 }
