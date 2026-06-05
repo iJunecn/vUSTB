@@ -12,6 +12,8 @@ class OAuthApp(Base):
     client_name: Mapped[str] = mapped_column(String(128), nullable=False)
     client_secret_hash: Mapped[str] = mapped_column(String(128), nullable=False)
     redirect_uri: Mapped[str] = mapped_column(String(512), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    is_device_shared: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="0")
     created_at: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False, server_default="0")
     updated_at: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False, server_default="0")
 
