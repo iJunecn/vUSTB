@@ -6,7 +6,8 @@ or internal API details to the client.
 
 Flow:
 1. Client calls GET /api/anyshare/files  →  returns file list
-2. Client calls GET /api/anyshare/download?docid=xxx&name=yyy  →  redirects to download URL
+2. Client calls GET /api/anyshare/download?docid=xxx&name=yyy  →  returns JSON with download URL
+   Frontend opens the URL directly, bypassing Next.js client-side routing.
 """
 from __future__ import annotations
 
@@ -16,7 +17,6 @@ from urllib.parse import quote
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/anyshare", tags=["anyshare"])
@@ -153,6 +153,11 @@ class FileListResponse(BaseModel):
     files: List[FileItem]
 
 
+class DownloadUrlResponse(BaseModel):
+    method: str
+    url: str
+
+
 # ── Endpoints ───────────────────────────────────────────────────────
 
 @router.get("/files", response_model=FileListResponse)
@@ -181,16 +186,12 @@ async def list_files():
     return FileListResponse(files=items)
 
 
-@router.get("/download")
-async def download_file(
+@router.get("/download", response_model=DownloadUrlResponse)
+async def get_download_url(
     docid: str = Query(..., description="File docid from file list"),
     name: str = Query(..., description="File name for download"),
 ):
-    """Get download URL and redirect the browser to it."""
+    """Get download URL as JSON. Frontend opens the URL directly to start download."""
     token = await _ensure_token()
     method, url = await _get_download_url(token, docid, name)
-    # For GET requests, redirect the browser directly
-    if method.upper() == "GET":
-        return RedirectResponse(url=url, status_code=302)
-    # For POST or other methods, return the URL so the frontend can handle it
-    return {"method": method, "url": url}
+    return DownloadUrlResponse(method=method.upper(), url=url)
