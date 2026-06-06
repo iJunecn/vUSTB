@@ -21,7 +21,7 @@ from app.deps import get_current_admin, get_current_super_admin, get_current_use
 from app.models import (
     User, UserGroup, InviteCode, OAuthApp, SiteSetting, Carousel, FallbackEndpoint,
     PointAccount, PointTransaction, PointType, PointReason,
-    Texture, Player,
+    Texture, Player, Wardrobe,
 )
 from app.services.admin_backend import admin_backend
 from app.services.oauth_backend import oauth_backend
@@ -242,6 +242,54 @@ async def delete_user(
     )).scalars().all()
     for dc in dc_rows:
         dc.user_id = None
+
+    # Delete user's players (and their wardrobe entries) before textures
+    # to avoid FK violation: players.skin_texture_id / cape_texture_id → textures.id
+    # Even with ondelete="SET NULL" in the model, existing DBs may not have it yet.
+    player_rows = (await db.execute(
+        select(Player).where(Player.owner_id == user_id)
+    )).scalars().all()
+    for p in player_rows:
+        # Remove wardrobe entries for this player's textures first
+        if p.skin_texture_id:
+            w_skin = (await db.execute(
+                select(Wardrobe).where(Wardrobe.texture_id == p.skin_texture_id)
+            )).scalars().all()
+            for w in w_skin:
+                await db.delete(w)
+        if p.cape_texture_id:
+            w_cape = (await db.execute(
+                select(Wardrobe).where(Wardrobe.texture_id == p.cape_texture_id)
+            )).scalars().all()
+            for w in w_cape:
+                await db.delete(w)
+        await db.delete(p)
+
+    # Nullify any remaining player references to this user's textures
+    # (handles players owned by OTHER users that reference this user's textures)
+    user_texture_ids = (await db.execute(
+        select(Texture.id).where(Texture.uploader_id == user_id)
+    )).scalars().all()
+    if user_texture_ids:
+        ref_players = (await db.execute(
+            select(Player).where(
+                (Player.skin_texture_id.in_(user_texture_ids)) |
+                (Player.cape_texture_id.in_(user_texture_ids))
+            )
+        )).scalars().all()
+        for p in ref_players:
+            if p.skin_texture_id in user_texture_ids:
+                p.skin_texture_id = None
+            if p.cape_texture_id in user_texture_ids:
+                p.cape_texture_id = None
+
+    # Delete wardrobe entries for this user's textures
+    if user_texture_ids:
+        w_rows = (await db.execute(
+            select(Wardrobe).where(Wardrobe.texture_id.in_(user_texture_ids))
+        )).scalars().all()
+        for w in w_rows:
+            await db.delete(w)
 
     await db.delete(u)
     await db.commit()

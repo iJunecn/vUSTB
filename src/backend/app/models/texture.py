@@ -28,8 +28,8 @@ class Player(Base):
     uuid: Mapped[str] = mapped_column(String(36), unique=True, nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
     owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    skin_texture_id: Mapped[int | None] = mapped_column(ForeignKey("textures.id"), nullable=True)
-    cape_texture_id: Mapped[int | None] = mapped_column(ForeignKey("textures.id"), nullable=True)
+    skin_texture_id: Mapped[int | None] = mapped_column(ForeignKey("textures.id", ondelete="SET NULL"), nullable=True)
+    cape_texture_id: Mapped[int | None] = mapped_column(ForeignKey("textures.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
