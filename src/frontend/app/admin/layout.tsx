@@ -107,6 +107,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             }
             .admin-main-content {
               width: 100% !important;
+              padding: 16px !important;
             }
             .admin-mobile-toggle {
               display: flex !important;

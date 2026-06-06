@@ -583,7 +583,7 @@ export default function RolesPage() {
                   placeholder="https://skin.example.com/api/yggdrasil/"
                 />
               </label>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div className="form-grid-2col">
                 <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <span style={{ fontSize: 13, fontWeight: 500 }}>用户名</span>
                   <input

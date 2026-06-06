@@ -206,10 +206,10 @@ export default function AdminOAuthAppsPage() {
 
       {/* Device Settings Info */}
       {deviceSettings && (
-        <div className="surface-card" style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div className="surface-card" style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <MonitorSmartphone style={{ width: 20, height: 20, color: 'var(--color-primary)', flexShrink: 0 }} />
-          <div style={{ flex: 1, fontSize: 13, color: 'var(--color-text-light)' }}>
-            设备流默认回调 URL：<code style={{ color: 'var(--color-heading)', fontWeight: 500 }}>{deviceSettings.default_redirect_uri}</code>
+          <div style={{ flex: 1, fontSize: 13, color: 'var(--color-text-light)', minWidth: 0 }}>
+            设备流默认回调 URL：<code style={{ color: 'var(--color-heading)', fontWeight: 500, wordBreak: 'break-all' }}>{deviceSettings.default_redirect_uri}</code>
             {deviceSettings.shared_client_ids.length > 0 && (
               <span style={{ marginLeft: 12 }}>共享 Client ID：{deviceSettings.shared_client_ids.join(', ')}</span>
             )}

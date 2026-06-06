@@ -240,14 +240,14 @@ export default function AdminProfilesPage() {
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="surface-card"
+            className="surface-card detail-dialog-layout"
             style={{
-              display: 'flex', gap: 24, padding: 24, borderRadius: 16,
+              padding: 24, borderRadius: 16,
               maxWidth: 700, width: '90%', maxHeight: '90vh', overflowY: 'auto',
             }}
           >
             {/* 3D Preview */}
-            <div style={{ flexShrink: 0, display: 'flex', justifyContent: 'center', alignItems: 'center', width: 280, height: 360, borderRadius: 12, background: 'var(--color-background-mute)' }}>
+            <div className="detail-viewer" style={{ flexShrink: 0, display: 'flex', justifyContent: 'center', alignItems: 'center', width: 280, height: 360, borderRadius: 12, background: 'var(--color-background-mute)' }}>
               {previewItem.skin_hash ? (
                 <SkinPreview
                   skinUrl={texturesUrl(previewItem.skin_hash)!}

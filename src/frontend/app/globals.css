@@ -1170,6 +1170,43 @@
   margin-right: 6px;
 }
 
+/* ===== Dashboard & Admin responsive utilities ===== */
+
+/* Side-by-side detail dialog → stacked on mobile */
+.detail-dialog-layout {
+  display: flex;
+  gap: 24px;
+}
+
+.detail-dialog-layout .detail-viewer {
+  flex-shrink: 0;
+}
+
+@media (max-width: 767px) {
+  .detail-dialog-layout {
+    flex-direction: column;
+    gap: 16px;
+  }
+  .detail-dialog-layout .detail-viewer {
+    flex: none !important;
+    width: 100% !important;
+    height: 200px !important;
+  }
+}
+
+/* Two-column form grid → single column on mobile */
+.form-grid-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 767px) {
+  .form-grid-2col {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ===== Shared responsive utilities ===== */
 
 /* Page container — standard max-width + padding for inner pages */

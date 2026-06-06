@@ -321,7 +321,7 @@ export default function AdminUsersPage() {
                   placeholder="user@example.com"
                 />
               </label>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div className="form-grid-2col">
                 <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <span style={{ fontSize: 13, fontWeight: 500 }}>用户名</span>
                   <input
@@ -343,7 +343,7 @@ export default function AdminUsersPage() {
                   />
                 </label>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div className="form-grid-2col">
                 <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <span style={{ fontSize: 13, fontWeight: 500 }}>密码</span>
                   <input

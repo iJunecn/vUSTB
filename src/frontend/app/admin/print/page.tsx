@@ -289,7 +289,7 @@ export default function AdminPrintPage() {
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--color-border)', paddingBottom: 8, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--color-border)', paddingBottom: 8, flexWrap: 'nowrap', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
         {tabs.map((t) => (
           <button
             key={t.key}

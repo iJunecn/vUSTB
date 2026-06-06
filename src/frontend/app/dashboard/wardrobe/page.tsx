@@ -352,15 +352,16 @@ export default function WardrobePage() {
           onClick={() => { setDetailOpen(false); setDetailTex(null); }}
         >
           <div
-            className="surface-card"
+            className="surface-card detail-dialog-layout"
             style={{
               width: '90%', maxWidth: 800, maxHeight: '90vh',
-              display: 'flex', overflow: 'hidden', borderRadius: 16,
+              overflow: 'auto', borderRadius: 16,
             }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* 3D Viewer */}
             <div
+              className="detail-viewer"
               style={{
                 flex: '0 0 320px',
                 background: 'var(--color-background-mute)',

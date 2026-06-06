@@ -88,6 +88,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             }
             .main-content {
               width: 100% !important;
+              padding: 16px !important;
             }
             .mobile-toggle {
               display: flex !important;

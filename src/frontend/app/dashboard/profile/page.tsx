@@ -162,7 +162,7 @@ export default function ProfilePage() {
       )}
 
       {/* Avatar section */}
-      <div className="surface-card" style={{ padding: 24, display: 'flex', alignItems: 'center', gap: 20 }}>
+      <div className="surface-card" style={{ padding: 24, display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
         <div
           style={{
             width: 72, height: 72, borderRadius: 10,
