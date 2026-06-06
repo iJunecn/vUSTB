@@ -31,6 +31,11 @@ const SERVER_GROUPS: ServerGroupConfig[] = [
     address: 'mod.ustb.world',
     themeOverride: '重度机械症',
   },
+  {
+    label: '休闲服',
+    address: 'utb.ustb.world',
+    themeOverride: '乌托邦探险之旅',
+  },
 ];
 
 export default function ServersPage() {
@@ -115,17 +120,6 @@ export default function ServersPage() {
               )}
             </div>
           </div>
-
-          <p style={{ fontSize: 13, color: 'var(--color-text-light)', marginBottom: 4 }}>
-            <a
-              href="https://github.com/LYOfficial/USTBL/releases"
-              target="_blank"
-              rel="noreferrer"
-              style={{ color: 'var(--color-primary)', textDecoration: 'underline', textUnderlineOffset: 2 }}
-            >
-              下载 USTBL 启动器
-            </a>
-          </p>
 
           {/* Server cards */}
           {loading ? (

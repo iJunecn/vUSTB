@@ -10,9 +10,9 @@ import { Menu, X, User, Settings, LogOut, Shield, ArrowRight } from 'lucide-reac
 const navItems = [
   { href: '/', label: '首页' },
   { href: '/servers', label: '服务器' },
-  { href: '/campus', label: '在线地图' },
   { href: '/dynamics', label: '动态' },
   { href: '/skin', label: '皮肤站' },
+  { href: '/launcher', label: '启动器' },
   { href: '/print', label: '打印预约' },
   { href: '/about', label: '关于' },
 ];
