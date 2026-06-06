@@ -100,7 +100,7 @@ export default function AdminMojangPage() {
             回退策略
           </h2>
         </div>
-        <div style={{ display: 'flex', gap: 16 }}>
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
           {(['serial', 'parallel'] as const).map((s) => (
             <label
               key={s}

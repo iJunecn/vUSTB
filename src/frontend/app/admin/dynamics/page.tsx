@@ -172,7 +172,7 @@ export default function AdminDynamicsPage() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {articles.map((article) => (
-              <div key={article.id} className="surface-card" style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div key={article.id} className="surface-card" style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
                 {/* Category badge */}
                 {article.category && (
                   <span className="dynamics-cat-pill" style={{ flexShrink: 0 }}>{article.category.name}</span>

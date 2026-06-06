@@ -1,27 +1,26 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useUserStore } from '@/stores/user';
 import {
-  LayoutDashboard, Coins, Shirt, Users, Shield, LogOut, Loader2, Menu, X,
+  LayoutDashboard, Coins, Shirt, Users, Shield, LogOut, Loader2,
 } from 'lucide-react';
 import { SkinAvatar } from '@/components/skin/SkinAvatar';
 
 const NAV = [
   { href: '/dashboard', label: '概览', icon: LayoutDashboard, exact: true },
-  { href: '/dashboard/points', label: '积分详细', icon: Coins },
-  { href: '/dashboard/wardrobe', label: '皮肤衣柜', icon: Shirt },
-  { href: '/dashboard/roles', label: '游戏角色', icon: Users },
-  { href: '/dashboard/security', label: '账号安全', icon: Shield },
+  { href: '/dashboard/points', label: '积分', icon: Coins },
+  { href: '/dashboard/wardrobe', label: '衣柜', icon: Shirt },
+  { href: '/dashboard/roles', label: '角色', icon: Users },
+  { href: '/dashboard/security', label: '安全', icon: Shield },
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const { user, loaded, hydrate, logout } = useUserStore();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     hydrate();
@@ -30,11 +29,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   useEffect(() => {
     if (loaded && !user) router.replace('/login');
   }, [loaded, user, router]);
-
-  // Close sidebar on route change (mobile)
-  useEffect(() => {
-    setSidebarOpen(false);
-  }, [pathname]);
 
   if (!loaded || !user) {
     return (
@@ -48,18 +42,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
-      {/* Mobile overlay */}
-      {sidebarOpen && (
-        <div
-          onClick={() => setSidebarOpen(false)}
-          style={{
-            position: 'fixed', inset: 0, zIndex: 40,
-            background: 'rgba(0,0,0,0.4)',
-          }}
-        />
-      )}
-
-      {/* Sidebar */}
+      {/* Desktop sidebar */}
       <aside
         style={{
           width: 240,
@@ -68,34 +51,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           background: 'var(--color-card-background)',
           display: 'flex',
           flexDirection: 'column',
-          position: 'relative' as const,
-          zIndex: 50,
         }}
-        className="sidebar-desktop"
+        className="dashboard-sidebar-desktop"
       >
-        {/* Mobile: absolutely positioned */}
-        <style>{`
-          @media (max-width: 767px) {
-            .sidebar-desktop {
-              position: fixed;
-              top: 0; left: 0; bottom: 0;
-              transform: translateX(-100%);
-              transition: transform 0.25s ease;
-              z-index: 50;
-            }
-            .sidebar-desktop.open {
-              transform: translateX(0);
-            }
-            .main-content {
-              width: 100% !important;
-              padding: 16px !important;
-            }
-            .mobile-toggle {
-              display: flex !important;
-            }
-          }
-        `}</style>
-
         {/* User info card */}
         <div style={{ padding: 20 }}>
           <div
@@ -201,23 +159,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
       </aside>
 
-      {/* Mobile toggle */}
-      <button
-        className="mobile-toggle"
-        onClick={() => setSidebarOpen(!sidebarOpen)}
-        style={{
-          display: 'none', position: 'fixed', top: 16, left: 16, zIndex: 60,
-          width: 40, height: 40, borderRadius: 10, border: '1px solid var(--color-border)',
-          background: 'var(--color-card-background)', alignItems: 'center',
-          justifyContent: 'center', cursor: 'pointer',
-        }}
-      >
-        {sidebarOpen ? <X style={{ width: 20, height: 20 }} /> : <Menu style={{ width: 20, height: 20 }} />}
-      </button>
-
       {/* Main content */}
       <main
-        className="main-content"
+        className="dashboard-main-content"
         style={{
           flex: 1, minWidth: 0,
           padding: '32px 40px',
@@ -226,6 +170,81 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       >
         {children}
       </main>
+
+      {/* Mobile bottom tab bar */}
+      <nav
+        className="dashboard-bottom-tabs"
+        style={{
+          position: 'fixed', bottom: 0, left: 0, right: 0,
+          zIndex: 40,
+          background: 'var(--color-card-background)',
+          borderTop: '1px solid var(--color-border)',
+          display: 'none',
+          justifyContent: 'space-around',
+          alignItems: 'center',
+          height: 56,
+          padding: '0 4px',
+          boxShadow: '0 -2px 8px rgba(0,0,0,0.06)',
+        }}
+      >
+        {NAV.map((item) => {
+          const active = item.exact ? pathname === item.href : pathname.startsWith(item.href);
+          const Icon = item.icon;
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                flex: 1, minWidth: 0,
+                padding: '6px 0',
+                textDecoration: 'none',
+                color: active ? 'var(--color-primary)' : 'var(--color-text-light)',
+                transition: 'color 0.15s',
+              }}
+            >
+              <Icon style={{ width: 20, height: 20 }} />
+              <span style={{ fontSize: 11, fontWeight: active ? 600 : 400, marginTop: 2 }}>
+                {item.label}
+              </span>
+            </Link>
+          );
+        })}
+        {/* Logout as last tab */}
+        <button
+          onClick={() => {
+            logout();
+            router.push('/');
+          }}
+          style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            flex: 1, minWidth: 0,
+            padding: '6px 0',
+            background: 'transparent', border: 'none', cursor: 'pointer',
+            color: 'var(--color-text-light)',
+            fontSize: 11, fontWeight: 400,
+            transition: 'color 0.15s',
+          }}
+        >
+          <LogOut style={{ width: 20, height: 20 }} />
+          <span style={{ marginTop: 2 }}>退出</span>
+        </button>
+      </nav>
+
+      <style>{`
+        @media (max-width: 767px) {
+          .dashboard-sidebar-desktop {
+            display: none !important;
+          }
+          .dashboard-main-content {
+            padding: 16px !important;
+            padding-bottom: 72px !important;
+          }
+          .dashboard-bottom-tabs {
+            display: flex !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }

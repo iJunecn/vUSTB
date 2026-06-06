@@ -1,35 +1,34 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useUserStore } from '@/stores/user';
 import {
   LayoutDashboard, Users, KeySquare, Settings,
-  Shield, Monitor, LogOut, Loader2, Menu, X, Printer, Newspaper, ImageIcon,
+  Shield, Monitor, LogOut, Loader2, Printer, Newspaper, ImageIcon,
   Palette, UserCircle,
 } from 'lucide-react';
 import { SkinAvatar } from '@/components/skin/SkinAvatar';
 
 const NAV = [
-  { href: '/admin', label: '概览', icon: LayoutDashboard, exact: true },
-  { href: '/admin/users', label: '用户管理', icon: Users },
-  { href: '/admin/textures', label: '材质管理', icon: Palette },
-  { href: '/admin/profiles', label: '角色管理', icon: UserCircle },
-  { href: '/admin/dynamics', label: '动态管理', icon: Newspaper },
-  { href: '/admin/media', label: '图片管理', icon: ImageIcon },
-  { href: '/admin/print', label: '打印预约管理', icon: Printer },
-  { href: '/admin/invites', label: '邀请码', icon: KeySquare },
-  { href: '/admin/settings', label: '站点设置', icon: Settings },
-  { href: '/admin/oauth-apps', label: 'OAuth 应用', icon: Shield },
-  { href: '/admin/mojang', label: 'Mojang Fallback', icon: Monitor },
+  { href: '/admin', label: '概览', shortLabel: '概览', icon: LayoutDashboard, exact: true },
+  { href: '/admin/users', label: '用户管理', shortLabel: '用户', icon: Users },
+  { href: '/admin/textures', label: '材质管理', shortLabel: '材质', icon: Palette },
+  { href: '/admin/profiles', label: '角色管理', shortLabel: '角色', icon: UserCircle },
+  { href: '/admin/dynamics', label: '动态管理', shortLabel: '动态', icon: Newspaper },
+  { href: '/admin/media', label: '图片管理', shortLabel: '图片', icon: ImageIcon },
+  { href: '/admin/print', label: '打印预约管理', shortLabel: '打印', icon: Printer },
+  { href: '/admin/invites', label: '邀请码', shortLabel: '邀请', icon: KeySquare },
+  { href: '/admin/settings', label: '站点设置', shortLabel: '设置', icon: Settings },
+  { href: '/admin/oauth-apps', label: 'OAuth 应用', shortLabel: 'OAuth', icon: Shield },
+  { href: '/admin/mojang', label: 'Mojang Fallback', shortLabel: 'Mojang', icon: Monitor },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const { user, loaded, hydrate, logout } = useUserStore();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     hydrate();
@@ -49,10 +48,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     }
   }, [loaded, user, router, pathname]);
 
-  useEffect(() => {
-    setSidebarOpen(false);
-  }, [pathname]);
-
   const canAccessAdmin = user && (user.user_group === 'admin' || user.user_group === 'super_admin');
   const isTeacher = user?.user_group === 'teacher';
 
@@ -65,21 +60,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   const displayName = user.username || user.display_name || user.email || '';
+  const visibleNav = NAV.filter((item) => {
+    if (isTeacher) return item.href === '/admin/print' || item.href === '/admin/invites';
+    return true;
+  });
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
-      {/* Mobile overlay */}
-      {sidebarOpen && (
-        <div
-          onClick={() => setSidebarOpen(false)}
-          style={{
-            position: 'fixed', inset: 0, zIndex: 40,
-            background: 'rgba(0,0,0,0.4)',
-          }}
-        />
-      )}
-
-      {/* Sidebar */}
+      {/* Desktop sidebar */}
       <aside
         style={{
           width: 240,
@@ -88,33 +76,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           background: 'var(--color-card-background)',
           display: 'flex',
           flexDirection: 'column',
-          position: 'relative' as const,
-          zIndex: 50,
         }}
         className="admin-sidebar-desktop"
       >
-        <style>{`
-          @media (max-width: 767px) {
-            .admin-sidebar-desktop {
-              position: fixed;
-              top: 0; left: 0; bottom: 0;
-              transform: translateX(-100%);
-              transition: transform 0.25s ease;
-              z-index: 50;
-            }
-            .admin-sidebar-desktop.open {
-              transform: translateX(0);
-            }
-            .admin-main-content {
-              width: 100% !important;
-              padding: 16px !important;
-            }
-            .admin-mobile-toggle {
-              display: flex !important;
-            }
-          }
-        `}</style>
-
         {/* Admin info card */}
         <div style={{ padding: 20 }}>
           <div
@@ -167,10 +131,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
         {/* Nav items */}
         <nav style={{ flex: 1, padding: '0 12px', display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {NAV.filter((item) => {
-            if (isTeacher) return item.href === '/admin/print' || item.href === '/admin/invites';
-            return true;
-          }).map((item) => {
+          {visibleNav.map((item) => {
             const active = item.exact ? pathname === item.href : pathname.startsWith(item.href);
             const Icon = item.icon;
             return (
@@ -224,20 +185,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
       </aside>
 
-      {/* Mobile toggle */}
-      <button
-        className="admin-mobile-toggle"
-        onClick={() => setSidebarOpen(!sidebarOpen)}
-        style={{
-          display: 'none', position: 'fixed', top: 16, left: 16, zIndex: 60,
-          width: 40, height: 40, borderRadius: 10, border: '1px solid var(--color-border)',
-          background: 'var(--color-card-background)', alignItems: 'center',
-          justifyContent: 'center', cursor: 'pointer',
-        }}
-      >
-        {sidebarOpen ? <X style={{ width: 20, height: 20 }} /> : <Menu style={{ width: 20, height: 20 }} />}
-      </button>
-
       {/* Main content */}
       <main
         className="admin-main-content"
@@ -249,6 +196,87 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       >
         {children}
       </main>
+
+      {/* Mobile bottom tab bar — scrollable for many items */}
+      <nav
+        className="admin-bottom-tabs"
+        style={{
+          position: 'fixed', bottom: 0, left: 0, right: 0,
+          zIndex: 40,
+          background: 'var(--color-card-background)',
+          borderTop: '1px solid var(--color-border)',
+          display: 'none',
+          alignItems: 'center',
+          height: 56,
+          boxShadow: '0 -2px 8px rgba(0,0,0,0.06)',
+          overflowX: 'auto',
+          WebkitOverflowScrolling: 'touch',
+          scrollbarWidth: 'none',
+        }}
+      >
+        {visibleNav.map((item) => {
+          const active = item.exact ? pathname === item.href : pathname.startsWith(item.href);
+          const Icon = item.icon;
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                flex: '0 0 auto',
+                minWidth: 64,
+                padding: '6px 8px',
+                textDecoration: 'none',
+                color: active ? 'var(--color-primary)' : 'var(--color-text-light)',
+                transition: 'color 0.15s',
+              }}
+            >
+              <Icon style={{ width: 20, height: 20 }} />
+              <span style={{ fontSize: 11, fontWeight: active ? 600 : 400, marginTop: 2, whiteSpace: 'nowrap' }}>
+                {item.shortLabel}
+              </span>
+            </Link>
+          );
+        })}
+        {/* Logout tab */}
+        <button
+          onClick={() => {
+            logout();
+            router.push('/');
+          }}
+          style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            flex: '0 0 auto',
+            minWidth: 64,
+            padding: '6px 8px',
+            background: 'transparent', border: 'none', cursor: 'pointer',
+            color: 'var(--color-text-light)',
+            fontSize: 11, fontWeight: 400,
+            transition: 'color 0.15s',
+          }}
+        >
+          <LogOut style={{ width: 20, height: 20 }} />
+          <span style={{ marginTop: 2 }}>退出</span>
+        </button>
+      </nav>
+
+      <style>{`
+        @media (max-width: 767px) {
+          .admin-sidebar-desktop {
+            display: none !important;
+          }
+          .admin-main-content {
+            padding: 16px !important;
+            padding-bottom: 72px !important;
+          }
+          .admin-bottom-tabs {
+            display: flex !important;
+          }
+          .admin-bottom-tabs::-webkit-scrollbar {
+            display: none;
+          }
+        }
+      `}</style>
     </div>
   );
 }

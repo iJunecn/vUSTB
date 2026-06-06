@@ -263,7 +263,7 @@ export default function AdminOAuthAppsPage() {
                   </p>
                   {a.description && <p style={{ fontSize: 12, color: 'var(--color-text-light)', marginTop: 4 }}>{a.description}</p>}
                 </div>
-                <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <button onClick={() => openEditModal(a)} className="btn-ghost" style={{ padding: '4px 12px', fontSize: 12 }}>
                     <Pencil style={{ width: 12, height: 12 }} /> 编辑
                   </button>

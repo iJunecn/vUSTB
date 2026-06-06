@@ -514,6 +514,7 @@ export default function RolesPage() {
               style={{
                 display: 'flex', alignItems: 'center', gap: 20, padding: 20,
                 background: 'var(--color-background-soft)', borderRadius: 8,
+                flexWrap: 'wrap',
               }}
             >
               <div style={{ flex: 1 }}>

@@ -62,10 +62,16 @@ export function SkinViewer({
     const canvas = document.createElement('canvas');
     container.appendChild(canvas);
 
+    // Use container dimensions if available, fall back to props
+    const containerW = container.clientWidth || width;
+    const containerH = container.clientHeight || height;
+    const canvasW = containerW > 0 ? containerW : width;
+    const canvasH = containerH > 0 ? containerH : height;
+
     const viewer = new SkinViewer3D({
       canvas,
-      width,
-      height,
+      width: canvasW,
+      height: canvasH,
       skin: skinUrl,
       cape: capeUrl || undefined,
       model: model === 'slim' ? 'slim' : 'default',
@@ -86,7 +92,24 @@ export function SkinViewer({
   useEffect(() => {
     initViewer();
 
+    // Resize observer: update canvas when container resizes (e.g. mobile layout switch)
+    const container = containerRef.current;
+    let observer: ResizeObserver | null = null;
+    if (container && typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          const { width: newW, height: newH } = entry.contentRect;
+          if (viewerRef.current && newW > 0 && newH > 0) {
+            viewerRef.current.width = Math.round(newW);
+            viewerRef.current.height = Math.round(newH);
+          }
+        }
+      });
+      observer.observe(container);
+    }
+
     return () => {
+      if (observer) observer.disconnect();
       if (viewerRef.current) {
         viewerRef.current.dispose();
         viewerRef.current = null;
