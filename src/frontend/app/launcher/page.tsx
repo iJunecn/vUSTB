@@ -60,29 +60,18 @@ function DownloadPanel() {
     return () => { cancelled = true; };
   }, [expanded]);
 
-  async function handleDownload(file: AnyshareFile) {
+  function handleDownload(file: AnyshareFile) {
     setDownloading(file.docid);
-    try {
-      // Call backend to get the download URL, then open it directly
-      // (avoids Next.js intercepting a 302 redirect to an external domain)
-      const resp = await api.get<{ method: string; url: string }>(
-        '/anyshare/download',
-        { params: { docid: file.docid, name: file.name } },
-      );
-      const { method, url } = resp.data;
-
-      if (method === 'GET' && url) {
-        // Open the external URL directly — browser navigates to it, triggering download
-        window.location.href = url;
-      } else if (url) {
-        // For non-GET methods, open in a new tab as fallback
-        window.open(url, '_blank');
-      }
-    } catch {
-      // Silently fail — user can retry
-    } finally {
-      setTimeout(() => setDownloading(null), 1500);
-    }
+    // Backend proxies the download with Content-Disposition: attachment,
+    // so the browser downloads the file without navigating away.
+    const url = `/api/anyshare/download?docid=${encodeURIComponent(file.docid)}&name=${encodeURIComponent(file.name)}`;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = file.name; // hint for browser, though backend sets Content-Disposition
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => setDownloading(null), 2000);
   }
 
   return (

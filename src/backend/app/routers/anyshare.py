@@ -1,4 +1,4 @@
-"""Anyshare proxy: list shared files and obtain download URLs.
+"""Anyshare proxy: list shared files and proxy-download them.
 
 Provides a public (no-auth) API for the launcher page to browse and download
 files from an Anyshare (爱数) shared link without exposing the share token
@@ -6,8 +6,9 @@ or internal API details to the client.
 
 Flow:
 1. Client calls GET /api/anyshare/files  →  returns file list
-2. Client calls GET /api/anyshare/download?docid=xxx&name=yyy  →  returns JSON with download URL
-   Frontend opens the URL directly, bypassing Next.js client-side routing.
+2. Client calls GET /api/anyshare/download?docid=xxx&name=yyy
+   Backend proxies the file with Content-Disposition: attachment,
+   so the browser starts a download without navigating away.
 """
 from __future__ import annotations
 
@@ -17,6 +18,7 @@ from urllib.parse import quote
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/anyshare", tags=["anyshare"])
@@ -117,8 +119,45 @@ async def _list_folder(token: str, folder_docid: str) -> tuple[list, list]:
     return dirs, files
 
 
-async def _get_download_url(token: str, docid: str, savename: str) -> tuple[str, str]:
-    """Return (method, download_url) for the given file."""
+def _parse_authrequest_headers(authrequest: list) -> dict[str, str]:
+    """Parse headers from an authrequest list (entries at index 2+).
+
+    Each entry is a string like "Key: Value" or "Key=Value".
+    Returns a dict of headers to include in the download request.
+    """
+    headers: dict[str, str] = {}
+    for entry in authrequest[2:]:
+        if not isinstance(entry, str):
+            continue
+        # Try "Key: Value" first, then "Key=Value"
+        sep = None
+        if ": " in entry:
+            sep = ": "
+        elif ":" in entry:
+            colon_idx = entry.index(":")
+            eq_idx = entry.find("=")
+            if eq_idx != -1 and eq_idx < colon_idx:
+                sep = "="
+            else:
+                sep = ":"
+        elif "=" in entry:
+            sep = "="
+        if not sep:
+            continue
+        key, value = entry.split(sep, 1)
+        key = key.strip()
+        value = (value or "").strip()
+        if key:
+            headers[key] = value
+    return headers
+
+
+async def _get_download_authrequest(token: str, docid: str, savename: str) -> tuple[str, str, dict[str, str]]:
+    """Return (method, download_url, headers) for the given file.
+
+    Parses the full authrequest to extract required headers (like Date,
+    Authorization, etc.) that must be sent with the download request.
+    """
     async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
         resp = await client.post(
             _api_url("efast/v1/file/osdownload"),
@@ -135,9 +174,10 @@ async def _get_download_url(token: str, docid: str, savename: str) -> tuple[str,
         authrequest = data.get("authrequest")
         if not isinstance(authrequest, list) or len(authrequest) < 2:
             raise HTTPException(502, "Unexpected download authrequest format")
-        method = authrequest[0] or "GET"
+        method = (authrequest[0] or "GET").upper()
         url = authrequest[1]
-        return method, url
+        headers = _parse_authrequest_headers(authrequest)
+        return method, url, headers
 
 
 # ── Models ──────────────────────────────────────────────────────────
@@ -151,11 +191,6 @@ class FileItem(BaseModel):
 
 class FileListResponse(BaseModel):
     files: List[FileItem]
-
-
-class DownloadUrlResponse(BaseModel):
-    method: str
-    url: str
 
 
 # ── Endpoints ───────────────────────────────────────────────────────
@@ -186,12 +221,40 @@ async def list_files():
     return FileListResponse(files=items)
 
 
-@router.get("/download", response_model=DownloadUrlResponse)
-async def get_download_url(
+@router.get("/download")
+async def download_file(
     docid: str = Query(..., description="File docid from file list"),
     name: str = Query(..., description="File name for download"),
 ):
-    """Get download URL as JSON. Frontend opens the URL directly to start download."""
+    """Proxy-download a file: backend fetches with required headers,
+    then streams the content to the browser with Content-Disposition."""
     token = await _ensure_token()
-    method, url = await _get_download_url(token, docid, name)
-    return DownloadUrlResponse(method=method.upper(), url=url)
+    method, url, dl_headers = await _get_download_authrequest(token, docid, name)
+
+    # Make the download request to Anyshare with the required headers
+    client = httpx.AsyncClient(timeout=DOWNLOAD_TIMEOUT)
+    req = client.build_request(method, url, headers=dl_headers)
+    resp = await client.send(req, stream=True)
+    resp.raise_for_status()
+
+    # Determine content type and length from the upstream response
+    content_type = resp.headers.get("content-type", "application/octet-stream")
+    content_length = resp.headers.get("content-length")
+
+    # Build response headers — force browser to download the file
+    response_headers = {
+        "Content-Disposition": f'attachment; filename="{name}"',
+        "Content-Type": content_type,
+    }
+    if content_length:
+        response_headers["Content-Length"] = content_length
+
+    async def _stream():
+        try:
+            async for chunk in resp.aiter_bytes(chunk_size=65536):
+                yield chunk
+        finally:
+            await resp.aclose()
+            await client.aclose()
+
+    return StreamingResponse(_stream(), headers=response_headers)
