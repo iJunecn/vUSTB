@@ -13,6 +13,10 @@ type AnyshareFile = {
   rev: string | null;
 };
 
+type FileListResponse = {
+  files: AnyshareFile[];
+};
+
 function humanSize(size: number | null): string {
   if (size == null) return '';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -39,9 +43,13 @@ function DownloadPanel() {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    api.get<AnyshareFile[]>('/anyshare/files')
+    api.get<FileListResponse>('/anyshare/files')
       .then((r) => {
-        if (!cancelled) setFiles(r.data);
+        if (!cancelled) {
+          // API returns { files: [...] }, extract the array
+          const list = r.data?.files ?? (Array.isArray(r.data) ? r.data : []);
+          setFiles(list);
+        }
       })
       .catch(() => {
         if (!cancelled) setError('获取文件列表失败，请稍后重试');
@@ -55,17 +63,22 @@ function DownloadPanel() {
   async function handleDownload(file: AnyshareFile) {
     setDownloading(file.docid);
     try {
-      // Open the backend download redirect in a new tab — browser will follow the redirect
+      // Use a hidden link to trigger download — backend redirects to the file URL
       const url = `/api/anyshare/download?docid=${encodeURIComponent(file.docid)}&name=${encodeURIComponent(file.name)}`;
-      window.open(url, '_blank');
+      const a = document.createElement('a');
+      a.href = url;
+      a.target = '_blank';
+      a.rel = 'noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
     } finally {
-      // Keep the indicator for a moment so user sees feedback
       setTimeout(() => setDownloading(null), 1500);
     }
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', marginBottom: expanded ? 56 : 40, transition: 'margin-bottom 0.25s ease' }}>
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
         <button
           onClick={() => setExpanded(!expanded)}
