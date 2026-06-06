@@ -1,9 +1,169 @@
 'use client';
 
-import { Download, Github, Boxes, Users, Shield, Compass } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Download, Github, Boxes, Users, Shield, Compass, ChevronDown, Loader2, HardDrive } from 'lucide-react';
+import { api } from '@/lib/api';
 
 const GITHUB_RELEASES = 'https://github.com/LYOfficial/USTBL/releases';
-const GITHUB_REPO = 'https://github.com/LYOfficial/USTBL';
+
+type AnyshareFile = {
+  name: string;
+  docid: string;
+  size: number | null;
+  rev: string | null;
+};
+
+function humanSize(size: number | null): string {
+  if (size == null) return '';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let value = size;
+  for (const unit of units) {
+    if (value < 1024 || unit === 'TB') {
+      if (unit === 'B') return `${value} ${unit}`;
+      return `${value.toFixed(2)} ${unit}`;
+    }
+    value /= 1024;
+  }
+  return `${value.toFixed(2)} TB`;
+}
+
+function DownloadPanel() {
+  const [expanded, setExpanded] = useState(false);
+  const [files, setFiles] = useState<AnyshareFile[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!expanded) return;
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    api.get<AnyshareFile[]>('/anyshare/files')
+      .then((r) => {
+        if (!cancelled) setFiles(r.data);
+      })
+      .catch(() => {
+        if (!cancelled) setError('获取文件列表失败，请稍后重试');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [expanded]);
+
+  async function handleDownload(file: AnyshareFile) {
+    setDownloading(file.docid);
+    try {
+      // Open the backend download redirect in a new tab — browser will follow the redirect
+      const url = `/api/anyshare/download?docid=${encodeURIComponent(file.docid)}&name=${encodeURIComponent(file.name)}`;
+      window.open(url, '_blank');
+    } finally {
+      // Keep the indicator for a moment so user sees feedback
+      setTimeout(() => setDownloading(null), 1500);
+    }
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="btn-primary"
+          style={{ padding: '12px 28px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 8 }}
+        >
+          <Download style={{ width: 18, height: 18 }} /> 下载 USTBL
+          <ChevronDown
+            style={{
+              width: 16, height: 16,
+              transition: 'transform 0.25s ease',
+              transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
+            }}
+          />
+        </button>
+        <a href={GITHUB_RELEASES} target="_blank" rel="noreferrer" className="btn-ghost" style={{ padding: '12px 28px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Github style={{ width: 18, height: 18 }} /> GitHub
+        </a>
+      </div>
+
+      {/* Sliding download panel */}
+      <div
+        className="launcher-download-panel"
+        style={{
+          maxHeight: expanded ? 400 : 0,
+          opacity: expanded ? 1 : 0,
+          overflow: 'hidden',
+          transition: 'max-height 0.35s ease, opacity 0.25s ease, margin 0.25s ease',
+          marginTop: expanded ? 20 : 0,
+          width: '100%',
+          maxWidth: 560,
+        }}
+      >
+        <div
+          style={{
+            border: '1px solid var(--color-border)',
+            borderRadius: 14,
+            background: 'var(--color-background-soft)',
+            padding: 20,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+            <HardDrive style={{ width: 16, height: 16, color: 'var(--color-primary)' }} />
+            <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-heading)' }}>USTBL 下载</span>
+            <span style={{ fontSize: 12, color: 'var(--color-text-light)', marginLeft: 'auto' }}>来源：北科网盘</span>
+          </div>
+
+          {loading ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px 0', gap: 8 }}>
+              <Loader2 style={{ width: 18, height: 18, color: 'var(--color-primary)', animation: 'spin 0.8s linear infinite' }} />
+              <span style={{ fontSize: 13, color: 'var(--color-text-light)' }}>正在获取文件列表...</span>
+            </div>
+          ) : error ? (
+            <div style={{ textAlign: 'center', padding: '16px 0', fontSize: 13, color: '#dc2626' }}>{error}</div>
+          ) : files.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '16px 0', fontSize: 13, color: 'var(--color-text-light)' }}>暂无可用文件</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {files.map((file) => (
+                <button
+                  key={file.docid}
+                  onClick={() => handleDownload(file)}
+                  disabled={downloading === file.docid}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '10px 14px', borderRadius: 10,
+                    background: 'var(--color-card-background)',
+                    border: '1px solid var(--color-border)',
+                    cursor: downloading === file.docid ? 'wait' : 'pointer',
+                    fontSize: 13, color: 'var(--color-text)',
+                    transition: 'background 0.15s, border-color 0.15s',
+                    width: '100%', textAlign: 'left',
+                  }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--color-primary)'; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--color-border)'; }}
+                >
+                  {downloading === file.docid ? (
+                    <Loader2 style={{ width: 14, height: 14, color: 'var(--color-primary)', flexShrink: 0, animation: 'spin 0.8s linear infinite' }} />
+                  ) : (
+                    <Download style={{ width: 14, height: 14, color: 'var(--color-primary)', flexShrink: 0 }} />
+                  )}
+                  <span style={{ flex: 1, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {file.name}
+                  </span>
+                  {file.size != null && (
+                    <span style={{ fontSize: 12, color: 'var(--color-text-light)', flexShrink: 0 }}>
+                      {humanSize(file.size)}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function LauncherPage() {
   return (
@@ -16,14 +176,7 @@ export default function LauncherPage() {
           专为 USTB 像素北科工程适配的 Minecraft 启动器，
           集成版本管理、多账号登录、OAuth 认证与校园发现。
         </p>
-        <div className="launcher-hero-actions">
-          <a href={GITHUB_RELEASES} target="_blank" rel="noreferrer" className="btn-primary" style={{ padding: '12px 28px', fontSize: 15 }}>
-            <Download style={{ width: 18, height: 18 }} /> 下载 USTBL
-          </a>
-          <a href={GITHUB_REPO} target="_blank" rel="noreferrer" className="btn-ghost" style={{ padding: '12px 28px', fontSize: 15 }}>
-            <Github style={{ width: 18, height: 18 }} /> GitHub
-          </a>
-        </div>
+        <DownloadPanel />
         <div className="launcher-hero-screenshot">
           <img src="/img/launcher/home.png" alt="USTBL 启动器首页" />
         </div>
@@ -163,11 +316,19 @@ export default function LauncherPage() {
           专为像素北科工程打造的 Minecraft 启动器，开箱即用。
         </p>
         <div className="launcher-cta-actions">
-          <a href={GITHUB_RELEASES} target="_blank" rel="noreferrer" className="btn-primary" style={{ padding: '12px 28px', fontSize: 15 }}>
-            <Download style={{ width: 18, height: 18 }} /> 前往下载
+          <a
+            href="#"
+            onClick={(e) => {
+              e.preventDefault();
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            className="btn-primary"
+            style={{ padding: '12px 28px', fontSize: 15, display: 'inline-flex', alignItems: 'center', gap: 8 }}
+          >
+            <Download style={{ width: 18, height: 18 }} /> 下载
           </a>
-          <a href={GITHUB_REPO} target="_blank" rel="noreferrer" className="btn-ghost" style={{ padding: '12px 28px', fontSize: 15 }}>
-            <Github style={{ width: 18, height: 18 }} /> 查看源码
+          <a href={GITHUB_RELEASES} target="_blank" rel="noreferrer" className="btn-ghost" style={{ padding: '12px 28px', fontSize: 15, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            <Github style={{ width: 18, height: 18 }} /> GitHub
           </a>
         </div>
       </section>

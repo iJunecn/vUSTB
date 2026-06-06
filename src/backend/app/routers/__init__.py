@@ -12,7 +12,7 @@ def register_routers(app: FastAPI) -> None:
         public, camera_presets, oauth_login,
         site_routes, microsoft, print_booking, article,
         csl, remote_ygg, points, ustb_sso,
-        github_bind, oauth_redirect,
+        github_bind, oauth_redirect, anyshare,
     )
 
     app.include_router(site_auth.router)
@@ -37,6 +37,7 @@ def register_routers(app: FastAPI) -> None:
     app.include_router(ustb_sso.router)
     app.include_router(github_bind.router)
     app.include_router(oauth_redirect.router)
+    app.include_router(anyshare.router)
 
     # 动态 / 文章发布系统
     app.include_router(article.public_router)
