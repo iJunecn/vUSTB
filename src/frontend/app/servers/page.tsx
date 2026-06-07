@@ -27,9 +27,14 @@ const SERVER_GROUPS: ServerGroupConfig[] = [
     ],
   },
   {
-    label: '模组服',
+    label: '长期模组服',
     address: 'mod.ustb.world',
     themeOverride: '重度机械症',
+  },
+  {
+    label: '中短期模组服',
+    address: 'wzsj.ustb.world',
+    themeOverride: '亡者世界',
   },
   {
     label: '休闲服',
