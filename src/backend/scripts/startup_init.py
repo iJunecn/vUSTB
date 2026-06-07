@@ -4,7 +4,7 @@ import logging
 from sqlalchemy import text
 
 from app.database import Base, engine
-from app.database.schema_sync import sync_schema
+from app.database.schema_sync import sync_schema, sync_enum_values_separate
 from app import models  # noqa: F401
 from app.config import settings
 
@@ -29,6 +29,9 @@ async def ensure_schema() -> None:
         # 为已存在的旧表补齐模型迭代后新增的列，避免 select 时 SQL 报错
         # 导致老账号无法登录、重新注册又被唯一约束挡住。
         await sync_schema(conn)
+
+    # ALTER TYPE ADD VALUE 必须在自动提交事务中执行，不能在 begin() 事务里
+    await sync_enum_values_separate()
 
 
 def ensure_keys() -> None:

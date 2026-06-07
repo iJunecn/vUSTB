@@ -7,6 +7,10 @@
 
 这里通过 Inspector 比对实际表结构与 ORM 模型，自动 ALTER TABLE 增列，
 并自动 ALTER TYPE ADD VALUE 补齐 enum 值。
+
+注意：asyncpg 在事务中遇到错误会进入 aborted 状态，后续所有 SQL 都失败。
+因此本模块对每个 ALTER 操作单独 try/except 并在出错后 rollback 当前事务
+的保存点，以避免连锁失败。
 """
 from __future__ import annotations
 
@@ -48,14 +52,19 @@ def _column_ddl(table, column) -> str:
 async def _rename_column_if_needed(
     conn: AsyncConnection, table_name: str, old: str, new: str
 ) -> None:
-    existing = await _existing_columns(conn, table_name)
+    try:
+        existing = await _existing_columns(conn, table_name)
+    except Exception:  # noqa: BLE001
+        logger.warning("failed to check columns for %s, skipping rename", table_name)
+        return
     if existing is None:
         return
     if old in existing and new not in existing:
-        await conn.execute(
-            text(f'ALTER TABLE "{table_name}" RENAME COLUMN "{old}" TO "{new}"')
+        await _safe_execute(
+            conn,
+            f'ALTER TABLE "{table_name}" RENAME COLUMN "{old}" TO "{new}"',
+            f"renamed {table_name}.{old} -> {new}",
         )
-        logger.info("renamed %s.%s -> %s", table_name, old, new)
 
 
 async def _existing_enum_values(conn: AsyncConnection, type_name: str) -> set[str] | None:
@@ -87,40 +96,46 @@ def _collect_enum_types() -> dict[str, set[str]]:
     return enums
 
 
-async def _sync_enum_values(conn: AsyncConnection) -> None:
-    """为 PostgreSQL 中已有的 enum 类型补齐 ORM 中新增但 DB 中缺失的值。
+async def _safe_execute(conn: AsyncConnection, sql: str, description: str) -> bool:
+    """在事务中安全执行 SQL，出错时 rollback 保存点以避免事务 aborted。
 
-    例如 point_reason 在 Python 侧新增了 admin_adjust，
-    但数据库中该 enum 类型还不包含此值，INSERT 会直接报错。
-    此函数自动 ALTER TYPE ADD VALUE 补齐。
+    asyncpg 在事务中遇到错误会将事务标记为 aborted（InFailedSQLTransactionError），
+    后续所有 SQL 都失败。使用 SAVEPOINT 可以在出错后 ROLLBACK TO SAVEPOINT，
+    使事务恢复到正常状态，继续执行后续操作。
     """
-    expected = _collect_enum_types()
-    for type_name, values in expected.items():
-        existing = await _existing_enum_values(conn, type_name)
-        if existing is None:
-            # enum 类型不存在，由 create_all 负责创建
-            continue
-        missing = values - existing
-        for val in sorted(missing):
-            # PostgreSQL 要求 ALTER TYPE ADD VALUE 在事务外执行，
-            # 但在 SQLAlchemy run_sync 的同步上下文中已自动处理。
-            # 使用 IF NOT EXISTS 避免并发启动时重复添加报错。
-            try:
-                await conn.execute(
-                    text(f'ALTER TYPE "{type_name}" ADD VALUE IF NOT EXISTS \'{val}\'')
-                )
-                logger.info("added enum value %s.%s", type_name, val)
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("failed to add enum value %s.%s: %s", type_name, val, exc)
+    # 创建保存点
+    await conn.execute(text("SAVEPOINT sp_sync"))
+    try:
+        await conn.execute(text(sql))
+        logger.info("%s", description)
+        # 释放保存点（成功时）
+        await conn.execute(text("RELEASE SAVEPOINT sp_sync"))
+        return True
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("failed: %s — %s", description, exc)
+        # 回滚到保存点，使事务恢复可用状态
+        try:
+            await conn.execute(text("ROLLBACK TO SAVEPOINT sp_sync"))
+        except Exception as rollback_exc:  # noqa: BLE001
+            logger.error("rollback to savepoint also failed: %s", rollback_exc)
+        return False
 
 
 async def sync_schema(conn: AsyncConnection) -> None:
-    """对所有 ORM 表执行：先做兼容性重命名，再补齐缺失列，同步 CheckConstraint，最后同步 enum 值。"""
+    """对所有 ORM 表执行：先做兼容性重命名，再补齐缺失列，同步 CheckConstraint。
+
+    enum 值同步和 server_default 更新在独立的自动提交事务中执行，
+    因为 PostgreSQL 的 ALTER TYPE ADD VALUE 不能在普通事务中运行。
+    """
     # 兼容旧版本：verification_codes.purpose -> type
     await _rename_column_if_needed(conn, "verification_codes", "purpose", "type")
 
     for table in Base.metadata.sorted_tables:
-        existing = await _existing_columns(conn, table.name)
+        try:
+            existing = await _existing_columns(conn, table.name)
+        except Exception:  # noqa: BLE001
+            logger.warning("failed to check columns for %s, skipping", table.name)
+            continue
         if existing is None:
             # 表不存在，由 create_all 负责创建
             continue
@@ -131,33 +146,58 @@ async def sync_schema(conn: AsyncConnection) -> None:
                 # 主键变更不在自动同步范围内
                 continue
             ddl = _column_ddl(table, column)
-            try:
-                await conn.execute(text(ddl))
-                logger.info("added %s.%s", table.name, column.name)
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("failed to add %s.%s: %s", table.name, column.name, exc)
+            await _safe_execute(conn, ddl, f"added {table.name}.{column.name}")
 
         # 补齐 CheckConstraint（如 pixel_points >= 0）
         for constraint in table.constraints:
             if isinstance(constraint, CheckConstraint) and constraint.name:
-                try:
-                    await conn.execute(text(
-                        f'ALTER TABLE "{table.name}" ADD CONSTRAINT "{constraint.name}" '
-                        f'CHECK ({constraint.sqltext})'
-                    ))
-                    logger.info("added constraint %s on %s", constraint.name, table.name)
-                except Exception as exc:  # noqa: BLE001
-                    # 约束已存在时会报错，忽略即可
-                    logger.info("constraint %s on %s already exists or skipped: %s", constraint.name, table.name, exc)
-
-    # 同步 enum 类型值（如 point_reason 缺少 admin_adjust）
-    await _sync_enum_values(conn)
+                await _safe_execute(
+                    conn,
+                    f'ALTER TABLE "{table.name}" ADD CONSTRAINT "{constraint.name}" '
+                    f'CHECK ({constraint.sqltext})',
+                    f"added constraint {constraint.name} on {table.name}",
+                )
 
     # 更新 server_default：pixel_points 从 0 改为 10
-    try:
-        await conn.execute(text(
-            'ALTER TABLE "point_accounts" ALTER COLUMN "pixel_points" SET DEFAULT 10'
-        ))
-        logger.info("updated point_accounts.pixel_points server_default to 10")
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("failed to update pixel_points server_default: %s", exc)
+    await _safe_execute(
+        conn,
+        'ALTER TABLE "point_accounts" ALTER COLUMN "pixel_points" SET DEFAULT 10',
+        "updated point_accounts.pixel_points server_default to 10",
+    )
+
+
+async def sync_enum_values_separate() -> None:
+    """在独立连接中同步 enum 值（ALTER TYPE ADD VALUE 需要自动提交事务）。
+
+    必须在 sync_schema 之后单独调用，使用新的数据库连接，
+    因为 asyncpg 不允许在普通事务中执行 ALTER TYPE ADD VALUE。
+    """
+    from app.database import engine
+
+    expected = _collect_enum_types()
+    if not expected:
+        return
+
+    async with engine.connect() as conn:
+        for type_name, values in expected.items():
+            existing = await _existing_enum_values(conn, type_name)
+            if existing is None:
+                # enum 类型不存在，由 create_all 负责创建
+                continue
+            missing = values - existing
+            for val in sorted(missing):
+                try:
+                    # 使用自动提交模式执行 ALTER TYPE ADD VALUE
+                    await conn.execute(
+                        text(f'ALTER TYPE "{type_name}" ADD VALUE IF NOT EXISTS \'{val}\'')
+                    )
+                    # 必须在每次 ALTER TYPE ADD VALUE 后 commit，
+                    # 因为 asyncpg 要求此操作在自动提交事务中执行
+                    await conn.commit()
+                    logger.info("added enum value %s.%s", type_name, val)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("failed to add enum value %s.%s: %s", type_name, val, exc)
+                    try:
+                        await conn.rollback()
+                    except Exception:
+                        pass
