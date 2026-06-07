@@ -10,7 +10,7 @@ class MCServer(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
-    address: Mapped[str] = mapped_column(String(255), nullable=False)  # host:port
+    address: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)  # host:port
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     version_hint: Mapped[str | None] = mapped_column(String(64), nullable=True)
     theme: Mapped[str | None] = mapped_column(String(128), nullable=True)

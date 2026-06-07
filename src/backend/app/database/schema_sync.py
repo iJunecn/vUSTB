@@ -165,6 +165,14 @@ async def sync_schema(conn: AsyncConnection) -> None:
         "updated point_accounts.pixel_points server_default to 10",
     )
 
+    # 为 mc_servers.address 补加唯一约束（模型已声明 unique=True）
+    # ON CONFLICT (address) 依赖此约束
+    await _safe_execute(
+        conn,
+        'ALTER TABLE "mc_servers" ADD CONSTRAINT "uq_mc_servers_address" UNIQUE ("address")',
+        "added unique constraint on mc_servers.address",
+    )
+
     # 默认服务器种子数据：按 address 列唯一冲突，已存在则跳过
     default_servers = [
         ("主服", "mc.ustb.world", "Java Edition 1.21.11", "", 0),
@@ -175,9 +183,9 @@ async def sync_schema(conn: AsyncConnection) -> None:
     for name, address, version_hint, theme, sort_order in default_servers:
         await _safe_execute(
             conn,
-            f'INSERT INTO "mc_servers" ("name", "address", "version_hint", "theme", "sort_order", "is_public") '
+            f"INSERT INTO mc_servers (name, address, version_hint, theme, sort_order, is_public) "
             f"VALUES ('{name}', '{address}', '{version_hint}', '{theme}', {sort_order}, true) "
-            f"ON CONFLICT (\"address\") DO NOTHING",
+            f"ON CONFLICT (address) DO NOTHING",
             f"seeded default server {name}",
         )
 
