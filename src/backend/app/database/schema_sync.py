@@ -130,6 +130,14 @@ async def sync_schema(conn: AsyncConnection) -> None:
     # 兼容旧版本：verification_codes.purpose -> type
     await _rename_column_if_needed(conn, "verification_codes", "purpose", "type")
 
+    # 确保新增的 enum 类型在 ALTER TABLE 之前就已存在
+    # create_all 只为新表创建 enum，已有数据库需要手动创建
+    await _safe_execute(
+        conn,
+        "CREATE TYPE IF NOT EXISTS \"article_status\" AS ENUM ('draft', 'published')",
+        "created enum type article_status",
+    )
+
     for table in Base.metadata.sorted_tables:
         try:
             existing = await _existing_columns(conn, table.name)

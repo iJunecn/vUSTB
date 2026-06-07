@@ -56,7 +56,7 @@ class Article(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False, comment="标题")
     content: Mapped[str] = mapped_column(Text, nullable=False, comment="内容 (markdown)")
     status: Mapped[str] = mapped_column(
-        SAEnum(ArticleStatus, name="article_status", create_constraint=True),
+        SAEnum(ArticleStatus, name="article_status", create_constraint=False),
         default=ArticleStatus.published, server_default="published",
         nullable=False, comment="文章状态: draft / published"
     )
