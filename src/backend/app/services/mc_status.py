@@ -4,10 +4,10 @@
 - get_status: 优先读 Redis；若过期则返回缓存版本并 fire-and-forget 触发刷新。
 - refresh_all: Celery 周期任务调用，刷新数据库中的所有服务器。
 
-检测方式：
-- 使用 motd.minebbs.com API（/api/status?host=xxx）查询服务器状态，
-  避免因部署环境网络限制导致直连 MC 端口超时/失败。
-- 若 API 不可达，回退到本地 socket 直连（mc_ping.py）。
+检测方式（按优先级）：
+1. api.mcstatus.io — 公共 MC 状态 API，对服务端友好，支持 SRV 自动解析
+2. motd.minebbs.com — 备选（需浏览器 UA，数据中心 IP 可能被 567 拦截）
+3. 本地 socket 直连（mc_ping.py）— 最终兜底
 """
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ import asyncio
 import json
 import logging
 import re
+import time
 from datetime import datetime, timezone
 from typing import Any
 
@@ -31,7 +32,16 @@ logger = logging.getLogger(__name__)
 
 _CACHE_TTL_SECONDS = 60
 _KEY_PREFIX = "mc:status:"
+
+# API 端点
+_MCSTATUS_API = "https://api.mcstatus.io/v2/status/java"
 _MOTD_API_BASE = "https://motd.minebbs.com"
+
+# 浏览器 UA — motd.minebbs.com 需要浏览器 UA 才不返回 567
+_BROWSER_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+)
 
 
 def _cache_key(address: str) -> str:
@@ -48,19 +58,22 @@ def get_redis() -> aioredis.Redis:
     return _redis
 
 
-def _extract_motd_text(motd: Any) -> str:
-    """从 motd.minebbs.com 返回的 motd 字段中提取纯文本。
+def _strip_format_codes(value: str) -> str:
+    return re.sub(r"§[0-9a-fk-or]", "", value, flags=re.IGNORECASE)
 
-    motd 可能是：
-    - 字符串（plain text）
-    - JSON Text Component dict（如 {"extra": [...], "text": "..."}）
-    - JSON Text Component list
+
+def _extract_motd_text(motd: Any) -> str:
+    """从 JSON Text Component 中递归提取纯文本。
+
+    兼容 motd.minebbs.com 返回的 motd 字段格式：
+    - 字符串
+    - dict（{"extra": [...], "text": "..."}）
+    - list
     """
     if motd is None:
         return ""
     if isinstance(motd, str):
-        # 去掉 §x 颜色代码
-        return re.sub(r"§[0-9a-fk-or]", "", motd, flags=re.IGNORECASE)
+        return _strip_format_codes(motd)
     if isinstance(motd, list):
         return "".join(_extract_motd_text(item) for item in motd)
     if isinstance(motd, dict):
@@ -70,17 +83,74 @@ def _extract_motd_text(motd: Any) -> str:
         if "extra" in motd:
             parts.append(_extract_motd_text(motd.get("extra")))
         return "".join(parts)
-    return re.sub(r"§[0-9a-fk-or]", "", str(motd), flags=re.IGNORECASE)
+    return _strip_format_codes(str(motd))
 
 
+# ---------------------------------------------------------------------------
+# api.mcstatus.io 响应映射
+# ---------------------------------------------------------------------------
+def _map_mcstatus_response(data: dict[str, Any], address: str, elapsed_ms: int) -> dict[str, Any]:
+    """将 api.mcstatus.io /v2/status/java 返回值映射为内部格式。
+
+    在线时返回:
+    {"online":true,"host":"...","port":25565,"ip_address":"...",
+     "srv_record":{"host":"mcname.ustb.world","port":12001},
+     "version":{"name_raw":"...","name_clean":"...","protocol":47},
+     "players":{"online":0,"max":1952,"list":[...]},
+     "motd":{"raw":"§1§l...","clean":"...","html":"..."},
+     "icon":"data:image/png;base64,..."}
+
+    离线时返回:
+    {"online":false,"host":"...","port":25565,"ip_address":"..."}
+    """
+    if not data.get("online"):
+        return {
+            "status": "offline",
+            "type": "java",
+            "host": address,
+            "delay_ms": elapsed_ms,
+        }
+
+    srv = data.get("srv_record") or {}
+    host_display = f"{srv.get('host', data.get('host', address))}:{srv.get('port', data.get('port', 25565))}" if srv else address
+
+    motd_data = data.get("motd", {})
+    # 优先用 clean（已剥离颜色代码），其次 raw 再自行清理
+    motd_text = (motd_data.get("clean") or _strip_format_codes(motd_data.get("raw", ""))) if motd_data else ""
+
+    players_data = data.get("players", {})
+    player_list = players_data.get("list", [])
+    sample = [p.get("name", "") if isinstance(p, dict) else str(p) for p in player_list if p]
+
+    version_data = data.get("version", {})
+
+    return {
+        "status": "online",
+        "type": "java",
+        "host": host_display,
+        "motd": motd_text,
+        "version": version_data.get("name_clean") or version_data.get("name_raw"),
+        "protocol": version_data.get("protocol"),
+        "players": {
+            "online": players_data.get("online"),
+            "max": players_data.get("max"),
+            "sample": sample,
+        },
+        "favicon": data.get("icon"),
+        "delay_ms": elapsed_ms,
+    }
+
+
+# ---------------------------------------------------------------------------
+# motd.minebbs.com 响应映射
+# ---------------------------------------------------------------------------
 def _map_motd_api_response(data: dict[str, Any], address: str) -> dict[str, Any]:
-    """将 motd.minebbs.com /api/status 返回值映射为内部统一格式。
+    """将 motd.minebbs.com /api/status 返回值映射为内部格式。
 
-    API 返回格式：
-    - online: {"type":"Java","status":"online","host":"...","motd":...,"pureMotd":"...",
-               "version":"...","protocol":774,"players":{"online":0,"max":1952,"sample":"无"},
-               "icon":"data:image/png;base64,...","delay":79,"cached":false}
-    - offline: {"status":"offline","host":"...","error":"..."}
+    在线: {"type":"Java","status":"online","host":"...","motd":...,"pureMotd":"...",
+           "version":"...","protocol":774,"players":{"online":0,"max":1952,"sample":"无"},
+           "icon":"data:image/png;base64,...","delay":79}
+    离线: {"status":"offline","host":"...","error":"..."}
     """
     if data.get("status") != "online":
         return {
@@ -90,10 +160,9 @@ def _map_motd_api_response(data: dict[str, Any], address: str) -> dict[str, Any]
             "delay_ms": data.get("delay", 0),
         }
 
-    server_type = data.get("type", "java").lower()  # "java" or "bedrock"
+    server_type = data.get("type", "java").lower()
     players_data = data.get("players", {})
     sample_raw = players_data.get("sample")
-    # sample 可能是字符串（如 "无"）或列表
     sample_list: list[str] = []
     if isinstance(sample_raw, list):
         sample_list = [p.get("name", "") if isinstance(p, dict) else str(p)
@@ -101,7 +170,6 @@ def _map_motd_api_response(data: dict[str, Any], address: str) -> dict[str, Any]
     elif isinstance(sample_raw, str) and sample_raw not in ("无", "None", ""):
         sample_list = [sample_raw]
 
-    # motd 文本：优先用 pureMotd（API 已剥离颜色代码），其次自行解析
     motd_text = data.get("pureMotd") or _extract_motd_text(data.get("motd"))
 
     return {
@@ -121,14 +189,36 @@ def _map_motd_api_response(data: dict[str, Any], address: str) -> dict[str, Any]
     }
 
 
+# ---------------------------------------------------------------------------
+# API 查询函数
+# ---------------------------------------------------------------------------
+async def _query_mcstatus_api(address: str) -> dict[str, Any]:
+    """通过 api.mcstatus.io 查询 Java 服务器状态（主选 API）。
+
+    请求: GET /v2/status/java/<address>
+    该 API 对服务端请求友好，自动解析 SRV 记录。
+    """
+    start = time.monotonic()
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(f"{_MCSTATUS_API}/{address}")
+            resp.raise_for_status()
+            data = resp.json()
+            elapsed = int((time.monotonic() - start) * 1000)
+            return _map_mcstatus_response(data, address, elapsed)
+    except Exception as exc:
+        logger.warning("mcstatus.io query failed for %s: %s", address, exc)
+        return None
+
+
 async def _query_motd_api(address: str) -> dict[str, Any]:
-    """通过 motd.minebbs.com API 查询服务器状态。
+    """通过 motd.minebbs.com API 查询服务器状态（备选）。
 
     请求: GET /api/status?host=<address>
-    超时: 8 秒
+    需要浏览器 UA，数据中心 IP 可能返回 567。
     """
     try:
-        async with httpx.AsyncClient(timeout=8.0) as client:
+        async with httpx.AsyncClient(timeout=8.0, headers={"User-Agent": _BROWSER_UA}) as client:
             resp = await client.get(
                 f"{_MOTD_API_BASE}/api/status",
                 params={"host": address},
@@ -142,17 +232,25 @@ async def _query_motd_api(address: str) -> dict[str, Any]:
 
 
 async def _ping_local_fallback(address: str) -> dict[str, Any]:
-    """本地 socket 直连回退（仅在 motd API 不可达时使用）。"""
+    """本地 socket 直连回退（仅在所有远程 API 不可达时使用）。"""
     from app.utils.mc_ping import query_server_status
     return await asyncio.to_thread(query_server_status, address)
 
 
 async def _ping_async(address: str) -> dict[str, Any]:
-    """查询服务器状态：优先 motd API，不可达则回退到本地直连。"""
+    """查询服务器状态：mcstatus.io → motd.minebbs.com → 本地直连。"""
+    # 1. 主选: api.mcstatus.io
+    result = await _query_mcstatus_api(address)
+    if result is not None:
+        return result
+
+    # 2. 备选: motd.minebbs.com
     result = await _query_motd_api(address)
     if result is not None:
         return result
-    logger.info("motd API unreachable, falling back to local ping for %s", address)
+
+    # 3. 兜底: 本地 socket 直连
+    logger.info("all remote APIs unreachable, falling back to local ping for %s", address)
     return await _ping_local_fallback(address)
 
 
