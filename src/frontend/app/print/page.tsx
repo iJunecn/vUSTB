@@ -211,6 +211,82 @@ export default function PrintHomePage() {
         </div>
       )}
 
+      {/* Pricing Modal */}
+      {showPricing && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 100,
+            background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget) setShowPricing(false); }}
+        >
+          <div
+            style={{
+              background: 'var(--color-card-background)', borderRadius: 16, maxWidth: 520, width: '100%',
+              boxShadow: '0 16px 48px rgba(0,0,0,0.2)', overflow: 'hidden',
+              animation: 'slideUp 0.3s ease-out',
+            }}
+          >
+            {/* Header */}
+            <div style={{
+              background: '#3b82f6', color: '#fff', padding: '16px 20px',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            }}>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Info style={{ width: 18, height: 18 }} /> 打印及定价安排
+              </h3>
+              <button onClick={() => setShowPricing(false)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', padding: 4 }}>
+                <X style={{ width: 18, height: 18 }} />
+              </button>
+            </div>
+            {/* Body */}
+            <div style={{ padding: '20px 24px', fontSize: 14, color: 'var(--color-text)', lineHeight: 1.8 }}>
+              <p>本系统内的H2D打印机为「像素北科」项目申报经费所购，一切打印安排以「像素北科」为最高优先级，其次为天码智能社、小学期队伍和人工智能学院。</p>
+              <p>打印机理论上对内免费使用，与外面的打印工场不同，我们不会收取高额的打印费用，只会收取打印、打印过程中擦料及换料等损耗的耗材费用，使用打印积分的形式进行费用收取。收取的费用用于天码智能社社团经费。</p>
+              <p>打印前请先绑定北京科技大学统一验证登录账号，并在积分页面购买积分，再开始打印，打印前请熟读左侧的「使用须知」。</p>
+            </div>
+            {/* Footer */}
+            <div style={{ padding: '0 24px 20px', textAlign: 'center' }}>
+              <button onClick={() => setShowPricing(false)} className="btn-primary" style={{ padding: '10px 24px' }}>
+                我已知晓
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Related Links */}
+      <div>
+        <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--color-heading)', margin: '0 0 16px 0' }}>
+          相关链接
+        </h2>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
+          {[
+            { label: 'H2D 打印机介绍', desc: '产品主页', url: 'https://bambulab.cn/zh-cn/h2d' },
+            { label: 'H2D 技术参数', desc: 'Tech Specs', url: 'https://bambulab.cn/zh-cn/h2d/tech-specs' },
+            { label: 'H2D Wiki', desc: '使用文档', url: 'https://wiki.bambulab.com/zh/h2d' },
+            { label: '切片软件', desc: 'Bambu Studio', url: 'https://wiki.bambulab.com/zh/bambu-studio#bambu-studio' },
+            { label: 'MakerWorld', desc: '模型社区', url: 'https://makerworld.com.cn/zh' },
+          ].map((link) => (
+            <a
+              key={link.url}
+              href={link.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="surface-card hoverable"
+              style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 6, textDecoration: 'none', cursor: 'pointer' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontWeight: 600, color: 'var(--color-heading)', fontSize: 14 }}>{link.label}</span>
+                <ExternalLink style={{ width: 14, height: 14, color: 'var(--color-text-light)', flexShrink: 0 }} />
+              </div>
+              <span style={{ fontSize: 12, color: 'var(--color-text-light)' }}>{link.desc}</span>
+            </a>
+          ))}
+        </div>
+      </div>
+
       {/* Spinner animation */}
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
