@@ -165,6 +165,22 @@ async def sync_schema(conn: AsyncConnection) -> None:
         "updated point_accounts.pixel_points server_default to 10",
     )
 
+    # 默认服务器种子数据：按 address 列唯一冲突，已存在则跳过
+    default_servers = [
+        ("主服", "mc.ustb.world", "Java Edition 1.21.11", "", 0),
+        ("长期模组服", "mod.ustb.world", "", "重度机械症", 1),
+        ("中短期模组服", "wzsj.ustb.world", "", "亡者世界", 2),
+        ("休闲服", "utb.ustb.world", "", "乌托邦探险之旅", 3),
+    ]
+    for name, address, version_hint, theme, sort_order in default_servers:
+        await _safe_execute(
+            conn,
+            f'INSERT INTO "mc_servers" ("name", "address", "version_hint", "theme", "sort_order", "is_public") '
+            f"VALUES ('{name}', '{address}', '{version_hint}', '{theme}', {sort_order}, true) "
+            f"ON CONFLICT (\"address\") DO NOTHING",
+            f"seeded default server {name}",
+        )
+
 
 async def sync_enum_values_separate() -> None:
     """在独立连接中同步 enum 值（ALTER TYPE ADD VALUE 需要自动提交事务）。
