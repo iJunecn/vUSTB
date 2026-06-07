@@ -5,7 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useUserStore } from '@/stores/user';
 import { rawApi } from '@/lib/api';
-import { Printer, AlertTriangle, X, Info } from 'lucide-react';
+import { Printer, AlertTriangle, X, Info, ExternalLink } from 'lucide-react';
 
 type PrinterInfo = {
   id: number;
@@ -29,6 +29,7 @@ export default function PrintHomePage() {
   const [statuses, setStatuses] = useState<Map<number, PrinterStatus>>(new Map());
   const [loading, setLoading] = useState(true);
   const [showNotice, setShowNotice] = useState(false);
+  const [showPricing, setShowPricing] = useState(false);
 
   useEffect(() => { hydrate(); }, [hydrate]);
 
@@ -129,14 +130,21 @@ export default function PrintHomePage() {
         )}
       </div>
 
-      {/* Notice button */}
-      <div style={{ textAlign: 'center', paddingTop: 8 }}>
+      {/* Notice + Pricing buttons */}
+      <div style={{ textAlign: 'center', paddingTop: 8, display: 'flex', gap: 8, justifyContent: 'center' }}>
         <button
           onClick={() => setShowNotice(true)}
           className="btn-ghost"
           style={{ fontSize: 13, padding: '6px 16px', display: 'inline-flex', alignItems: 'center', gap: 6 }}
         >
           <AlertTriangle style={{ width: 14, height: 14 }} /> 查看使用须知
+        </button>
+        <button
+          onClick={() => setShowPricing(true)}
+          className="btn-ghost"
+          style={{ fontSize: 13, padding: '6px 16px', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+        >
+          <Info style={{ width: 14, height: 14 }} /> 打印及定价安排
         </button>
       </div>
 

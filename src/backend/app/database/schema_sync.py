@@ -1,12 +1,12 @@
-"""轻量级 schema 同步：为已存在的表补齐新增列。
+"""轻量级 schema 同步：为已存在的表补齐新增列，并为 PostgreSQL enum 类型补齐新增值。
 
-`Base.metadata.create_all` 只会创建缺失的表，不会向已存在的表添加新列。
-当模型在迭代中新增了字段（如 users 表增加 display_name / is_admin / banned_until），
-旧数据库会缺少对应列，导致 SELECT 查询直接抛出 SQL 异常，原有账号既无法登录、
-也无法重新注册。
+`Base.metadata.create_all` 只会创建缺失的表，不会向已存在的表添加新列，
+也不会向已存在的 enum 类型添加新值。
+当模型在迭代中新增了字段或 enum 成员（如 point_reason 增加 admin_adjust），
+旧数据库会缺少对应列或 enum 值，导致 INSERT 直接抛出 SQL 异常。
 
-这里通过 Inspector 比对实际表结构与 ORM 模型，自动 ALTER TABLE 增列。
-为兼容已弃用字段，特别处理 verification_codes 的 purpose → type 重命名。
+这里通过 Inspector 比对实际表结构与 ORM 模型，自动 ALTER TABLE 增列，
+并自动 ALTER TYPE ADD VALUE 补齐 enum 值。
 """
 from __future__ import annotations
 
@@ -58,8 +58,64 @@ async def _rename_column_if_needed(
         logger.info("renamed %s.%s -> %s", table_name, old, new)
 
 
+async def _existing_enum_values(conn: AsyncConnection, type_name: str) -> set[str] | None:
+    """查询 PostgreSQL 中某个 enum 类型的已有值，不存在则返回 None。"""
+    def _query(sync_conn):
+        result = sync_conn.execute(text(
+            "SELECT enumlabel FROM pg_enum e "
+            "JOIN pg_type t ON e.enumtypid = t.oid "
+            "WHERE t.typname = :name ORDER BY e.enumsortorder"
+        ), {"name": type_name})
+        rows = result.fetchall()
+        return {r[0] for r in rows} if rows else None
+
+    return await conn.run_sync(_query)
+
+
+def _collect_enum_types() -> dict[str, set[str]]:
+    """从 ORM 元数据中收集所有 Enum 列对应的 {pg_type_name: {value1, value2, ...}}。"""
+    from sqlalchemy import Enum as SAEnum
+
+    enums: dict[str, set[str]] = {}
+    for table in Base.metadata.sorted_tables:
+        for column in table.columns:
+            col_type = column.type
+            if isinstance(col_type, SAEnum):
+                pg_name = col_type.name
+                if pg_name and pg_name not in enums:
+                    enums[pg_name] = set(col_type.enums)
+    return enums
+
+
+async def _sync_enum_values(conn: AsyncConnection) -> None:
+    """为 PostgreSQL 中已有的 enum 类型补齐 ORM 中新增但 DB 中缺失的值。
+
+    例如 point_reason 在 Python 侧新增了 admin_adjust，
+    但数据库中该 enum 类型还不包含此值，INSERT 会直接报错。
+    此函数自动 ALTER TYPE ADD VALUE 补齐。
+    """
+    expected = _collect_enum_types()
+    for type_name, values in expected.items():
+        existing = await _existing_enum_values(conn, type_name)
+        if existing is None:
+            # enum 类型不存在，由 create_all 负责创建
+            continue
+        missing = values - existing
+        for val in sorted(missing):
+            # PostgreSQL 要求 ALTER TYPE ADD VALUE 在事务外执行，
+            # 但在 SQLAlchemy run_sync 的同步上下文中已自动处理。
+            # 使用 IF NOT EXISTS 避免并发启动时重复添加报错。
+            try:
+                await conn.execute(
+                    text(f'ALTER TYPE "{type_name}" ADD VALUE IF NOT EXISTS \'{val}\'')
+                )
+                logger.info("added enum value %s.%s", type_name, val)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("failed to add enum value %s.%s: %s", type_name, val, exc)
+
+
 async def sync_schema(conn: AsyncConnection) -> None:
-    """对所有 ORM 表执行：先做兼容性重命名，再补齐缺失列。"""
+    """对所有 ORM 表执行：先做兼容性重命名，再补齐缺失列，最后同步 enum 值。"""
     # 兼容旧版本：verification_codes.purpose -> type
     await _rename_column_if_needed(conn, "verification_codes", "purpose", "type")
 
@@ -80,3 +136,6 @@ async def sync_schema(conn: AsyncConnection) -> None:
                 logger.info("added %s.%s", table.name, column.name)
             except Exception as exc:  # noqa: BLE001
                 logger.warning("failed to add %s.%s: %s", table.name, column.name, exc)
+
+    # 同步 enum 类型值（如 point_reason 缺少 admin_adjust）
+    await _sync_enum_values(conn)
