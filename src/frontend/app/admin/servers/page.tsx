@@ -98,7 +98,8 @@ export default function AdminServersPage() {
   async function refreshStatus(id: number) {
     try {
       await api.post(`/mc-servers/${id}/refresh`);
-      toast.success('已触发刷新');
+      toast.success('已刷新');
+      await refresh();
     } catch (err: any) {
       toast.error(err?.response?.data?.detail || '刷新失败');
     }
