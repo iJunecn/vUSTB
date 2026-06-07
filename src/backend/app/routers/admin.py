@@ -40,6 +40,10 @@ class UserOut(BaseModel):
     email_verified: bool
     is_banned: bool
     created_at: datetime
+    phone: str | None = None
+    real_name: str | None = None
+    student_id: str | None = None
+    github_name: str | None = None
 
 
 class UserUpdate(BaseModel):
@@ -131,6 +135,8 @@ async def create_user(
         id=user.id, email=user.email, username=user.username,
         user_group=user.user_group.value, email_verified=user.email_verified,
         is_banned=user.is_banned, created_at=user.created_at,
+        phone=user.phone, real_name=user.real_name,
+        student_id=user.student_id, github_name=user.github_name,
     )
 
 
@@ -145,6 +151,8 @@ async def list_users(
             id=u.id, email=u.email, username=u.username,
             user_group=u.user_group.value, email_verified=u.email_verified,
             is_banned=u.is_banned, created_at=u.created_at,
+            phone=u.phone, real_name=u.real_name,
+            student_id=u.student_id, github_name=u.github_name,
         )
         for u in rows
     ]
@@ -177,6 +185,8 @@ async def update_user(
         id=u.id, email=u.email, username=u.username,
         user_group=u.user_group.value, email_verified=u.email_verified,
         is_banned=u.is_banned, created_at=u.created_at,
+        phone=u.phone, real_name=u.real_name,
+        student_id=u.student_id, github_name=u.github_name,
     )
 
 
