@@ -7,6 +7,18 @@ import { useUserStore } from '@/stores/user';
 import { rawApi } from '@/lib/api';
 import { Loader2, CalendarCheck, X, AlertCircle, Shield } from 'lucide-react';
 
+/** 将 Date 格式化为北京时间的 YYYY-MM-DD */
+function toBeijingDateStr(d: Date): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(d);
+  const y = parts.find(p => p.type === 'year')!.value;
+  const m = parts.find(p => p.type === 'month')!.value;
+  const dd = parts.find(p => p.type === 'day')!.value;
+  return `${y}-${m}-${dd}`;
+}
+
 export default function PrintBookingPageWrapper() {
   return (
     <Suspense fallback={
@@ -172,7 +184,7 @@ function PrintBookingPage() {
             value={form.date}
             onChange={(e) => setForm({ ...form, date: e.target.value })}
             required
-            min={new Date().toISOString().slice(0, 10)}
+            min={toBeijingDateStr(new Date())}
             className="input"
           />
         </label>

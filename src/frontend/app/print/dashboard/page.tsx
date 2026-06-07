@@ -49,13 +49,36 @@ const STATUS_MAP: Record<string, { label: string; color: string; icon: React.Rea
   rejected: { label: '已拒绝', color: '#ef4444', icon: <AlertCircle style={{ width: 14, height: 14 }} /> },
 };
 
-function getMonday(d: Date): Date {
-  const dt = new Date(d);
-  const day = dt.getDay();
-  const diff = dt.getDate() - day + (day === 0 ? -6 : 1);
-  dt.setDate(diff);
-  dt.setHours(0, 0, 0, 0);
-  return dt;
+// ── 北京时间工具（UTC+8） ──
+
+/** 获取当前北京时间 */
+function getBeijingNow(): Date {
+  const now = new Date();
+  // UTC 时间 + 8 小时，得到北京时间对应的 UTC 时刻
+  return new Date(now.getTime() + (8 + now.getTimezoneOffset() / -60) * 3600000);
+}
+
+/** 将 Date 格式化为北京时间的 YYYY-MM-DD */
+function toBeijingDateStr(d: Date): string {
+  // 利用 toLocaleString 的 timeZone 参数获取北京时间的各字段
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(d);
+  const y = parts.find(p => p.type === 'year')!.value;
+  const m = parts.find(p => p.type === 'month')!.value;
+  const dd = parts.find(p => p.type === 'day')!.value;
+  return `${y}-${m}-${dd}`;
+}
+
+/** 获取北京时间所在周的周一 */
+function getBeijingMonday(): Date {
+  const bjNow = getBeijingNow();
+  const day = bjNow.getDay(); // 0=Sun ... 6=Sat
+  const diff = day === 0 ? -6 : 1 - day; // 周一为起始
+  const monday = new Date(bjNow);
+  monday.setDate(bjNow.getDate() + diff);
+  return monday;
 }
 
 function renderCost(weight: number): string {
@@ -106,13 +129,13 @@ export default function PrintDashboard() {
     if (loaded && !user) router.replace('/login');
   }, [loaded, user, router]);
 
-  const monday = getMonday(new Date());
+  const monday = getBeijingMonday();
   monday.setDate(monday.getDate() + weekOffset * 7);
   const weekDates: string[] = [];
   for (let i = 0; i < 7; i++) {
     const d = new Date(monday);
     d.setDate(d.getDate() + i);
-    weekDates.push(d.toISOString().slice(0, 10));
+    weekDates.push(toBeijingDateStr(d));
   }
 
   const loadData = useCallback(async () => {
@@ -289,7 +312,7 @@ export default function PrintDashboard() {
                 </td>
                 {weekDates.map((d) => {
                   const b = grid[d]?.[slot];
-                  const isPast = new Date(d + 'T23:59:59') < new Date();
+                  const isPast = new Date(d + 'T23:59:59+08:00') < new Date();
                   const isMyBooking = b && b.user_id === user.id;
                   return (
                     <td key={d + slot} style={{ padding: 8, borderBottom: '1px solid var(--color-border)', textAlign: 'center', verticalAlign: 'top' }}>
