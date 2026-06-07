@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import get_db
-from app.deps import get_current_admin, get_current_super_admin, get_current_user
+from app.deps import get_current_admin, get_current_super_admin, get_current_user, get_current_server_content_manager
 from app.models import (
     User, UserGroup, InviteCode, OAuthApp, SiteSetting, Carousel, FallbackEndpoint,
     PointAccount, PointTransaction, PointType, PointReason,
@@ -427,8 +427,8 @@ async def create_invites(
     db: AsyncSession = Depends(get_db),
     actor: User = Depends(get_current_user),
 ):
-    # 权限检查：非管理员/教师不能创建邀请码
-    if actor.user_group not in (UserGroup.SUPER_ADMIN, UserGroup.ADMIN, UserGroup.TEACHER):
+    # 权限检查：非管理员/教师/服务器管理员不能创建邀请码
+    if actor.user_group not in (UserGroup.SUPER_ADMIN, UserGroup.ADMIN, UserGroup.TEACHER, UserGroup.SERVER_MANAGER):
         raise HTTPException(status_code=403, detail="需要管理员或教师权限才能创建邀请码")
 
     # target_group 权限控制
@@ -440,11 +440,13 @@ async def create_invites(
             raise HTTPException(status_code=403, detail="不能通过邀请码授予超级管理员身份")
         if target_group == "admin" and actor.user_group != UserGroup.SUPER_ADMIN:
             raise HTTPException(status_code=403, detail="仅超级管理员可创建管理员邀请码")
+        if target_group == "server_manager" and actor.user_group not in (UserGroup.SUPER_ADMIN, UserGroup.ADMIN):
+            raise HTTPException(status_code=403, detail="仅管理员可创建服务器管理员邀请码")
         if target_group == "teacher" and actor.user_group not in (UserGroup.SUPER_ADMIN, UserGroup.ADMIN, UserGroup.TEACHER):
             raise HTTPException(status_code=403, detail="无权创建教师邀请码")
         # 验证 target_group 值合法
-        if target_group not in ("admin", "teacher"):
-            raise HTTPException(status_code=400, detail="target_group 只能是 admin 或 teacher")
+        if target_group not in ("admin", "teacher", "server_manager"):
+            raise HTTPException(status_code=400, detail="target_group 只能是 admin、teacher 或 server_manager")
     else:
         target_group = None
 
@@ -1064,7 +1066,7 @@ async def admin_list_textures(
     cursor: str | None = None,
     limit: int = 200,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin),
+    _: User = Depends(get_current_server_content_manager),
 ):
     """管理员材质列表（vSkin 兼容，支持搜索和分页）"""
     base_q = select(Texture)
@@ -1117,7 +1119,7 @@ async def admin_patch_texture(
     texture_hash: str,
     body: dict = Body(...),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin),
+    _: User = Depends(get_current_server_content_manager),
 ):
     """管理员修改材质信息"""
     tex = (await db.execute(select(Texture).where(Texture.hash == texture_hash))).scalar_one_or_none()
@@ -1140,7 +1142,7 @@ async def admin_delete_texture(
     user_id: int | None = None,
     force: bool = False,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin),
+    _: User = Depends(get_current_server_content_manager),
 ):
     """管理员删除材质"""
     q = select(Texture).where(Texture.hash == texture_hash)
@@ -1192,7 +1194,7 @@ async def admin_list_profiles(
     cursor: str | None = None,
     limit: int = 200,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin),
+    _: User = Depends(get_current_server_content_manager),
 ):
     """管理员角色列表"""
     base_q = select(Player)
@@ -1245,7 +1247,7 @@ async def admin_patch_profile(
     profile_id: int,
     body: dict = Body(...),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin),
+    _: User = Depends(get_current_server_content_manager),
 ):
     """管理员修改角色"""
     p = (await db.execute(select(Player).where(Player.id == profile_id))).scalar_one_or_none()
@@ -1261,7 +1263,7 @@ async def admin_patch_profile(
 async def admin_delete_profile(
     profile_id: int,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin),
+    _: User = Depends(get_current_server_content_manager),
 ):
     """管理员删除角色"""
     p = (await db.execute(select(Player).where(Player.id == profile_id))).scalar_one_or_none()
@@ -1277,7 +1279,7 @@ async def admin_patch_profile_skin(
     profile_id: int,
     body: dict = Body(...),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin),
+    _: User = Depends(get_current_server_content_manager),
 ):
     """管理员设置角色皮肤"""
     p = (await db.execute(select(Player).where(Player.id == profile_id))).scalar_one_or_none()
@@ -1300,7 +1302,7 @@ async def admin_patch_profile_cape(
     profile_id: int,
     body: dict = Body(...),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin),
+    _: User = Depends(get_current_server_content_manager),
 ):
     """管理员设置角色披风"""
     p = (await db.execute(select(Player).where(Player.id == profile_id))).scalar_one_or_none()

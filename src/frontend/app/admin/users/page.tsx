@@ -11,7 +11,7 @@ type AdminUser = {
   id: number;
   email: string;
   username: string;
-  user_group: 'super_admin' | 'admin' | 'teacher' | 'user';
+  user_group: 'super_admin' | 'admin' | 'teacher' | 'server_manager' | 'user';
   email_verified: boolean;
   is_banned: boolean;
   created_at: string;
@@ -21,10 +21,11 @@ type AdminUser = {
   github_name: string | null;
 };
 
-const GROUPS = ['user', 'teacher', 'admin', 'super_admin'] as const;
+const GROUPS = ['user', 'server_manager', 'teacher', 'admin', 'super_admin'] as const;
 
 const GROUP_LABELS: Record<string, string> = {
   user: '用户',
+  server_manager: '服务器管理员',
   teacher: '教师',
   admin: '管理员',
   super_admin: '超管',

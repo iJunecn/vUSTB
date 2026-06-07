@@ -345,6 +345,46 @@ async def create_booking(
 
     await db.commit()
     await db.refresh(booking)
+
+    # 发送审批通知邮件给 super_admin / admin / teacher
+    try:
+        from app.utils.email_utils import email_sender
+        managers = (await db.execute(
+            select(User).where(
+                User.user_group.in_((UserGroup.SUPER_ADMIN, UserGroup.ADMIN, UserGroup.TEACHER)),
+                User.is_banned == False,
+            )
+        )).scalars().all()
+
+        # 获取打印机名称
+        printer_name = "未指定"
+        if booking.printer_id:
+            printer_obj = (await db.execute(select(Printer3D).where(Printer3D.id == booking.printer_id))).scalar_one_or_none()
+            if printer_obj:
+                printer_name = printer_obj.name
+
+        booking_info = {
+            "username": user.username or "",
+            "real_name": user.real_name or "",
+            "student_id": user.student_id or "",
+            "phone": user.phone or "",
+            "email": user.email or "",
+            "date": booking.date,
+            "slot_type": booking.slot_type.value,
+            "printer_name": printer_name,
+            "file_name": booking.file_name or "未指定",
+            "purpose": booking.purpose or "未说明",
+            "weight": booking.weight,
+            "cost": booking.cost,
+        }
+        for manager in managers:
+            if manager.email:
+                await email_sender.send_booking_notification(db, manager.email, booking_info)
+    except Exception:
+        # 邮件发送失败不应影响预约创建
+        import logging
+        logging.getLogger(__name__).warning("Failed to send booking notification emails", exc_info=True)
+
     d = booking.to_dict()
     d.update({"username": user.username, "real_name": user.real_name, "student_id": user.student_id})
     return BookingOut(**d)

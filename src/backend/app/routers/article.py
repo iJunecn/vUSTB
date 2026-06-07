@@ -20,7 +20,7 @@ from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.database import get_db
-from app.deps import get_current_admin, get_current_user
+from app.deps import get_current_server_content_manager, get_current_user
 from app.models import User, SiteSetting
 from app.models.article import Article, ArticleCategory, ArticleMedia
 
@@ -338,7 +338,7 @@ async def admin_list_articles(
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin),
+    _: User = Depends(get_current_server_content_manager),
 ):
     """管理：获取所有文章（含定时发布）。"""
     q = select(Article).options(selectinload(Article.category))
@@ -353,7 +353,7 @@ async def admin_list_articles(
 @admin_router.get("/count")
 async def admin_count_articles(
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin),
+    _: User = Depends(get_current_server_content_manager),
 ):
     """管理：文章总数（含定时发布）。"""
     cnt = (await db.execute(select(func.count(Article.id)))).scalar() or 0
@@ -364,7 +364,7 @@ async def admin_count_articles(
 async def create_article(
     body: ArticleCreate,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_admin),
+    user: User = Depends(get_current_server_content_manager),
 ):
     """管理：创建文章。"""
     # 检查 seo_slug 唯一性
@@ -414,7 +414,7 @@ async def create_article(
 async def admin_get_article(
     article_id: int,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin),
+    _: User = Depends(get_current_server_content_manager),
 ):
     """管理：获取文章详情（含定时发布）。"""
     article = (await db.execute(
@@ -430,7 +430,7 @@ async def update_article(
     article_id: int,
     body: ArticleUpdate,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin),
+    _: User = Depends(get_current_server_content_manager),
 ):
     """管理：更新文章。"""
     article = (await db.execute(
@@ -477,7 +477,7 @@ async def update_article(
 async def delete_article(
     article_id: int,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin),
+    _: User = Depends(get_current_server_content_manager),
 ):
     """管理：删除文章。"""
     article = (await db.execute(
@@ -498,7 +498,7 @@ cat_admin_router = APIRouter(prefix="/api/admin/article-categories", tags=["arti
 @cat_admin_router.get("", response_model=list[CategoryOut])
 async def admin_list_categories(
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin),
+    _: User = Depends(get_current_server_content_manager),
 ):
     rows = (await db.execute(
         select(ArticleCategory).order_by(ArticleCategory.id)
@@ -511,7 +511,7 @@ async def admin_list_categories(
 async def admin_create_category(
     body: CategoryCreate,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin),
+    _: User = Depends(get_current_server_content_manager),
 ):
     existing = (await db.execute(
         select(ArticleCategory).where(ArticleCategory.name == body.name)
@@ -531,7 +531,7 @@ async def admin_update_category(
     cat_id: int,
     body: CategoryUpdate,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin),
+    _: User = Depends(get_current_server_content_manager),
 ):
     cat = (await db.execute(
         select(ArticleCategory).where(ArticleCategory.id == cat_id)
@@ -558,7 +558,7 @@ async def admin_update_category(
 async def admin_delete_category(
     cat_id: int,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin),
+    _: User = Depends(get_current_server_content_manager),
 ):
     cat = (await db.execute(
         select(ArticleCategory).where(ArticleCategory.id == cat_id)
@@ -595,7 +595,7 @@ class MediaOut(BaseModel):
 @media_router.get("", response_model=list[MediaOut])
 async def list_media(
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin),
+    _: User = Depends(get_current_server_content_manager),
 ):
     rows = (await db.execute(
         select(ArticleMedia).order_by(ArticleMedia.created_at.desc())
@@ -609,7 +609,7 @@ async def list_media(
 async def upload_media(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_admin),
+    user: User = Depends(get_current_server_content_manager),
 ):
     """上传文章媒体文件。"""
     allowed_types = {"image/png", "image/jpeg", "image/gif", "image/svg+xml", "image/webp", "video/mp4"}
@@ -657,7 +657,7 @@ async def upload_media(
 async def delete_media(
     media_id: int,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin),
+    _: User = Depends(get_current_server_content_manager),
 ):
     media = (await db.execute(
         select(ArticleMedia).where(ArticleMedia.id == media_id)

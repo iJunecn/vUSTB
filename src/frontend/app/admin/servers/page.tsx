@@ -12,13 +12,14 @@ type Server = {
   address: string | null;
   description: string | null;
   version_hint: string | null;
+  theme: string | null;
   icon_url: string | null;
   is_public: boolean;
   sort_order: number;
 };
 
 const EMPTY: Omit<Server, 'id'> = {
-  name: '', address: '', description: '', version_hint: '',
+  name: '', address: '', description: '', version_hint: '', theme: '',
   icon_url: '', is_public: true, sort_order: 0,
 };
 
@@ -108,6 +109,7 @@ export default function AdminServersPage() {
         <Input label="名称" value={draft.name} onChange={(v) => setDraft({ ...draft, name: v })} required />
         <Input label="地址 host:port" value={draft.address || ''} onChange={(v) => setDraft({ ...draft, address: v })} required />
         <Input label="版本提示" value={draft.version_hint || ''} onChange={(v) => setDraft({ ...draft, version_hint: v })} />
+        <Input label="主题" value={draft.theme || ''} onChange={(v) => setDraft({ ...draft, theme: v })} />
         <Input label="图标 URL" value={draft.icon_url || ''} onChange={(v) => setDraft({ ...draft, icon_url: v })} />
         <Input label="描述" value={draft.description || ''} onChange={(v) => setDraft({ ...draft, description: v })} />
         <div className="flex items-center gap-4">
@@ -135,6 +137,7 @@ export default function AdminServersPage() {
               <div className="space-y-1">
                 <p className="font-semibold">{s.name} <span className="text-xs text-muted-foreground">#{s.id}</span></p>
                 <p className="text-xs text-muted-foreground"><code>{s.address}</code></p>
+                {s.theme && <p className="text-xs text-muted-foreground">主题：{s.theme}</p>}
                 {s.description && <p className="text-xs text-muted-foreground">{s.description}</p>}
               </div>
               <div className="flex flex-wrap gap-2 items-start">

@@ -11,6 +11,7 @@ class UserGroup(str, PyEnum):
     SUPER_ADMIN = "super_admin"
     ADMIN = "admin"
     TEACHER = "teacher"
+    SERVER_MANAGER = "server_manager"
     USER = "user"
 
 

@@ -20,7 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.deps import get_current_admin
+from app.deps import get_current_admin, get_current_server_content_manager
 from app.models import MCServer, User
 from app.services.mc_status import get_status_with_fallback, refresh_one, parse_motd_segments
 
@@ -33,6 +33,7 @@ class MCServerOut(BaseModel):
     address: str | None = None
     description: str | None = None
     version_hint: str | None = None
+    theme: str | None = None
     icon_url: str | None = None
     sort_order: int = 0
     is_public: bool = True
@@ -45,6 +46,7 @@ class MCServerOut(BaseModel):
             id=s.id, name=s.name,
             address=s.address if expose_address else None,
             description=s.description, version_hint=s.version_hint,
+            theme=s.theme,
             icon_url=s.icon_url, sort_order=s.sort_order, is_public=s.is_public,
             last_checked_at=s.last_checked_at, last_status=s.last_status,
         )
@@ -55,6 +57,7 @@ class MCServerCreate(BaseModel):
     address: str = Field(..., min_length=1, max_length=255)
     description: str | None = None
     version_hint: str | None = None
+    theme: str | None = None
     icon_url: str | None = None
     is_public: bool = True
     sort_order: int = 0
@@ -66,6 +69,7 @@ class MCServerUpdate(BaseModel):
     address: str | None = None
     description: str | None = None
     version_hint: str | None = None
+    theme: str | None = None
     icon_url: str | None = None
     is_public: bool | None = None
     sort_order: int | None = None
@@ -101,6 +105,7 @@ async def server_statuses(db: AsyncSession = Depends(get_db)) -> list[dict[str, 
             "address": s.address if _expose_address(s) else None,
             "icon_url": s.icon_url,
             "version_hint": s.version_hint,
+            "theme": s.theme,
             "motd_segments": parse_motd_segments(motd),
             "connect_ms": status.get("delay_ms") if status else None,
             "protocol": status.get("protocol") if status else None,
@@ -129,11 +134,12 @@ async def server_status(server_id: int, db: AsyncSession = Depends(get_db)):
 async def create_server(
     body: MCServerCreate,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin),
+    _: User = Depends(get_current_server_content_manager),
 ):
     s = MCServer(
         name=body.name, address=body.address, description=body.description,
-        version_hint=body.version_hint, icon_url=body.icon_url,
+        version_hint=body.version_hint, theme=body.theme,
+        icon_url=body.icon_url,
         is_public=body.is_public, sort_order=body.sort_order,
     )
     db.add(s)
@@ -147,7 +153,7 @@ async def update_server(
     server_id: int,
     body: MCServerUpdate,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin),
+    _: User = Depends(get_current_server_content_manager),
 ):
     s = (await db.execute(select(MCServer).where(MCServer.id == server_id))).scalar_one_or_none()
     if not s:
@@ -165,7 +171,7 @@ async def update_server(
 async def delete_server(
     server_id: int,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin),
+    _: User = Depends(get_current_server_content_manager),
 ):
     s = (await db.execute(select(MCServer).where(MCServer.id == server_id))).scalar_one_or_none()
     if not s:
@@ -179,7 +185,7 @@ async def delete_server(
 async def force_refresh(
     server_id: int,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin),
+    _: User = Depends(get_current_server_content_manager),
 ):
     s = (await db.execute(select(MCServer).where(MCServer.id == server_id))).scalar_one_or_none()
     if not s:

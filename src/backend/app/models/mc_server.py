@@ -13,6 +13,7 @@ class MCServer(Base):
     address: Mapped[str] = mapped_column(String(255), nullable=False)  # host:port
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     version_hint: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    theme: Mapped[str | None] = mapped_column(String(128), nullable=True)
     is_public: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     icon_url: Mapped[str | None] = mapped_column(String(512), nullable=True)

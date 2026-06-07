@@ -7,13 +7,14 @@ import { useUserStore } from '@/stores/user';
 import {
   LayoutDashboard, Users, KeySquare, Settings,
   Shield, Monitor, LogOut, Loader2, Printer, Newspaper, ImageIcon,
-  Palette, UserCircle,
+  Palette, UserCircle, Server,
 } from 'lucide-react';
 import { SkinAvatar } from '@/components/skin/SkinAvatar';
 
 const NAV = [
   { href: '/admin', label: '概览', shortLabel: '概览', icon: LayoutDashboard, exact: true },
   { href: '/admin/users', label: '用户管理', shortLabel: '用户', icon: Users },
+  { href: '/admin/servers', label: '服务器管理', shortLabel: '服务器', icon: Server },
   { href: '/admin/textures', label: '材质管理', shortLabel: '材质', icon: Palette },
   { href: '/admin/profiles', label: '角色管理', shortLabel: '角色', icon: UserCircle },
   { href: '/admin/dynamics', label: '动态管理', shortLabel: '动态', icon: Newspaper },
@@ -42,6 +43,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         if (!pathname.startsWith('/admin/print') && !pathname.startsWith('/admin/invites')) {
           router.replace('/admin/print');
         }
+      } else if (user.user_group === 'server_manager') {
+        // server_manager can only access servers, dynamics, textures, profiles
+        const allowed = ['/admin/servers', '/admin/dynamics', '/admin/textures', '/admin/profiles'];
+        if (!allowed.some((p) => pathname.startsWith(p))) {
+          router.replace('/admin/servers');
+        }
       } else if (user.user_group !== 'admin' && user.user_group !== 'super_admin') {
         router.replace('/');
       }
@@ -50,8 +57,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const canAccessAdmin = user && (user.user_group === 'admin' || user.user_group === 'super_admin');
   const isTeacher = user?.user_group === 'teacher';
+  const isServerManager = user?.user_group === 'server_manager';
 
-  if (!loaded || !user || (!canAccessAdmin && !isTeacher)) {
+  if (!loaded || !user || (!canAccessAdmin && !isTeacher && !isServerManager)) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', padding: '80px 0' }}>
         <Loader2 className="w-6 h-6 animate-spin" style={{ color: 'var(--color-text-light)' }} />
@@ -62,6 +70,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const displayName = user.username || user.display_name || user.email || '';
   const visibleNav = NAV.filter((item) => {
     if (isTeacher) return item.href === '/admin/print' || item.href === '/admin/invites';
+    if (isServerManager) return ['/admin/servers', '/admin/dynamics', '/admin/textures', '/admin/profiles'].some((p) => item.href.startsWith(p));
     return true;
   });
 
