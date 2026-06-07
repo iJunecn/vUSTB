@@ -14,7 +14,7 @@ import logging
 
 from sqlalchemy import inspect, text
 from sqlalchemy.ext.asyncio import AsyncConnection
-from sqlalchemy.schema import CreateColumn
+from sqlalchemy.schema import CreateColumn, CheckConstraint
 
 from app.database import Base
 
@@ -115,7 +115,7 @@ async def _sync_enum_values(conn: AsyncConnection) -> None:
 
 
 async def sync_schema(conn: AsyncConnection) -> None:
-    """对所有 ORM 表执行：先做兼容性重命名，再补齐缺失列，最后同步 enum 值。"""
+    """对所有 ORM 表执行：先做兼容性重命名，再补齐缺失列，同步 CheckConstraint，最后同步 enum 值。"""
     # 兼容旧版本：verification_codes.purpose -> type
     await _rename_column_if_needed(conn, "verification_codes", "purpose", "type")
 
@@ -137,5 +137,27 @@ async def sync_schema(conn: AsyncConnection) -> None:
             except Exception as exc:  # noqa: BLE001
                 logger.warning("failed to add %s.%s: %s", table.name, column.name, exc)
 
+        # 补齐 CheckConstraint（如 pixel_points >= 0）
+        for constraint in table.constraints:
+            if isinstance(constraint, CheckConstraint) and constraint.name:
+                try:
+                    await conn.execute(text(
+                        f'ALTER TABLE "{table.name}" ADD CONSTRAINT "{constraint.name}" '
+                        f'CHECK ({constraint.sqltext})'
+                    ))
+                    logger.info("added constraint %s on %s", constraint.name, table.name)
+                except Exception as exc:  # noqa: BLE001
+                    # 约束已存在时会报错，忽略即可
+                    logger.info("constraint %s on %s already exists or skipped: %s", constraint.name, table.name, exc)
+
     # 同步 enum 类型值（如 point_reason 缺少 admin_adjust）
     await _sync_enum_values(conn)
+
+    # 更新 server_default：pixel_points 从 0 改为 10
+    try:
+        await conn.execute(text(
+            'ALTER TABLE "point_accounts" ALTER COLUMN "pixel_points" SET DEFAULT 10'
+        ))
+        logger.info("updated point_accounts.pixel_points server_default to 10")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("failed to update pixel_points server_default: %s", exc)

@@ -309,8 +309,8 @@ async def delete_user(
 # ============== 用户积分管理 ==============
 
 class UserPointsUpdate(BaseModel):
-    pixel_points: int | None = None
-    shell_points: int | None = None
+    pixel_points: int | None = Field(None, ge=0)
+    shell_points: int | None = Field(None, ge=0)
 
 
 @router.get("/users/{user_id}/points")
@@ -327,7 +327,7 @@ async def get_user_points(
         await db.execute(select(PointAccount).where(PointAccount.user_id == user_id))
     ).scalar_one_or_none()
     if not acct:
-        return {"pixel_points": 0, "shell_points": 0}
+        return {"pixel_points": 10, "shell_points": 0}
     return {"pixel_points": acct.pixel_points, "shell_points": acct.shell_points}
 
 
@@ -347,7 +347,7 @@ async def set_user_points(
         await db.execute(select(PointAccount).where(PointAccount.user_id == user_id))
     ).scalar_one_or_none()
     if not acct:
-        acct = PointAccount(user_id=user_id, pixel_points=0, shell_points=0)
+        acct = PointAccount(user_id=user_id, pixel_points=10, shell_points=0)
         db.add(acct)
         await db.flush()
 

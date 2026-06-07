@@ -32,14 +32,14 @@ BJ_TZ = timezone(timedelta(hours=8))
 async def _get_or_create_account(
     db: AsyncSession, user_id: int
 ) -> PointAccount:
-    """获取用户积分账户，不存在则创建（像素积分默认 0，注册时另设）。"""
+    """获取用户积分账户，不存在则创建（像素积分默认 10，注册赠送）。"""
     acct = (
         await db.execute(
             select(PointAccount).where(PointAccount.user_id == user_id)
         )
     ).scalar_one_or_none()
     if not acct:
-        acct = PointAccount(user_id=user_id, pixel_points=0, shell_points=0)
+        acct = PointAccount(user_id=user_id, pixel_points=10, shell_points=0)
         db.add(acct)
         await db.flush()
     return acct
