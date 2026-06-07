@@ -42,10 +42,10 @@ class EmailSender:
             <tr>
               <td style="background:linear-gradient(135deg,#1a56db,#3b82f6); padding:36px 32px 28px; text-align:center;">
                 <div style="margin-bottom:10px;">
-                  <span style="display:inline-block; width:48px; height:48px; line-height:48px; background:#ffffff; border-radius:12px; font-size:22px; font-weight:800; color:#1a56db; text-align:center; vertical-align:middle;">像</span>
+                  <img src="https://www.ustb.world/img/logo.webp" alt="像素北科" width="48" height="48" style="display:inline-block; width:48px; height:48px; border-radius:12px; background:#ffffff; vertical-align:middle;" />
                 </div>
                 <div style="font-size:22px; font-weight:700; color:#ffffff; letter-spacing:1.5px;">像素北科</div>
-                <div style="font-size:13px; color:rgba(255,255,255,0.85); margin-top:6px;">vUSTB · 北京科技大学元宇宙体素工作坊</div>
+                <div style="font-size:13px; color:rgba(255,255,255,0.85); margin-top:6px;">北京科技大学元宇宙体素工作坊</div>
               </td>
             </tr>
             <!-- 正文区 -->
