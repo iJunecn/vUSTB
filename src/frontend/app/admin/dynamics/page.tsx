@@ -20,6 +20,7 @@ type ArticleDetail = {
   title: string;
   content: string;
   content_type: string;
+  status: string;
   summary: string | null;
   category_id: number | null;
   category: Category | null;
@@ -149,8 +150,9 @@ export default function AdminDynamicsPage() {
       {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
         <StatsCard label="总文章数" value={articles.length} color="#2f78ba" />
-        <StatsCard label="已发布" value={articles.filter((a) => !isScheduled(a)).length} color="#22c55e" />
-        <StatsCard label="定时发布" value={articles.filter((a) => isScheduled(a)).length} color="#eab308" />
+        <StatsCard label="已发布" value={articles.filter((a) => a.status !== 'draft' && !isScheduled(a)).length} color="#22c55e" />
+        <StatsCard label="草稿" value={articles.filter((a) => a.status === 'draft').length} color="#f97316" />
+        <StatsCard label="定时发布" value={articles.filter((a) => a.status !== 'draft' && isScheduled(a)).length} color="#eab308" />
         <StatsCard label="总浏览量" value={articles.reduce((s, a) => s + (a.view_count || 0), 0)} color="#a855f7" />
       </div>
 
@@ -187,6 +189,11 @@ export default function AdminDynamicsPage() {
                     <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--color-heading)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {article.title}
                     </span>
+                    {article.status === 'draft' && (
+                      <span style={{ fontSize: 11, fontWeight: 600, color: '#d97706', background: '#fef3c7', padding: '1px 6px', borderRadius: 4, flexShrink: 0 }}>
+                        草稿
+                      </span>
+                    )}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 4, fontSize: 12, color: 'var(--color-text-light)' }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>

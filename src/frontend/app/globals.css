@@ -1031,6 +1031,20 @@
   box-shadow: 0 14px 30px rgba(66, 82, 105, 0.13);
 }
 
+/* ===== Article Editor Split Layout ===== */
+.article-editor-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 768px) {
+  .article-editor-split {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ===== Markdown / Article content ===== */
 .article-content.prose-markdown {
   color: var(--color-text);

@@ -49,6 +49,7 @@ class CategoryUpdate(BaseModel):
 class ArticleListOut(BaseModel):
     id: int
     title: str
+    status: str = "published"
     summary: str | None = None
     category_id: int | None = None
     category: CategoryOut | None = None
@@ -68,12 +69,14 @@ class ArticleListOut(BaseModel):
 class ArticleDetailOut(ArticleListOut):
     content: str = ""
     content_type: str = "markdown"
+    status: str = "published"
     pinned_at: datetime | None = None
 
 class ArticleCreate(BaseModel):
     title: str = Field(..., max_length=255)
     content: str
     content_type: str = "markdown"
+    status: str = "published"
     summary: str | None = None
     category_id: int | None = None
     cover_image_url: str | None = None
@@ -89,6 +92,7 @@ class ArticleUpdate(BaseModel):
     title: str | None = Field(None, max_length=255)
     content: str | None = None
     content_type: str | None = None
+    status: str | None = None
     summary: str | None = None
     category_id: int | None = None
     cover_image_url: str | None = None
@@ -107,7 +111,7 @@ def _article_to_list_out(a: Article) -> ArticleListOut:
     cat = CategoryOut(id=a.category.id, name=a.category.name, description=a.category.description,
                       created_at=a.category.created_at, updated_at=a.category.updated_at) if a.category else None
     return ArticleListOut(
-        id=a.id, title=a.title, summary=a.summary,
+        id=a.id, title=a.title, status=a.status, summary=a.summary,
         category_id=a.category_id, category=cat,
         author_id=a.author_id, view_count=a.view_count,
         cover_image_url=a.cover_image_url, cover_image_alt=a.cover_image_alt,
@@ -123,6 +127,7 @@ def _article_to_detail_out(a: Article) -> ArticleDetailOut:
                       created_at=a.category.created_at, updated_at=a.category.updated_at) if a.category else None
     return ArticleDetailOut(
         id=a.id, title=a.title, content=a.content, content_type=a.content_type,
+        status=a.status,
         summary=a.summary, category_id=a.category_id, category=cat,
         author_id=a.author_id, view_count=a.view_count,
         cover_image_url=a.cover_image_url, cover_image_alt=a.cover_image_alt,
@@ -144,7 +149,8 @@ async def list_articles(
 ):
     """公开：获取文章列表（不含正文，用于列表页）。"""
     q = select(Article).options(selectinload(Article.category)).where(
-        Article.created_at <= datetime.now(timezone.utc)
+        Article.status == "published",
+        Article.created_at <= datetime.now(timezone.utc),
     )
     if category_id is not None:
         q = q.where(Article.category_id == category_id)
@@ -173,7 +179,8 @@ async def search_articles(
 ):
     """公开：搜索文章。"""
     query = select(Article).options(selectinload(Article.category)).where(
-        Article.created_at <= datetime.now(timezone.utc)
+        Article.status == "published",
+        Article.created_at <= datetime.now(timezone.utc),
     )
     if q:
         pattern = f"%{q}%"
@@ -192,7 +199,10 @@ async def search_articles(
 async def count_articles(db: AsyncSession = Depends(get_db)):
     """公开：文章总数。"""
     cnt = (await db.execute(
-        select(func.count(Article.id)).where(Article.created_at <= datetime.now(timezone.utc))
+        select(func.count(Article.id)).where(
+            Article.status == "published",
+            Article.created_at <= datetime.now(timezone.utc),
+        )
     )).scalar() or 0
     return {"count": cnt}
 
@@ -245,7 +255,10 @@ async def rss_feed(
     q = (
         select(Article)
         .options(selectinload(Article.category))
-        .where(Article.created_at <= datetime.now(timezone.utc))
+        .where(
+            Article.status == "published",
+            Article.created_at <= datetime.now(timezone.utc),
+        )
         .order_by(Article.is_pinned.desc(), Article.pin_order.asc(), Article.created_at.desc())
         .limit(20)
     )
@@ -308,8 +321,10 @@ async def get_article(
     article_id: int | str,
     db: AsyncSession = Depends(get_db),
 ):
-    """公开：获取文章详情（含正文），支持数字 ID 或 seo_slug 查询。"""
-    q = select(Article).options(selectinload(Article.category))
+    """公开：获取文章详情（含正文），支持数字 ID 或 seo_slug 查询。仅返回已发布文章。"""
+    q = select(Article).options(selectinload(Article.category)).where(
+        Article.status == "published",
+    )
     try:
         numeric_id = int(article_id)
         q = q.where(Article.id == numeric_id)
@@ -387,6 +402,7 @@ async def create_article(
         title=body.title,
         content=body.content,
         content_type=body.content_type,
+        status=body.status,
         summary=body.summary,
         category_id=body.category_id,
         author_id=user.id,
