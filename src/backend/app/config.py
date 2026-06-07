@@ -19,7 +19,7 @@ _AF_TOK_B64 = "ZDZESnVVa0g0RXN3Uld5WWJRTjhCamNGVENoQXZuM2U="
 # SMTP 邮件服务 — base64 编码存储敏感字段
 _SMTP_HOST = "mx.jianyuelab.net"
 _SMTP_PORT = 465
-_SMTP_USER = "noreply"
+_SMTP_USER = "noreply@ustb.world"
 _SMTP_PWD_B64 = "dXN0YndvcmxkbWFpbA=="
 _SMTP_FROM = "像素北科"
 _SMTP_SSL = True
