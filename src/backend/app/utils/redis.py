@@ -1,9 +1,4 @@
-"""共享 Redis 客户端。
-
-gunicorn 使用多 worker 进程，每个 worker 有独立的内存空间。
-因此所有跨请求共享的状态（SSO 会话、OAuth state、pending OAuth）
-必须存储在 Redis 中，而非 Python 进程内存字典。
-"""
+"""共享 Redis 客户端。"""
 import json
 import logging
 from typing import Any
@@ -18,16 +13,14 @@ _redis: aioredis.Redis | None = None
 
 
 def get_redis() -> aioredis.Redis:
-    """获取共享 Redis 客户端（懒初始化，单例）。"""
+    """获取共享 Redis 客户端（懒初始化）。"""
     global _redis
     if _redis is None:
         _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
     return _redis
 
 
-# ---------------------------------------------------------------------------
-# 便捷方法：存储/读取/删除 JSON 序列化的 dict
-# ---------------------------------------------------------------------------
+# JSON 序列化便捷方法
 
 
 async def set_json(key: str, data: dict, ex: int | None = None) -> None:

@@ -80,7 +80,7 @@ async def _get_jwt_user_id_optional(creds: HTTPAuthorizationCredentials = Depend
     return int(user_id) if user_id else None
 
 
-# ========== 登录 / 注册 / 验证码 ==========
+# 登录/注册/验证码
 
 @router.post("/api/site-login")
 async def site_login(req: dict, request: Request, db: AsyncSession = Depends(get_db)):
@@ -128,7 +128,7 @@ async def reset_password(req: dict, request: Request, db: AsyncSession = Depends
     return {"ok": True}
 
 
-# ========== 当前用户信息 ==========
+# 当前用户
 
 @router.get("/api/me")
 async def me(user_id: int = Depends(_get_jwt_user_id), db: AsyncSession = Depends(get_db)):
@@ -176,7 +176,7 @@ async def change_password(
     return {"ok": True, "message": "密码修改成功"}
 
 
-# ========== 角色管理 ==========
+# 角色管理
 
 @router.post("/api/me/profiles")
 async def create_profile(
@@ -208,7 +208,7 @@ async def clear_profile_cape(pid: int, user_id: int = Depends(_get_jwt_user_id),
     return {"ok": True}
 
 
-# ========== 材质管理 ==========
+# 材质管理
 
 @router.post("/api/me/textures")
 async def upload_texture_to_library(
@@ -423,7 +423,7 @@ async def textures_upload(
     user_id: int = Depends(_get_jwt_user_id),
     db: AsyncSession = Depends(get_db),
 ):
-    """前端直接上传材质接口，同时应用到角色"""
+    """上传材质并应用到角色"""
     content = await file.read()
     public_bool = is_public.lower() == "true"
 
@@ -454,13 +454,11 @@ async def textures_upload(
     if not already:
         db.add(Wardrobe(user_id=user_id, texture_id=tex.id))
 
-    # 应用到角色 — uuid form field may be a player UUID or numeric ID
+    # 应用到角色
     try:
-        # Try to interpret as numeric ID first
         try:
             player_id = int(uuid)
         except (ValueError, TypeError):
-            # Lookup player by UUID to get numeric ID
             player = (await db.execute(select(Player).where(Player.uuid == uuid, Player.owner_id == user_id))).scalar_one_or_none()
             if not player:
                 raise ValueError("Profile not found")
@@ -473,7 +471,7 @@ async def textures_upload(
     return {"ok": True}
 
 
-# ========== 公共皮肤库 ==========
+# 公共皮肤库
 
 @router.get("/api/public/skin-library")
 async def get_skin_library(
@@ -492,7 +490,6 @@ async def get_skin_library(
 
     offset = (page - 1) * limit
 
-    # Build visibility filter based on auth status
     from app.utils.user_groups import resolve_user_group, SUPER_ADMIN_GROUP
     if user_id is not None:
         user_row = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
@@ -524,7 +521,6 @@ async def get_skin_library(
         base_q.order_by(Texture.created_at.desc()).offset(offset).limit(limit)
     )).scalars().all()
 
-    # 批量获取上传者信息
     uploader_ids = list(set(t.uploader_id for t in items if t.uploader_id))
     uploader_names = {}
     if uploader_ids:
@@ -551,7 +547,7 @@ async def get_skin_library(
     }
 
 
-# ========== 公共设置 ==========
+# 公共设置
 
 @router.get("/api/public/settings")
 async def get_public_settings(db: AsyncSession = Depends(get_db)):
@@ -616,7 +612,7 @@ async def get_default_avatar():
     return Response(content=png_data, media_type="image/png")
 
 
-# ========== OAuth 2.0 ==========
+# OAuth 2.0
 
 @router.get("/api/oauth/authorize/check")
 async def oauth_authorize_check(

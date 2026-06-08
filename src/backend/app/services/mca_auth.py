@@ -1,9 +1,4 @@
-"""MCA download authorization service.
-
-Ported from USTB-Official-Backend/app/services/McaDownload.py.
-Validates that a download request targets an allowed .mca region file
-and enforces visibility-based access tiers (public / authenticated / admin).
-"""
+"""MCA 地区文件下载授权。"""
 from __future__ import annotations
 
 import posixpath
@@ -27,7 +22,7 @@ class McaDownloadAuthorizationError(Exception):
 
 
 class McaDownloadAuthorizationService:
-    """Authorise MCA region-file download requests."""
+    """MCA 下载授权服务。"""
 
     @staticmethod
     def _normalize_path(value: str, *, field_name: str) -> str:

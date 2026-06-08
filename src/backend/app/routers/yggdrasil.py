@@ -1,22 +1,6 @@
-"""Yggdrasil 协议路由（authlib-injector 兼容）
+"""Yggdrasil 协议路由（authlib-injector 兼容）。
 
-实现端点（挂载前缀 /api/yggdrasil）：
-- GET  /api/yggdrasil/                          Yggdrasil meta（含 signaturePublickey、skinDomains）
-- POST /api/yggdrasil/authserver/authenticate
-- POST /api/yggdrasil/authserver/refresh
-- POST /api/yggdrasil/authserver/validate
-- POST /api/yggdrasil/authserver/invalidate
-- POST /api/yggdrasil/authserver/signout
-- POST /api/yggdrasil/sessionserver/session/minecraft/join
-- GET  /api/yggdrasil/sessionserver/session/minecraft/hasJoined
-- GET  /api/yggdrasil/sessionserver/session/minecraft/profile/{uuid}
-- POST /api/yggdrasil/minecraftservices/publickeys              (1.20+ 公钥查询)
-- GET  /api/yggdrasil/minecraftservices/publickeys/{uuid}       (1.20+ 单键查询)
-- GET  /api/yggdrasil/api/users/profiles/minecraft/{playerName}
-- POST /api/yggdrasil/api/profiles/minecraft
-- GET  /api/yggdrasil/api/minecraft/profile/lookup/name/{playerName}
-- PUT  /api/yggdrasil/api/user/profile/{uuid}/{textureType}  (上传材质，需要 access_token)
-- DELETE /api/yggdrasil/api/user/profile/{uuid}/{textureType}
+端点列表见下方路由注册。
 """
 import base64
 import json
@@ -53,7 +37,7 @@ def _json_response(data: dict, status_code: int = 200) -> JSONResponse:
     return JSONResponse(data, status_code=status_code, media_type=YGG_CONTENT_TYPE)
 
 
-# ====== 会话 token（Yggdrasil 使用自定义 accessToken/clientToken 而非 JWT） ======
+# 会话 token
 _SESSION_TOKENS: dict[str, dict] = {}  # access_token -> {user_id, client_token, selected_uuid, expires_at}
 _JOIN_TOKENS: dict[str, dict] = {}  # server_id -> {selected_uuid, access_token, expires_at}
 
@@ -72,10 +56,7 @@ def _now_ms() -> int:
 async def _build_profile_json(
     db: AsyncSession, player: Player, sign: bool = False, request: Request | None = None
 ) -> dict:
-    """构建 Yggdrasil profile JSON，包含 textures 与可选签名。
-
-    严格遵循 Yggdrasil 服务端技术规范 §角色信息的序列化。
-    """
+    """构建 Yggdrasil profile JSON。"""
     skin_tex = None
     cape_tex = None
     if player.skin_texture_id:
@@ -151,7 +132,7 @@ def _yggdrasil_error(error: str, message: str, status_code: int = 403) -> Yggdra
     return YggdrasilError(error, message, status_code)
 
 
-# ====== 收集 skinDomains ======
+# skinDomains
 
 _DEFAULT_SITE_URL = "http://localhost"
 
@@ -277,7 +258,7 @@ async def _collect_skin_domains(db: AsyncSession, request: Request | None = None
     return list(dict.fromkeys(domains))
 
 
-# ====== Meta 端点（authlib-injector 必需） ======
+# Meta 端点
 @router.get("/")
 @router.get("")
 async def yggdrasil_meta(request: Request, db: AsyncSession = Depends(get_db)):
@@ -318,13 +299,13 @@ async def yggdrasil_meta(request: Request, db: AsyncSession = Depends(get_db)):
     return resp
 
 
-# ====== 材质静态文件 ======
+# 材质静态文件
 # 注意：不在此挂载 /static/textures —— 该路径由 app.routers.static_files 提供，
 # Caddy 直接反代 /static/*。在 Yggdrasil 路由内重复挂载会导致 URL 漂移到
 # /api/yggdrasil/static/textures/，破坏 skinDomains 白名单匹配。
 
 
-# ====== authserver ======
+# 认证服务
 @router.post("/authserver/authenticate")
 async def authserver_authenticate(req: AuthRequest, request: Request, db: AsyncSession = Depends(get_db)):
     await rate_limiter.check(request, db, is_auth_endpoint=True)
@@ -509,7 +490,7 @@ async def authserver_signout(req: dict, request: Request, db: AsyncSession = Dep
     return Response(status_code=204)
 
 
-# ====== sessionserver ======
+# 会话服务
 @router.post("/sessionserver/session/minecraft/join")
 async def session_join(req: JoinRequest, request: Request):
     access_token = req.accessToken
@@ -586,7 +567,7 @@ async def session_profile(
             break
 
     if not player:
-        # Fallback to configured services
+        # 未找到则查询 Fallback
         fallback_resp = await fallback_backend.get_profile(db, uuid, unsigned)
         if fallback_resp:
             return fallback_resp
@@ -596,7 +577,7 @@ async def session_profile(
     return _json_response(profile)
 
 
-# ====== profiles by name / bulk ======
+# 角色查询
 @router.get("/api/users/profiles/minecraft/{playerName}")
 @router.get("/users/profiles/minecraft/{playerName}")
 @router.get("/api/profiles/minecraft/{playerName}")
@@ -606,7 +587,7 @@ async def get_profile_by_name(playerName: str, db: AsyncSession = Depends(get_db
     if player:
         return _json_response({"id": player.uuid.replace("-", ""), "name": player.name})
 
-    # Fallback to configured services
+    # 未找到则查询 Fallback
     fallback_resp = await fallback_backend.get_profile_by_name(db, playerName)
     if fallback_resp:
         return fallback_resp
@@ -634,7 +615,7 @@ async def query_profiles(names: list[str], db: AsyncSession = Depends(get_db)):
     return _json_response(local_profiles)
 
 
-# ====== services lookup ======
+# 服务查询
 @router.get("/api/minecraft/profile/lookup/name/{playerName}")
 @router.get("/minecraft/profile/lookup/name/{playerName}")
 async def lookup_profile_by_name(playerName: str, db: AsyncSession = Depends(get_db)):
@@ -643,7 +624,7 @@ async def lookup_profile_by_name(playerName: str, db: AsyncSession = Depends(get
     if player:
         return _json_response({"id": player.uuid.replace("-", ""), "name": player.name})
 
-    # Fallback
+    # 未找到则查询 Fallback
     fallback_resp = await fallback_backend.services_lookup(db, playerName)
     if fallback_resp:
         return fallback_resp
@@ -651,7 +632,7 @@ async def lookup_profile_by_name(playerName: str, db: AsyncSession = Depends(get
     return Response(status_code=204)
 
 
-# ====== minecraftservices/publickeys (Minecraft 1.20+ 兼容) ======
+# 1.20+ 公钥
 @router.post("/minecraftservices/publickeys")
 async def minecraftservices_publickeys(body: dict):
     """Minecraft 1.20+ authlib 会向此端点请求公钥以验证材质签名。
@@ -707,7 +688,7 @@ async def minecraftservices_publickeys_by_uuid(uuid: str):
     })
 
 
-# ====== 材质上传/删除 ======
+# 材质上传/删除
 @router.put("/api/user/profile/{uuid}/{texture_type}")
 async def upload_texture(
     uuid: str,
@@ -792,7 +773,7 @@ async def delete_texture_binding(
     return Response(status_code=204)
 
 
-# ====== Helpers ======
+# 工具函数
 
 def _cleanup_expired_tokens():
     """清理过期的会话 token"""

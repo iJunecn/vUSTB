@@ -61,14 +61,12 @@ export default function DynamicsPage() {
     });
   };
 
-  // Separate pinned and normal articles
   const pinnedArticles = articles.filter((a) => a.is_pinned);
   const normalArticles = articles.filter((a) => !a.is_pinned);
 
   return (
     <div style={{ minHeight: '100vh', paddingTop: 56 }}>
       <div className="page-container" style={{ paddingTop: '40px', paddingBottom: '40px' }}>
-        {/* Header */}
         <div style={{ marginBottom: 32 }}>
           <p className="section-kicker" style={{ marginBottom: 8 }}>DYNAMICS</p>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -104,7 +102,6 @@ export default function DynamicsPage() {
           </p>
         </div>
 
-        {/* Search */}
         <div style={{ position: 'relative', marginBottom: 24 }}>
           <Search
             style={{
@@ -122,7 +119,6 @@ export default function DynamicsPage() {
           />
         </div>
 
-        {/* Categories */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 32 }}>
           <button
             onClick={() => setSelectedCategory(null)}
@@ -161,21 +157,18 @@ export default function DynamicsPage() {
           ))}
         </div>
 
-        {/* Loading */}
         {loading && (
           <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--color-text-light)' }}>
             加载中...
           </div>
         )}
 
-        {/* Empty */}
         {!loading && articles.length === 0 && (
           <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--color-text-light)' }}>
             暂无文章
           </div>
         )}
 
-        {/* Pinned Articles */}
         {!loading && pinnedArticles.length > 0 && (
           <div style={{ marginBottom: 32 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
@@ -190,7 +183,6 @@ export default function DynamicsPage() {
           </div>
         )}
 
-        {/* Normal Articles */}
         {!loading && normalArticles.length > 0 && (
           <div className="grid-articles">
             {normalArticles.map((article) => (
@@ -215,7 +207,6 @@ function ArticleCard({
   return (
     <Link href={href} style={{ textDecoration: 'none' }}>
       <div className="surface-card hoverable dynamics-article-card">
-        {/* Cover image */}
         {article.cover_image_url && (
           <div style={{ width: '100%', height: 160, overflow: 'hidden', borderRadius: '12px 12px 0 0' }}>
             <img
@@ -232,7 +223,6 @@ function ArticleCard({
         )}
 
         <div style={{ padding: 20 }}>
-          {/* Meta row */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10, flexWrap: 'wrap' }}>
             {article.category && (
               <span className="dynamics-cat-pill">{article.category.name}</span>
@@ -252,12 +242,10 @@ function ArticleCard({
             )}
           </div>
 
-          {/* Title */}
           <h3 style={{ fontSize: 17, fontWeight: 600, color: 'var(--color-heading)', margin: '0 0 8px', lineHeight: 1.4 }}>
             {article.title}
           </h3>
 
-          {/* Summary */}
           {article.summary && (
             <p style={{ fontSize: 13, color: 'var(--color-text-light)', margin: 0, lineHeight: 1.6,
               display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden'
@@ -266,7 +254,6 @@ function ArticleCard({
             </p>
           )}
 
-          {/* Read more */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 14, fontSize: 13, color: 'var(--color-primary)', fontWeight: 500 }}>
             阅读更多 <ArrowRight style={{ width: 14, height: 14 }} />
           </div>

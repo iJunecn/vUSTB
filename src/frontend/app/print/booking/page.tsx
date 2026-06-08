@@ -90,7 +90,6 @@ function PrintBookingPage() {
     setShellCost(cost);
   }, [form.weight]);
 
-  // 计算当前可选的时段（基于北京时间）
   const availableSlots = useMemo(() => {
     if (!form.date) return { AM: true, PM: true };
     const today = toBeijingDateStr(new Date());
@@ -104,7 +103,6 @@ function PrintBookingPage() {
     return { AM: true, PM: true };
   }, [form.date]);
 
-  // 如果当前选中的时段变得不可用，自动清空
   useEffect(() => {
     if (form.slot_type === 'AM' && !availableSlots.AM) {
       setForm((f) => ({ ...f, slot_type: '' }));
@@ -118,7 +116,7 @@ function PrintBookingPage() {
     e.preventDefault();
     setError('');
 
-    // Check USTB SSO binding before creating booking
+
     if (!user?.real_name || !user?.student_id) {
       setShowSsoModal(true);
       return;
@@ -167,7 +165,6 @@ function PrintBookingPage() {
         <h1 style={{ fontSize: 26, fontWeight: 800, color: 'var(--color-heading)', margin: 0 }}>创建预约</h1>
       </div>
 
-      {/* Shell points balance */}
       <div style={{ padding: '12px 16px', borderRadius: 10, background: 'color-mix(in srgb, #3b82f6 8%, transparent)', border: '1px solid color-mix(in srgb, #3b82f6 20%, transparent)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-heading)' }}>当前贝壳积分</span>
         <span style={{ fontSize: 20, fontWeight: 700, color: '#3b82f6' }}>{shellPoints}</span>
@@ -180,7 +177,6 @@ function PrintBookingPage() {
       )}
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-        {/* Printer */}
         {printers.length > 0 && (
           <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-heading)' }}>打印机</span>
@@ -200,7 +196,6 @@ function PrintBookingPage() {
           </label>
         )}
 
-        {/* Date */}
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-heading)' }}>预约日期</span>
           <input
@@ -213,7 +208,6 @@ function PrintBookingPage() {
           />
         </label>
 
-        {/* Slot */}
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-heading)' }}>时段</span>
           <select
@@ -228,7 +222,6 @@ function PrintBookingPage() {
           </select>
         </label>
 
-        {/* File name */}
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-heading)' }}>文件名</span>
           <input
@@ -240,7 +233,6 @@ function PrintBookingPage() {
           />
         </label>
 
-        {/* Purpose */}
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-heading)' }}>用途</span>
           <textarea
@@ -253,7 +245,6 @@ function PrintBookingPage() {
           />
         </label>
 
-        {/* Weight */}
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-heading)' }}>预估重量 (g)</span>
           <input
@@ -269,7 +260,6 @@ function PrintBookingPage() {
           <p style={{ fontSize: 11, color: 'var(--color-text-light)', margin: '2px 0 0' }}>请务必如实填写，管理员将会核对。</p>
         </label>
 
-        {/* Cost preview */}
         <div style={{ padding: '16px 20px', borderRadius: 12, background: 'var(--color-background-soft)', border: '2px solid var(--color-primary)', textAlign: 'center' }}>
           <div style={{ color: 'var(--color-text-light)', fontSize: 13, marginBottom: 4 }}>消耗贝壳积分</div>
           <div>
@@ -303,7 +293,6 @@ function PrintBookingPage() {
         </div>
       </form>
 
-      {/* Insufficient points modal */}
       {showInsufficientModal && (
         <div
           style={{ position: 'fixed', inset: 0, zIndex: 110, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
@@ -342,7 +331,6 @@ function PrintBookingPage() {
         </div>
       )}
 
-      {/* SSO binding required modal */}
       {showSsoModal && (
         <div
           style={{ position: 'fixed', inset: 0, zIndex: 110, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}

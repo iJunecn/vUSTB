@@ -35,7 +35,7 @@ export default function ServersPage() {
         setServers(data);
       }
     } catch {
-      // silently ignore fetch errors
+
     } finally {
       setLoading(false);
     }
@@ -56,7 +56,6 @@ export default function ServersPage() {
 
   return (
     <div className="servers-page-container">
-      {/* Background */}
       <div className="home-bg">
         <picture>
           <source srcSet="/img/background.webp" type="image/webp" />
@@ -65,10 +64,8 @@ export default function ServersPage() {
       </div>
       <div className="home-bg-overlay" />
 
-      {/* Content */}
       <div className="servers-page-content">
         <div className="servers-page-card">
-          {/* Header */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
             <div>
               <p className="section-kicker" style={{ marginBottom: 4 }}>SERVER STATUS</p>
@@ -94,7 +91,6 @@ export default function ServersPage() {
             </div>
           </div>
 
-          {/* Server cards */}
           {loading ? (
             <div style={{ display: 'flex', justifyContent: 'center', padding: '32px 0' }}>
               <div
@@ -126,7 +122,6 @@ export default function ServersPage() {
                       border: '1px solid var(--color-border)',
                     }}
                   >
-                    {/* Main server row */}
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                         {iconSrc ? (
@@ -158,7 +153,6 @@ export default function ServersPage() {
 
                     {isOnline && (
                       <div style={{ marginTop: 8 }}>
-                        {/* MOTD */}
                         {server.motd_segments && server.motd_segments.length > 0 && (
                           <p style={{ fontSize: 11, color: 'var(--color-text)', margin: '0 0 4px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {server.motd_segments.map((seg, i) => (
@@ -166,7 +160,6 @@ export default function ServersPage() {
                             ))}
                           </p>
                         )}
-                        {/* Metrics row */}
                         <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--color-text-light)', flexWrap: 'wrap' }}>
                           {server.version_hint && <span>{server.version_hint}</span>}
                           {server.theme && <span>主题：{server.theme}</span>}
@@ -180,7 +173,6 @@ export default function ServersPage() {
                       </div>
                     )}
 
-                    {/* Version/theme when offline */}
                     {!isOnline && (
                       <div style={{ marginTop: 6, fontSize: 11, color: 'var(--color-text-light)' }}>
                         {server.version_hint && <span>{server.version_hint}</span>}

@@ -57,7 +57,6 @@ export function CapeViewer({
       cape: capeUrl,
     } as any);
 
-    // Hide the skin model, only show cape
     if (viewer.playerObject) {
       viewer.playerObject.skin.visible = false;
     }

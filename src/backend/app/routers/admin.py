@@ -31,7 +31,7 @@ from app.utils.user_groups import is_admin_group, normalize_user_group
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
-# ============== 用户管理 ==============
+# 用户管理
 class UserOut(BaseModel):
     id: int
     email: str
@@ -202,11 +202,9 @@ async def delete_user(
     if not u:
         raise HTTPException(status_code=404, detail="not found")
 
-    # Clean up related records that lack CASCADE on FK
     from app.models import PointAccount, PointTransaction, Booking, AccessToken, DeviceCode
     from app.models import Article, ArticleMedia
 
-    # Delete point transactions & account
     pt_rows = (await db.execute(
         select(PointTransaction).where(PointTransaction.user_id == user_id)
     )).scalars().all()
@@ -218,49 +216,41 @@ async def delete_user(
     if pa:
         await db.delete(pa)
 
-    # Nullify article author references (keep articles, remove author link)
     art_rows = (await db.execute(
         select(Article).where(Article.author_id == user_id)
     )).scalars().all()
     for a in art_rows:
         a.author_id = None
 
-    # Nullify article media uploader references
     media_rows = (await db.execute(
         select(ArticleMedia).where(ArticleMedia.uploader_id == user_id)
     )).scalars().all()
     for m in media_rows:
         m.uploader_id = None
 
-    # Delete bookings
     booking_rows = (await db.execute(
         select(Booking).where(Booking.user_id == user_id)
     )).scalars().all()
     for b in booking_rows:
         await db.delete(b)
 
-    # Delete OAuth access tokens
     token_rows = (await db.execute(
         select(AccessToken).where(AccessToken.user_id == user_id)
     )).scalars().all()
     for t in token_rows:
         await db.delete(t)
 
-    # Nullify device code user references
     dc_rows = (await db.execute(
         select(DeviceCode).where(DeviceCode.user_id == user_id)
     )).scalars().all()
     for dc in dc_rows:
         dc.user_id = None
 
-    # Delete user's players (and their wardrobe entries) before textures
-    # to avoid FK violation: players.skin_texture_id / cape_texture_id → textures.id
-    # Even with ondelete="SET NULL" in the model, existing DBs may not have it yet.
+    # 删除用户角色前需先清理 wardrobe，避免 FK 违规
     player_rows = (await db.execute(
         select(Player).where(Player.owner_id == user_id)
     )).scalars().all()
     for p in player_rows:
-        # Remove wardrobe entries for this player's textures first
         if p.skin_texture_id:
             w_skin = (await db.execute(
                 select(Wardrobe).where(Wardrobe.texture_id == p.skin_texture_id)
@@ -275,8 +265,7 @@ async def delete_user(
                 await db.delete(w)
         await db.delete(p)
 
-    # Nullify any remaining player references to this user's textures
-    # (handles players owned by OTHER users that reference this user's textures)
+    # 其他用户的角色若引用了此用户的材质，需解绑
     user_texture_ids = (await db.execute(
         select(Texture.id).where(Texture.uploader_id == user_id)
     )).scalars().all()
@@ -293,7 +282,6 @@ async def delete_user(
             if p.cape_texture_id in user_texture_ids:
                 p.cape_texture_id = None
 
-    # Delete wardrobe entries for this user's textures
     if user_texture_ids:
         w_rows = (await db.execute(
             select(Wardrobe).where(Wardrobe.texture_id.in_(user_texture_ids))
@@ -306,7 +294,7 @@ async def delete_user(
     return {"ok": True}
 
 
-# ============== 用户积分管理 ==============
+# 积分管理
 
 class UserPointsUpdate(BaseModel):
     pixel_points: int | None = Field(None, ge=0)
@@ -385,7 +373,7 @@ async def set_user_points(
     return {"ok": True, **result}
 
 
-# ============== 邀请码 ==============
+# 邀请码
 class InviteOut(BaseModel):
     id: int
     code: str
@@ -484,13 +472,7 @@ async def delete_invite(
     return {"ok": True}
 
 
-# ============== OAuth Apps (vSkin style — see /admin/oauth/apps) ==============
-# The vSkin-compatible OAuth app management is at the bottom of this file
-# using the oauth_backend service layer. The old Pydantic-model-based
-# CRUD endpoints have been replaced.
-
-
-# ============== 站点设置 ==============
+# 站点设置
 class SettingItem(BaseModel):
     key: str
     value: Any
@@ -522,7 +504,7 @@ async def upsert_setting(
     return SettingItem(key=existing.key, value=existing.value)
 
 
-# ============== 轮播图 ==============
+# 轮播图
 class CarouselOut(BaseModel):
     id: int
     title: str
@@ -574,7 +556,7 @@ async def delete_carousel(
     return {"ok": True}
 
 
-# ============== 统计 ==============
+# 统计
 @router.get("/stats")
 async def stats(
     db: AsyncSession = Depends(get_db),
@@ -590,7 +572,7 @@ async def stats(
     }
 
 
-# ============== Fallback Endpoints ==============
+# Fallback
 class FallbackEndpointOut(BaseModel):
     id: int
     priority: int
@@ -707,7 +689,7 @@ async def delete_fallback_endpoint(
     return {"ok": True}
 
 
-# ============== Mojang Fallback (combined) ==============
+# Mojang Fallback
 class MojangFallbackEndpointOut(BaseModel):
     id: int | None = None
     session_url: str
@@ -765,7 +747,6 @@ async def update_mojang_fallback(
 ):
     await _upsert_setting(db, "fallback_strategy", body.strategy)
 
-    # Replace all fallback endpoints
     existing = (await db.execute(select(FallbackEndpoint))).scalars().all()
     for e in existing:
         await db.delete(e)
@@ -805,7 +786,7 @@ async def update_mojang_fallback(
     )
 
 
-# ============== 分组站点设置 ==============
+# 分组设置
 
 _SETTING_GROUPS: dict[str, list[str]] = {
     "site": [
@@ -862,7 +843,6 @@ async def get_settings_group(
         await db.execute(select(SiteSetting).where(SiteSetting.key.in_(keys)))
     ).scalars().all()
     result = {s.key: s.value for s in rows}
-    # Fill missing keys with None
     for k in keys:
         if k not in result:
             result[k] = None
@@ -884,7 +864,6 @@ async def update_settings_group(
             raise HTTPException(status_code=400, detail=f"Setting key '{key}' does not belong to group '{group}'")
         await _upsert_setting(db, key, value)
     await db.commit()
-    # Return the updated group
     rows = (
         await db.execute(select(SiteSetting).where(SiteSetting.key.in_(allowed_keys)))
     ).scalars().all()
@@ -901,7 +880,7 @@ async def upload_site_logo(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_admin),
 ):
-    """Upload a site logo image and save the URL to settings."""
+    """上传站点 Logo"""
     allowed_types = {"image/png", "image/jpeg", "image/gif", "image/svg+xml", "image/webp"}
     if file.content_type not in allowed_types:
         raise HTTPException(status_code=400, detail="Invalid image type")
@@ -924,7 +903,6 @@ async def upload_site_logo(
     with open(dest, "wb") as f:
         f.write(content)
 
-    # Build a public URL. The static file router serves carousel_directory.
     logo_url = f"/static/carousel/{filename}"
 
     await _upsert_setting(db, "site_logo", logo_url)
@@ -933,7 +911,7 @@ async def upload_site_logo(
     return {"ok": True, "url": logo_url}
 
 
-# ============== vSkin 兼容: 用户管理增强 ==============
+# vSkin 兼容: 用户管理
 
 @router.post("/users/{user_id}/toggle-admin")
 async def toggle_user_admin(
@@ -998,7 +976,7 @@ async def reset_user_password(
     return await admin_backend.reset_user_password(db, int(user_id), new_password)
 
 
-# ============== vSkin 兼容: 分组设置 ==============
+# vSkin 兼容: 分组设置
 
 @router.get("/settings/site")
 async def get_site_settings(db: AsyncSession = Depends(get_db), _: User = Depends(get_current_admin)):
@@ -1044,7 +1022,7 @@ async def save_fallback_settings(body: dict = Body(...), db: AsyncSession = Depe
     return {"ok": True}
 
 
-# ============== vSkin 兼容: 材质管理 ==============
+# vSkin 兼容: 材质管理
 
 class AdminTextureOut(BaseModel):
     hash: str
@@ -1075,7 +1053,6 @@ async def admin_list_textures(
     if q:
         base_q = base_q.where(Texture.name.ilike(f"%{q}%"))
     if cursor:
-        # cursor-based: use created_at as cursor
         try:
             import datetime as _dt
             cursor_dt = _dt.datetime.fromisoformat(cursor)
@@ -1087,7 +1064,6 @@ async def admin_list_textures(
         base_q.order_by(Texture.created_at.desc()).limit(limit + 1)
     )).scalars().all()
 
-    # 获取上传者信息
     uploader_ids = list(set(t.uploader_id for t in rows if t.uploader_id))
     uploader_map = {}
     if uploader_ids:
@@ -1151,14 +1127,12 @@ async def admin_delete_texture(
     tex = (await db.execute(q)).scalar_one_or_none()
     if not tex:
         raise HTTPException(status_code=404, detail="Texture not found")
-    # Remove wardrobe entries
     from app.models import Wardrobe
     wardrobes = (await db.execute(
         select(Wardrobe).where(Wardrobe.texture_id == tex.id)
     )).scalars().all()
     for w in wardrobes:
         await db.delete(w)
-    # Unbind from players
     from app.models import Player
     players_skin = (await db.execute(
         select(Player).where(Player.skin_texture_id == tex.id)
@@ -1175,7 +1149,7 @@ async def admin_delete_texture(
     return {"ok": True}
 
 
-# ============== vSkin 兼容: 角色管理 ==============
+# vSkin 兼容: 角色管理
 
 class AdminProfileOut(BaseModel):
     id: int
@@ -1205,7 +1179,6 @@ async def admin_list_profiles(
         base_q.order_by(Player.created_at.desc()).limit(limit)
     )).scalars().all()
 
-    # 获取 owner 信息
     owner_ids = list(set(p.owner_id for p in rows))
     owner_map = {}
     if owner_ids:
@@ -1320,7 +1293,7 @@ async def admin_patch_profile_cape(
     return {"ok": True}
 
 
-# ============== vSkin 兼容: 白名单管理 ==============
+# 白名单
 
 class WhitelistEntryOut(BaseModel):
     username: str
@@ -1334,8 +1307,7 @@ async def admin_get_whitelist(
     _: User = Depends(get_current_admin),
 ):
     """管理员获取白名单列表（vSkin 兼容）"""
-    # 白名单基于 Player 表 — 在 vUSTB 中所有已注册角色即视为白名单
-    # 若需要与特定 Fallback 端点联动，可扩展此逻辑
+    # vUSTB 中所有已注册角色即视为白名单
     rows = (await db.execute(select(Player).order_by(Player.name))).scalars().all()
     return [WhitelistEntryOut(username=p.name) for p in rows]
 
@@ -1346,7 +1318,7 @@ async def admin_add_whitelist_user(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_admin),
 ):
-    """管理员添加白名单用户（vSkin 兼容 — 仅记录，vUSTB 自动白名单）"""
+    """添加白名单（vUSTB 自动白名单，此接口仅做记录）"""
     username = body.get("username", "")
     endpoint_id = body.get("endpoint_id", 0)
     if not username:
@@ -1365,7 +1337,7 @@ async def admin_remove_whitelist_user(
     return {"ok": True}
 
 
-# ============== vSkin 兼容: Carousel 文件上传/删除 ==============
+# Carousel
 
 @router.post("/carousel")
 async def upload_carousel_file(
@@ -1386,7 +1358,7 @@ async def delete_carousel_file(filename: str, db: AsyncSession = Depends(get_db)
     return await admin_backend.delete_carousel_image(db, filename)
 
 
-# ============== vSkin 兼容: OAuth App 管理 (vSkin 风格) ==============
+# OAuth App
 
 @router.get("/oauth/apps")
 async def get_oauth_apps_v2(db: AsyncSession = Depends(get_db), _: User = Depends(get_current_admin)):

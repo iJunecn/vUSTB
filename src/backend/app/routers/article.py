@@ -1,8 +1,4 @@
-"""动态 / 文章发布系统 API。
-
-公开路由：文章列表、文章详情、分类列表、RSS 订阅源
-管理员路由：文章 CRUD、分类 CRUD、媒体上传
-"""
+"""动态 / 文章发布系统。"""
 from __future__ import annotations
 
 import os
@@ -24,12 +20,12 @@ from app.deps import get_current_server_content_manager, get_current_user
 from app.models import User, SiteSetting
 from app.models.article import Article, ArticleCategory, ArticleMedia
 
-# ========== 公开路由 ==========
+# 公开路由
 public_router = APIRouter(prefix="/api/articles", tags=["articles-public"])
 admin_router = APIRouter(prefix="/api/admin/articles", tags=["articles-admin"])
 
 
-# --------------- Pydantic Schemas ---------------
+# schemas
 
 class CategoryOut(BaseModel):
     id: int
@@ -105,7 +101,7 @@ class ArticleUpdate(BaseModel):
     seo_slug: str | None = None
 
 
-# --------------- Helper ---------------
+# helper
 
 def _article_to_list_out(a: Article) -> ArticleListOut:
     cat = CategoryOut(id=a.category.id, name=a.category.name, description=a.category.description,
@@ -138,7 +134,7 @@ def _article_to_detail_out(a: Article) -> ArticleDetailOut:
     )
 
 
-# ============ 公开 API ============
+# 公开 API
 
 @public_router.get("", response_model=list[ArticleListOut])
 async def list_articles(
@@ -345,7 +341,7 @@ async def get_article(
     return _article_to_detail_out(article)
 
 
-# ============ 管理 API ============
+# 管理 API
 
 @admin_router.get("", response_model=list[ArticleDetailOut])
 async def admin_list_articles(
@@ -506,7 +502,7 @@ async def delete_article(
     return {"ok": True}
 
 
-# ============ 分类管理 API ============
+# 分类管理
 
 cat_admin_router = APIRouter(prefix="/api/admin/article-categories", tags=["article-categories-admin"])
 
@@ -592,7 +588,7 @@ async def admin_delete_category(
     return {"ok": True}
 
 
-# ============ 媒体上传 API ============
+# 媒体上传
 
 media_router = APIRouter(prefix="/api/admin/article-media", tags=["article-media-admin"])
 

@@ -1,16 +1,4 @@
-"""MC 服务器列表与状态接口。
-
-公开接口：
-- GET /api/mc-servers              列出所有 is_public=True 的服务器（不含敏感字段）
-- GET /api/mc-servers/statuses     批量取实时状态（Redis 缓存优先）
-- GET /api/mc-servers/{id}/status  单个服务器实时状态
-
-管理员：
-- POST   /api/mc-servers
-- PUT    /api/mc-servers/{id}
-- DELETE /api/mc-servers/{id}
-- POST   /api/mc-servers/{id}/refresh   强制刷新状态
-"""
+"""MC 服务器列表与状态查询。"""
 from datetime import datetime
 from typing import Any
 
@@ -129,7 +117,7 @@ async def server_status(server_id: int, db: AsyncSession = Depends(get_db)):
     return await get_status_with_fallback(s, db)
 
 
-# ====== 管理员 ======
+# 管理员
 @router.post("", response_model=MCServerOut)
 async def create_server(
     body: MCServerCreate,

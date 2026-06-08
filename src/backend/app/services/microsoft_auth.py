@@ -1,7 +1,4 @@
-"""微软账户登录模块 — 从 vSkin 搬运。
-
-实现 OAuth 2.0 授权码模式和 Minecraft 正版验证。
-"""
+"""微软账户登录与 Minecraft 正版验证。"""
 import aiohttp
 import urllib.parse
 from typing import Optional, Dict, Tuple

@@ -17,7 +17,6 @@ function LoginInner() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // USTB SSO login (QR code)
   const [showSsoModal, setShowSsoModal] = useState(false);
   const [ssoQrUrl, setSsoQrUrl] = useState('');
   const [ssoSessionId, setSsoSessionId] = useState('');
@@ -27,10 +26,8 @@ function LoginInner() {
   const [ssoError, setSsoError] = useState('');
   const [ssoOauthToken, setSsoOauthToken] = useState('');
 
-  // GitHub login
   const [githubLoading, setGithubLoading] = useState(false);
 
-  // Handle access_token from OAuth redirect (GitHub login callback)
   useEffect(() => {
     const accessToken = searchParams.get('access_token');
     const oauthError = searchParams.get('oauth_error');
@@ -50,7 +47,7 @@ function LoginInner() {
         missing_params: '授权参数缺失',
       };
       setError(messages[oauthError] || `第三方登录失败: ${oauthError}`);
-      // Clean URL
+
       router.replace('/login', { scroll: false });
     }
   }, [searchParams, setToken, router, next]);
@@ -73,7 +70,6 @@ function LoginInner() {
     }
   }
 
-  // --- USTB SSO Login ---
 
   async function startSsoLogin() {
     setSsoLoading(true);
@@ -92,7 +88,6 @@ function LoginInner() {
     }
   }
 
-  // SSO Login polling
   useEffect(() => {
     if (!ssoPolling || !ssoSessionId) return;
     const interval = setInterval(async () => {
@@ -140,7 +135,6 @@ function LoginInner() {
     setSsoError('');
   }
 
-  // --- GitHub Login ---
 
   async function startGithubLogin() {
     setGithubLoading(true);
@@ -200,7 +194,6 @@ function LoginInner() {
           </button>
         </form>
 
-        {/* Third-party login */}
         <div style={{ marginTop: '24px' }}>
           <div style={{
             display: 'flex', alignItems: 'center', gap: '12px',
@@ -263,7 +256,6 @@ function LoginInner() {
         </div>
       </div>
 
-      {/* SSO Login QR Modal */}
       {showSsoModal && (
         <div
           style={{

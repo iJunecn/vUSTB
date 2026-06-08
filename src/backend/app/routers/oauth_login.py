@@ -1,8 +1,4 @@
-"""OAuth2 client login flows for GitHub, MUA, and USTB providers.
-
-⚠️ 多 worker 注意：gunicorn 多进程不共享内存，
-_oauth_states 和 _pending_oauth 改为 Redis 存储。
-"""
+"""OAuth2 登录流程（GitHub / MUA / USTB）。"""
 from __future__ import annotations
 
 import html
@@ -29,9 +25,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/auth/oauth", tags=["oauth_login"])
 
-# ---------------------------------------------------------------------------
-# Redis-backed state stores（跨 worker 共享）
-# ---------------------------------------------------------------------------
+# Redis 状态存储
 
 _STATE_KEY_PREFIX = "oauth:state:"
 _PENDING_KEY_PREFIX = "oauth:pending:"
@@ -73,9 +67,7 @@ async def get_pending_oauth(oauth_token: str) -> dict | None:
     return await get_json(f"{_PENDING_KEY_PREFIX}{oauth_token}")
 
 
-# ---------------------------------------------------------------------------
-# Provider configuration
-# ---------------------------------------------------------------------------
+# OAuth 提供方配置
 
 _OAUTH_PROVIDERS = {
     "github": {
@@ -115,9 +107,7 @@ _OAUTH_PROVIDERS = {
 }
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+# 工具函数
 
 
 def _get_provider(provider: str) -> dict:
@@ -132,7 +122,7 @@ def _get_provider(provider: str) -> dict:
 
 
 def _generate_pkce() -> tuple[str, str]:
-    """Generate PKCE code_verifier and code_challenge (S256)."""
+    """生成 PKCE code_verifier/code_challenge。"""
     import base64
     import hashlib
 
@@ -143,7 +133,7 @@ def _generate_pkce() -> tuple[str, str]:
 
 
 async def _exchange_code(cfg: dict, code: str, code_verifier: str | None = None) -> str:
-    """Exchange an authorization code for an access token. Returns the access token string."""
+    """用授权码换取 access_token。"""
     data = {
         "client_id": cfg["client_id"],
         "client_secret": cfg["client_secret"],
@@ -172,7 +162,7 @@ async def _exchange_code(cfg: dict, code: str, code_verifier: str | None = None)
 
 
 async def _fetch_user_info(cfg: dict, access_token: str) -> dict:
-    """Fetch user info from the provider. Returns raw JSON dict."""
+    """获取用户信息。"""
     async with httpx.AsyncClient(timeout=10) as client:
         resp = await client.get(
             cfg["user_url"],
@@ -184,7 +174,7 @@ async def _fetch_user_info(cfg: dict, access_token: str) -> dict:
 
 
 async def _fetch_github_user_email(access_token: str) -> str | None:
-    """Fetch the primary verified email from GitHub API."""
+    """获取 GitHub 主验证邮箱。"""
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.get(
@@ -202,7 +192,7 @@ async def _fetch_github_user_email(access_token: str) -> str | None:
 
 
 def _normalize_user_info(raw: dict, provider: str) -> dict:
-    """Normalize provider-specific user info into a common schema."""
+    """统一不同提供方的用户信息格式。"""
     if provider == "github":
         return {
             "provider": "github",
@@ -221,7 +211,6 @@ def _normalize_user_info(raw: dict, provider: str) -> dict:
             "email": raw.get("email", ""),
             "avatar_url": raw.get("avatar_url", ""),
         }
-    # ustb
     return {
         "provider": "ustb",
         "provider_uid": str(raw.get("id", "")),
@@ -233,7 +222,7 @@ def _normalize_user_info(raw: dict, provider: str) -> dict:
 
 
 async def _find_user_by_oauth(info: dict, db: AsyncSession) -> User | None:
-    """Find an existing user by OAuth identity (github_id). Returns None if not found."""
+    """按 OAuth 标识查找用户。"""
     provider = info["provider"]
     provider_uid = info["provider_uid"]
 
@@ -268,7 +257,7 @@ async def _find_user_by_oauth(info: dict, db: AsyncSession) -> User | None:
 
 
 async def _store_pending_oauth_async(info: dict) -> str:
-    """Store pending OAuth info in Redis and return an oauth_token for later binding."""
+    """暂存 OAuth 信息到 Redis，返回绑定用 token。"""
     oauth_token = secrets.token_urlsafe(32)
     provider = info["provider"]
     pending: dict = {
@@ -288,9 +277,7 @@ async def _store_pending_oauth_async(info: dict) -> str:
     return oauth_token
 
 
-# ---------------------------------------------------------------------------
-# Endpoints
-# ---------------------------------------------------------------------------
+# 端点
 
 
 @router.get("/{provider}")
@@ -298,7 +285,7 @@ async def oauth_login(
     provider: str,
     return_to: str | None = Query(None),
 ):
-    """Start an OAuth2 login flow. Redirects the user to the provider's authorization page."""
+    """发起 OAuth 登录，重定向到提供方。"""
     cfg = _get_provider(provider)
 
     state = secrets.token_urlsafe(32)
@@ -333,9 +320,7 @@ async def oauth_login(
     return RedirectResponse(url=auth_url)
 
 
-# ---------------------------------------------------------------------------
-# Unified GitHub OAuth callback: /oauth/redirect
-# ---------------------------------------------------------------------------
+# GitHub 回调
 
 
 async def _handle_github_callback(
@@ -344,7 +329,7 @@ async def _handle_github_callback(
     error: str | None,
     db: AsyncSession,
 ):
-    """Handle GitHub OAuth callback for both login and bind flows."""
+    """处理 GitHub OAuth 回调。"""
     if error:
         logger.warning("GitHub OAuth error: %s", error)
         frontend_url = settings.site_url
@@ -377,7 +362,7 @@ async def _handle_github_callback(
 
     frontend_url = settings.site_url.rstrip("/")
 
-    # ── Bind flow ──────────────────────────────────────────────
+    # 绑定流程
     if purpose == "bind":
         user_id = stored.get("user_id")
         if not user_id:
@@ -406,13 +391,12 @@ async def _handle_github_callback(
         db_user.github_id = github_id
         db_user.github_name = github_name
         await db.commit()
-        # 验证写入
         await db.refresh(db_user)
         logger.info("GitHub bind committed: github_id=%s, github_name=%s", db_user.github_id, db_user.github_name)
 
         return RedirectResponse(url=f"{frontend_url}/dashboard/security?github_bind=success")
 
-    # ── Login flow ─────────────────────────────────────────────
+    # 登录流程
     user = await _find_user_by_oauth(info, db)
 
     if user:
@@ -433,9 +417,7 @@ async def _handle_github_callback(
     )
 
 
-# ---------------------------------------------------------------------------
-# Legacy callback endpoint (kept for MUA / USTB vSkin providers)
-# ---------------------------------------------------------------------------
+# MUA/USTB 回调
 
 
 class OAuthCallbackResponse(BaseModel):
@@ -452,7 +434,7 @@ async def oauth_callback(
     error: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
 ):
-    """Handle the OAuth2 callback. For GitHub, delegates to the unified handler."""
+    """处理 OAuth 回调。"""
     if provider == "github":
         return await _handle_github_callback(code, state, error, db)
 
@@ -497,9 +479,7 @@ async def oauth_callback(
     )
 
 
-# ---------------------------------------------------------------------------
-# Bind pending OAuth info after registration
-# ---------------------------------------------------------------------------
+# 注册后绑定
 
 
 @router.post("/bind-pending")
@@ -508,7 +488,7 @@ async def bind_pending_oauth(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Bind pending third-party OAuth info to the current user after registration."""
+    """注册后绑定第三方 OAuth。"""
     oauth_token = body.get("oauth_token", "")
     if not oauth_token:
         raise HTTPException(status_code=400, detail="缺少 oauth_token")
@@ -574,16 +554,14 @@ async def bind_pending_oauth(
     }
 
 
-# ---------------------------------------------------------------------------
-# Verify pending oauth_token (for register page to show context)
-# ---------------------------------------------------------------------------
+# 验证待绑定 token
 
 
 @router.get("/pending-info")
 async def get_pending_oauth_info(
     oauth_token: str = Query(...),
 ):
-    """Get pending OAuth info without consuming it. Used by the register page to display context."""
+    """读取待绑定 OAuth 信息（不消费）。"""
     pending = await get_pending_oauth(oauth_token)
     if not pending:
         raise HTTPException(status_code=404, detail="oauth_token 无效或已过期")

@@ -2,7 +2,7 @@ from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, Dict, List
 
 
-# ====== 站点用户认证 ======
+# 站点用户认证
 
 class RegisterRequest(BaseModel):
     email: EmailStr
@@ -53,7 +53,7 @@ class UpdateProfileRequest(BaseModel):
     display_name: Optional[str] = Field(default=None, max_length=64)
 
 
-# ====== Yggdrasil 协议请求体 — 从 vSkin 搬运 ======
+# Yggdrasil 协议请求体
 
 class Agent(BaseModel):
     name: str = "Minecraft"

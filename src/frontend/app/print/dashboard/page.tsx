@@ -49,7 +49,6 @@ const STATUS_MAP: Record<string, { label: string; color: string; icon: React.Rea
   rejected: { label: '已拒绝', color: '#ef4444', icon: <AlertCircle style={{ width: 14, height: 14 }} /> },
 };
 
-// ── 北京时间工具（UTC+8） ──
 
 /** 获取当前北京时间 */
 function getBeijingNow(): Date {
@@ -109,12 +108,10 @@ export default function PrintDashboard() {
   const [loading, setLoading] = useState(true);
   const [weekOffset, setWeekOffset] = useState(0);
 
-  // Detail modal state
   const [detailBooking, setDetailBooking] = useState<Booking | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [showSsoModal, setShowSsoModal] = useState(false);
 
-  // Confirm dialog state
   const [confirmState, setConfirmState] = useState<{ open: boolean; options: ConfirmOptions; onConfirm: () => void }>({
     open: false, options: { message: '' }, onConfirm: () => {},
   });
@@ -134,7 +131,6 @@ export default function PrintDashboard() {
     purpose: '',
   });
 
-  // Payment QR modal (removed — using shell points now)
 
   useEffect(() => { hydrate(); }, [hydrate]);
 
@@ -179,7 +175,6 @@ export default function PrintDashboard() {
 
   const weekDayNames = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 
-  // Build schedule grid
   const grid: Record<string, Record<string, Booking | null>> = {};
   for (const d of weekDates) grid[d] = { AM: null, PM: null };
   for (const b of bookings) {
@@ -213,7 +208,6 @@ export default function PrintDashboard() {
     }
   };
 
-  // Detail modal
   const openDetail = async (id: number) => {
     setDetailLoading(true);
     setDetailBooking(null);
@@ -255,7 +249,6 @@ export default function PrintDashboard() {
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 24px', display: 'flex', flexDirection: 'column', gap: 32 }}>
-      {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
         <div>
           <p className="section-kicker" style={{ marginBottom: 4 }}>3D PRINT</p>
@@ -286,7 +279,6 @@ export default function PrintDashboard() {
         </div>
       </div>
 
-      {/* Week navigation */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <button onClick={() => setWeekOffset(weekOffset - 1)} className="btn-ghost" style={{ padding: '4px 8px' }}>
           <ChevronLeft style={{ width: 18, height: 18 }} />
@@ -304,7 +296,6 @@ export default function PrintDashboard() {
         )}
       </div>
 
-      {/* Schedule grid */}
       <div className="surface-card" style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
@@ -412,7 +403,6 @@ export default function PrintDashboard() {
         </table>
       </div>
 
-      {/* My bookings */}
       <div>
         <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--color-heading)', margin: '0 0 12px 0' }}>我的预约记录</h2>
         {myBookings.length === 0 ? (
@@ -462,7 +452,6 @@ export default function PrintDashboard() {
         )}
       </div>
 
-      {/* ===== Detail / Edit Modal ===== */}
       {detailLoading && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <Loader2 className="w-6 h-6 animate-spin" style={{ color: '#fff' }} />
@@ -475,7 +464,6 @@ export default function PrintDashboard() {
           onClick={(e) => { if (e.target === e.currentTarget) closeDetail(); }}
         >
           <div style={{ background: 'var(--color-card-background)', borderRadius: 16, maxWidth: 520, width: '100%', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 16px 48px rgba(0,0,0,0.2)', animation: 'slideUp 0.3s ease-out' }}>
-            {/* Modal header */}
             <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--color-heading)' }}>预约详情</h3>
               <button onClick={closeDetail} style={{ background: 'none', border: 'none', color: 'var(--color-text-light)', cursor: 'pointer', padding: 4 }}>
@@ -483,9 +471,7 @@ export default function PrintDashboard() {
               </button>
             </div>
 
-            {/* Modal body */}
             <div style={{ padding: 20 }}>
-              {/* Current info */}
               <div style={{ padding: '10px 14px', borderRadius: 8, marginBottom: 16, background: detailBooking.user_id === user.id ? 'color-mix(in srgb, var(--color-primary) 8%, transparent)' : 'color-mix(in srgb, #f59e0b 8%, transparent)' }}>
                 <strong style={{ color: 'var(--color-heading)', fontSize: 13 }}>
                   {detailBooking.user_id === user.id ? '✓ 这是您预定的时段' : `管理员查看 - ${detailBooking.real_name || detailBooking.username}`}
@@ -499,7 +485,6 @@ export default function PrintDashboard() {
                 📅 <strong>{detailBooking.date}</strong> {SLOT_LABELS[detailBooking.slot_type]}
               </div>
 
-              {/* Status */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
                 <span style={{ fontSize: 13, color: 'var(--color-text-light)' }}>状态：</span>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, color: STATUS_MAP[detailBooking.status]?.color || '#6b7280', fontWeight: 600 }}>
@@ -510,7 +495,6 @@ export default function PrintDashboard() {
                 )}
               </div>
 
-              {/* Edit form */}
               {(detailBooking.status !== 'cancelled' && detailBooking.status !== 'done') && (
                 <div style={{ border: '1px solid var(--color-border)', borderRadius: 12, padding: 16 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
@@ -518,7 +502,6 @@ export default function PrintDashboard() {
                     <span style={{ fontSize: 11, color: 'var(--color-text-light)' }}>修改后立即生效</span>
                   </div>
 
-                  {/* Weight */}
                   <div style={{ marginBottom: 12 }}>
                     <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-heading)', marginBottom: 6, display: 'block' }}>预计打印克数 (g)</label>
                     <input
@@ -531,7 +514,6 @@ export default function PrintDashboard() {
                     <p style={{ fontSize: 11, color: 'var(--color-text-light)', margin: '4px 0 0' }}>请如实填写，管理员将核对。</p>
                   </div>
 
-                  {/* File name & purpose */}
                   <div style={{ marginBottom: 12 }}>
                     <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-heading)', marginBottom: 6, display: 'block' }}>文件名</label>
                     <input
@@ -554,7 +536,6 @@ export default function PrintDashboard() {
                     />
                   </div>
 
-                  {/* Cost display */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', borderRadius: 8, background: 'var(--color-background-soft)', border: '1px solid var(--color-border)' }}>
                     <span style={{ fontSize: 13, color: 'var(--color-text-light)' }}>消耗贝壳积分</span>
                     <span style={{ fontSize: 20, fontWeight: 700, color: 'var(--color-primary)' }}>{editCost} 积分</span>
@@ -563,7 +544,6 @@ export default function PrintDashboard() {
               )}
             </div>
 
-            {/* Modal footer */}
             <div style={{ padding: '0 20px 16px', display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
               {detailBooking.status !== 'cancelled' && detailBooking.status !== 'done' && (
                 <>
@@ -601,7 +581,6 @@ export default function PrintDashboard() {
                   )}
                 </>
               )}
-              {/* Admin actions */}
               {canManage && detailBooking.status === 'pending' && (
                 <>
                   <button
@@ -650,7 +629,6 @@ export default function PrintDashboard() {
         </div>
       )}
 
-      {/* SSO binding required modal */}
       {showSsoModal && (
         <div
           style={{ position: 'fixed', inset: 0, zIndex: 110, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
@@ -689,7 +667,6 @@ export default function PrintDashboard() {
         </div>
       )}
 
-      {/* Confirm Dialog */}
       <ConfirmDialog
         open={confirmState.open}
         onConfirm={confirmState.onConfirm}

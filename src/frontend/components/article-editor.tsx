@@ -18,7 +18,6 @@ type Category = {
 export function ArticleEditor({ articleId }: { articleId: number | null }) {
   const router = useRouter();
 
-  // Form state
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [summary, setSummary] = useState('');
@@ -31,16 +30,13 @@ export function ArticleEditor({ articleId }: { articleId: number | null }) {
   const [seoKeywords, setSeoKeywords] = useState('');
   const [seoSlug, setSeoSlug] = useState('');
 
-  // Article status (for editing existing articles)
   const [articleStatus, setArticleStatus] = useState<string>('published');
 
-  // UI state
   const [categories, setCategories] = useState<Category[]>([]);
   const [saving, setSaving] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
   const [loading, setLoading] = useState(articleId !== null);
 
-  // Textarea ref + cursor tracking for image insertion at cursor position
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const cursorPosRef = useRef(0);
 
@@ -66,7 +62,7 @@ export function ArticleEditor({ articleId }: { articleId: number | null }) {
   const insertAtCursor = useCallback((insertText: string) => {
     const ta = textareaRef.current;
     if (!ta) {
-      // fallback: append at end
+
       setContent((prev) => prev + insertText);
       return;
     }
@@ -78,7 +74,7 @@ export function ArticleEditor({ articleId }: { articleId: number | null }) {
     const newContent = before + insertText + after;
     setContent(newContent);
 
-    // Set cursor after inserted text on next frame
+
     const newPos = pos + insertText.length;
     requestAnimationFrame(() => {
       ta.focus();
@@ -115,7 +111,7 @@ export function ArticleEditor({ articleId }: { articleId: number | null }) {
           setSeoKeywords(d.seo_keywords || '');
           setSeoSlug(d.seo_slug || '');
           setArticleStatus(d.status || 'published');
-          // Initialize cursor at end
+
           cursorPosRef.current = d.content.length;
         })
         .catch(() => toast.error('加载文章失败'))
@@ -182,7 +178,7 @@ export function ArticleEditor({ articleId }: { articleId: number | null }) {
       } else {
         const res = await api.post('/admin/articles', payload);
         toast.success('草稿已保存');
-        // Update articleId so subsequent saves are updates, not creates
+
         const newId = res.data?.id;
         if (newId) {
           router.replace(`/admin/dynamics/${newId}`);
@@ -212,7 +208,6 @@ export function ArticleEditor({ articleId }: { articleId: number | null }) {
     } catch {
       toast.error('图片上传失败');
     }
-    // Reset the file input so the same file can be re-selected
     e.target.value = '';
   };
 
@@ -226,7 +221,6 @@ export function ArticleEditor({ articleId }: { articleId: number | null }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button onClick={() => router.push('/admin/dynamics')} className="btn-ghost" style={{ padding: '6px 12px', fontSize: 13 }}>
@@ -267,11 +261,8 @@ export function ArticleEditor({ articleId }: { articleId: number | null }) {
         </div>
       </div>
 
-      {/* Split layout: left editor + right preview */}
       <div className="article-editor-split">
-        {/* Left: Editor */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {/* Title */}
           <input
             className="input"
             value={title}
@@ -280,7 +271,6 @@ export function ArticleEditor({ articleId }: { articleId: number | null }) {
             style={{ fontSize: 18, fontWeight: 600, padding: '12px 16px' }}
           />
 
-          {/* Category + Pin */}
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             <select
               className="input"
@@ -299,7 +289,6 @@ export function ArticleEditor({ articleId }: { articleId: number | null }) {
             </label>
           </div>
 
-          {/* Summary */}
           <input
             className="input"
             value={summary}
@@ -307,7 +296,6 @@ export function ArticleEditor({ articleId }: { articleId: number | null }) {
             placeholder="摘要（可选，显示在列表中）"
           />
 
-          {/* Content editor */}
           <div style={{ position: 'relative' }}>
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
               <label className="btn-ghost" style={{ padding: '4px 10px', fontSize: 12, cursor: 'pointer' }}>
@@ -334,7 +322,6 @@ export function ArticleEditor({ articleId }: { articleId: number | null }) {
             />
           </div>
 
-          {/* Cover Image URL */}
           <input
             className="input"
             value={coverImageUrl}
@@ -342,7 +329,6 @@ export function ArticleEditor({ articleId }: { articleId: number | null }) {
             placeholder="封面图 URL（可选）"
           />
 
-          {/* SEO Section (collapsible) */}
           <details style={{ border: '1px solid var(--color-border)', borderRadius: 10, overflow: 'hidden' }}>
             <summary style={{ padding: '10px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--color-text-light)', background: 'var(--color-background-soft)' }}>
               SEO 设置（可选）
@@ -356,7 +342,6 @@ export function ArticleEditor({ articleId }: { articleId: number | null }) {
           </details>
         </div>
 
-        {/* Right: Live Markdown Preview */}
         <div className="surface-card" style={{ padding: 24, maxHeight: '80vh', overflowY: 'auto', position: 'sticky', top: 20 }}>
           <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--color-heading)', margin: '0 0 8px' }}>
             {title || '文章标题'}

@@ -13,21 +13,18 @@ function SecurityPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // Account info form
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [savingInfo, setSavingInfo] = useState(false);
   const [infoMsg, setInfoMsg] = useState<Msg | null>(null);
 
-  // Password form
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [savingPwd, setSavingPwd] = useState(false);
   const [pwdMsg, setPwdMsg] = useState<Msg | null>(null);
 
-  // USTB SSO binding
   const [showQrModal, setShowQrModal] = useState(false);
   const [qrUrl, setQrUrl] = useState('');
   const [ssoSessionId, setSsoSessionId] = useState('');
@@ -37,11 +34,9 @@ function SecurityPageInner() {
   const [ssoError, setSsoError] = useState('');
   const [unbinding, setUnbinding] = useState(false);
 
-  // GitHub binding
   const [githubBinding, setGithubBinding] = useState(false);
   const [githubUnbinding, setGithubUnbinding] = useState(false);
 
-  // URL param messages (from OAuth redirect)
   const [githubBindMsg, setGithubBindMsg] = useState<Msg | null>(null);
 
   useEffect(() => {
@@ -52,16 +47,15 @@ function SecurityPageInner() {
     }
   }, [user]);
 
-  // Check URL params for GitHub bind result
   useEffect(() => {
     const githubBind = searchParams.get('github_bind');
     if (githubBind === 'success') {
-      // 刷新用户数据，确保拿到最新的 github_id / github_name
+
       hydrate().then(() => {
         setGithubBindMsg({ ok: true, text: 'GitHub 账号绑定成功' });
-        // 清理 URL 参数
+
         router.replace('/dashboard/security', { scroll: false });
-        // 5 秒后自动清除消息
+
         setTimeout(() => setGithubBindMsg(null), 5000);
       });
     } else if (githubBind === 'error') {
@@ -125,7 +119,6 @@ function SecurityPageInner() {
     }
   }
 
-  // --- USTB SSO binding ---
 
   async function startSsoBind() {
     setSsoLoading(true);
@@ -149,7 +142,6 @@ function SecurityPageInner() {
     }
   }
 
-  // Polling effect
   useEffect(() => {
     if (!ssoPolling || !ssoSessionId) return;
     const interval = setInterval(async () => {
@@ -212,16 +204,15 @@ function SecurityPageInner() {
   }
 
   const isSsoBound = !!(user?.real_name && user?.student_id);
-  const isGithubBound = !!(user?.github_id);  // github_id 是字符串，如 "12345678"
+  const isGithubBound = !!(user?.github_id);
 
-  // --- GitHub binding ---
 
   async function startGithubBind() {
     setGithubBinding(true);
     try {
       const res = await api.get('/github/auth-url');
       const authUrl = res.data.auth_url;
-      // Redirect to GitHub authorization page
+
       window.location.href = authUrl;
     } catch (err: any) {
       setGithubBindMsg({ ok: false, text: err?.response?.data?.detail || '获取授权链接失败' });
@@ -236,7 +227,7 @@ function SecurityPageInner() {
       await api.post('/github/unbind');
       await hydrate();
       setGithubBindMsg({ ok: true, text: '已解绑 GitHub 账号' });
-      // 引导用户去 GitHub 撤销应用授权
+
       window.open('https://github.com/settings/applications', '_blank');
     } catch (err: any) {
       setGithubBindMsg({ ok: false, text: err?.response?.data?.detail || '解绑失败' });
@@ -257,7 +248,6 @@ function SecurityPageInner() {
         </p>
       </div>
 
-      {/* Account info form */}
       <form onSubmit={saveInfo} className="surface-card" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <UserIcon style={{ width: 20, height: 20, color: 'var(--color-primary)' }} />
@@ -312,7 +302,6 @@ function SecurityPageInner() {
         </div>
       </form>
 
-      {/* Account binding */}
       <div className="surface-card" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <Shield style={{ width: 20, height: 20, color: 'var(--color-primary)' }} />
@@ -325,7 +314,6 @@ function SecurityPageInner() {
           </p>
         )}
 
-        {/* USTB SSO binding item */}
         <div
           style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -398,7 +386,6 @@ function SecurityPageInner() {
           )}
         </div>
 
-        {/* GitHub binding item */}
         <div
           style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -471,7 +458,6 @@ function SecurityPageInner() {
         </div>
       </div>
 
-      {/* Password form */}
       <form onSubmit={changePassword} className="surface-card" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <Lock style={{ width: 20, height: 20, color: 'var(--color-primary)' }} />
@@ -527,7 +513,6 @@ function SecurityPageInner() {
         </div>
       </form>
 
-      {/* QR Code Modal */}
       {showQrModal && (
         <div
           style={{

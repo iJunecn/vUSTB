@@ -1,8 +1,4 @@
-"""PIL 图像处理：材质哈希、尺寸校验、皮肤截脸、默认头像。
-
-Migrated from vSkin utils/image_utils.py – 规范的材质哈希算法（基于像素 SHA-256）、
-尺寸校验、PNG 规范化、头像截取、默认 Steve 头像。
-"""
+"""材质图像处理：哈希、尺寸校验、皮肤截脸、默认头像。"""
 import hashlib
 import struct
 import io
@@ -14,7 +10,7 @@ from PIL import Image
 from app.config import settings
 
 
-# ====== 材质哈希（Yggdrasil 规范：基于像素数据的 SHA-256） ======
+# 材质哈希（基于像素数据的 SHA-256）
 
 def compute_texture_hash(image_bytes: bytes) -> str:
     """从 PNG 字节流计算材质 Hash（规范算法：基于像素数据）。"""
@@ -26,10 +22,7 @@ def compute_texture_hash(image_bytes: bytes) -> str:
 
 
 def compute_texture_hash_from_image(img: Image.Image) -> str:
-    """实现规范中定义的特殊材质 Hash 算法：基于像素数据的 SHA-256。
-
-    规范要求计算缓冲区 (width, height, pixels) 的 SHA-256，而非 PNG 文件字节。
-    """
+    """规范材质 Hash：基于像素数据（非文件字节）的 SHA-256。"""
     width, height = img.size
     buf = bytearray(width * height * 4 + 8)
 
@@ -56,7 +49,7 @@ def compute_texture_hash_from_image(img: Image.Image) -> str:
     return hashlib.sha256(buf).hexdigest()
 
 
-# ====== 尺寸校验 ======
+# 尺寸校验
 
 def validate_texture_dimensions(img: Image.Image, is_cape: bool = False) -> bool:
     """验证材质尺寸是否合法。
@@ -71,7 +64,7 @@ def validate_texture_dimensions(img: Image.Image, is_cape: bool = False) -> bool
         return (w % 64 == 0 and h == w) or (w % 64 == 0 and h * 2 == w)
 
 
-# ====== PNG 规范化 ======
+# PNG 规范化
 
 def normalize_png(image_bytes: bytes) -> Tuple[bytes, Image.Image]:
     """规范化 PNG 图像，移除多余数据，返回 (规范化字节, PIL Image)。"""
@@ -87,7 +80,7 @@ def normalize_png(image_bytes: bytes) -> Tuple[bytes, Image.Image]:
         raise ValueError(f"Failed to normalize PNG: {str(e)}")
 
 
-# ====== 头像截取 ======
+# 头像截取
 
 def extract_skin_head_avatar(image_bytes: bytes, output_size: int = 256) -> bytes:
     """从皮肤中截取正脸头像（含帽子层）并输出为方形 PNG。
@@ -152,7 +145,7 @@ def default_steve_head_avatar(output_size: int = 256) -> bytes:
     return output.getvalue()
 
 
-# ====== 旧接口兼容 ======
+# 旧接口兼容
 
 def crop_head_from_skin(skin_png: bytes, size: int = 64) -> bytes:
     """从标准 Minecraft 皮肤截取头部正脸（区域 8,8 → 16,16），缩放到 size。"""

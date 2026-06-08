@@ -1,18 +1,6 @@
 """USTB 统一验证登录绑定 — 微信扫码认证，获取姓名和学号。
 
-基于 USTB-SSO 库 + byyt.ustb.edu.cn 用户信息 API。
-
-核心流程：
-1. 使用 USTB-SSO 库的 QrAuthProcedure 初始化认证（BYYT 预设）
-2. 生成二维码，前端轮询扫码状态
-3. 扫码成功后，complete_auth 完成认证
-4. 通过 byyt.ustb.edu.cn/user/me API 获取用户姓名和学号
-
-使用 BYYT_USTB_EDU_CN 预设（entity_id=YW2025006），
-因为 chat.ustb.edu.cn 从 Docker 容器内不可访问，
-而 byyt.ustb.edu.cn 是公网可访问的，认证回调不会超时。
-
-⚠️ 多 worker 注意：gunicorn 多进程不共享内存，所有会话数据必须存 Redis。
+使用 BYYT 预设（byyt.ustb.edu.cn，公网可访问），会话数据存 Redis 以支持多 worker。
 """
 import asyncio
 import logging
@@ -37,9 +25,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/ustb-sso", tags=["ustb_sso"])
 
-# ---------------------------------------------------------------------------
-# SSO 常量 — 使用 BYYT_USTB_EDU_CN 预设（公网可访问）
-# ---------------------------------------------------------------------------
+# SSO 常量
 _SSO_AUTH_ENTRY = "https://sso.ustb.edu.cn/idp/authCenter/authenticate"
 _SSO_QUERY_AUTH_METHODS = "https://sso.ustb.edu.cn/idp/authn/queryAuthMethods"
 _SSO_QR_INFO = "https://sso.ustb.edu.cn/idp/authn/getMicroQr"
@@ -47,27 +33,21 @@ _SIS_QR_PAGE = "https://sis.ustb.edu.cn/connect/qrpage"
 _SIS_QR_IMG = "https://sis.ustb.edu.cn/connect/qrimg"
 _SIS_QR_STATE = "https://sis.ustb.edu.cn/connect/state"
 
-# BYYT 预测参数（公网可访问，Docker 容器可以正常回调）
 _ENTITY_ID = "YW2025006"
 _REDIRECT_URI = "https://byyt.ustb.edu.cn/oauth/login/code"
 _STATE = "null"
 
-# byyt 用户信息 API
 _BYYT_USER_INFO = "https://byyt.ustb.edu.cn/user/me"
 
-# 超时
 _SESSION_TIMEOUT = 180  # 3 分钟
 _HTTP_TIMEOUT = 10      # 单个 HTTP 请求超时（秒）
 _COMPLETE_TIMEOUT = 30  # complete_auth 中关键请求的超时（秒）
 
-# Redis key 前缀
 _BIND_KEY_PREFIX = "ustb_sso:bind:"
 _LOGIN_KEY_PREFIX = "ustb_sso:login:"
 
 
-# ---------------------------------------------------------------------------
-# httpx Client Cookie 序列化（跨 worker 共享 session cookies）
-# ---------------------------------------------------------------------------
+# Cookie 序列化
 
 
 def _serialize_cookies(client: httpx.Client) -> list[dict]:
@@ -92,9 +72,7 @@ def _create_client_with_cookies(cookies: list[dict] | None = None) -> httpx.Clie
     return client
 
 
-# ---------------------------------------------------------------------------
-# Redis 会话存储辅助
-# ---------------------------------------------------------------------------
+# Redis 会话存储
 
 
 async def _save_bind_session(session_id: str, data: dict) -> None:
@@ -121,9 +99,7 @@ async def _delete_login_session(session_id: str) -> None:
     await delete(f"{_LOGIN_KEY_PREFIX}{session_id}")
 
 
-# ---------------------------------------------------------------------------
-# 同步 SSO 操作（在 asyncio.to_thread 中执行）
-# ---------------------------------------------------------------------------
+# 同步 SSO 操作
 
 
 def _sso_init_sync() -> tuple[str, str, list[dict], dict]:
@@ -231,7 +207,6 @@ def _sso_init_sync() -> tuple[str, str, list[dict], dict]:
     sid = match.group(1)
     logger.debug("SSO init step 4 done: sid=%s...%s", sid[:4], sid[-4:])
 
-    # 提取 cookies
     cookies = _serialize_cookies(client)
     client.close()
 
@@ -258,7 +233,7 @@ def _sso_poll_sync(session: dict) -> dict:
     """同步执行 SSO 轮询。返回 { status, real_name?, student_id? }。"""
     sid = session["sid"]
 
-    # 轮询扫码状态（不需要 cookies，只需要 sid）
+    # 轮询扫码状态
     client = httpx.Client(timeout=16, follow_redirects=False)
     try:
         rsp = client.get(_SIS_QR_STATE, params={"sid": sid}, timeout=16)
@@ -298,11 +273,7 @@ def _sso_poll_sync(session: dict) -> dict:
 
 
 def _sso_complete_auth_sync(session: dict, pass_code: str) -> dict:
-    """完成 SSO 认证流程，获取用户姓名和学号。
-
-    使用 BYYT 预设，return_url 指向 byyt.ustb.edu.cn（公网可访问），
-    认证完成后通过 byyt.ustb.edu.cn/user/me API 获取用户信息。
-    """
+    """完成 SSO 认证流程，获取用户姓名和学号。"""
     cookies = session.get("cookies", [])
     client = _create_client_with_cookies(cookies)
 
@@ -311,7 +282,7 @@ def _sso_complete_auth_sync(session: dict, pass_code: str) -> dict:
         return_url = session["return_url"]
         random_token = session["random_token"]
 
-        # 1. 构建 SIS 认证参数
+        # 构建 SIS 认证参数
         params = {
             "appid": app_id,
             "auth_code": pass_code,
@@ -327,7 +298,7 @@ def _sso_complete_auth_sync(session: dict, pass_code: str) -> dict:
         if not return_url:
             raise RuntimeError("Return URL not available")
 
-        # 2. 访问 return_url 完成 SSO 认证（byyt.ustb.edu.cn 公网可访问）
+        # 访问 return_url 完成 SSO 认证
         logger.debug("SSO complete: GET return_url with params")
         try:
             rsp = client.get(return_url, params=params, follow_redirects=True, timeout=_COMPLETE_TIMEOUT)
@@ -339,7 +310,7 @@ def _sso_complete_auth_sync(session: dict, pass_code: str) -> dict:
         text = rsp.text if hasattr(rsp, "text") else ""
         logger.debug("SSO complete: return_url response status=%d, length=%d", rsp.status_code, len(text))
 
-        # 3. 解析 actionType 和 locationValue（与 USTB-SSO 库 _complete_auth 一致）
+        # 解析 actionType 和 locationValue
         action_type_match = re.search(r'var actionType\s*=\s*"([^"]+)"', text)
         location_value_match = re.search(r'var locationValue\s*=\s*"([^"]+)"', text)
 
@@ -357,7 +328,7 @@ def _sso_complete_auth_sync(session: dict, pass_code: str) -> dict:
         else:
             logger.warning("SSO complete: actionType/locationValue not found (HTML length=%d)", len(text))
 
-        # 4. 认证完成，通过 byyt.ustb.edu.cn/user/me 获取用户信息
+        # 通过 byyt API 获取用户信息
         real_name = None
         student_id = None
 
@@ -372,13 +343,13 @@ def _sso_complete_auth_sync(session: dict, pass_code: str) -> dict:
         except Exception as e:
             logger.warning("byyt.ustb.edu.cn/user/me request failed: %s", e)
 
-        # 5. HTML 页面解析兜底
+        # HTML 解析兜底
         if not real_name or not student_id:
             name2, sid2 = _extract_user_info_from_html(text)
             real_name = real_name or name2
             student_id = student_id or sid2
 
-        # 6. userName 作为学号兜底
+        # userName 作为学号兜底
         if not student_id:
             user_name_from_auth = session.get("user_name", "")
             if user_name_from_auth:
@@ -429,9 +400,7 @@ def _extract_user_info_from_html(text: str) -> tuple[str | None, str | None]:
     return real_name, student_id
 
 
-# ---------------------------------------------------------------------------
-# API Endpoints — 绑定模式
-# ---------------------------------------------------------------------------
+# 绑定端点
 
 
 @router.post("/init")
@@ -473,11 +442,11 @@ async def poll_sso_status(
         await _delete_bind_session(session_id)
         raise HTTPException(status_code=410, detail="二维码已过期，请重新获取")
 
-    # 认证完成中，返回 waiting（防止竞态）
+    # 防竞态：完成中仍返回 waiting
     if session.get("status") == "completing":
         return {"status": "waiting", "message": "认证完成中..."}
 
-    # 已完成，直接返回缓存结果
+    # 已完成，返回缓存结果
     if session.get("status") == "success":
         return {
             "status": "success",
@@ -485,11 +454,11 @@ async def poll_sso_status(
             "student_id": session.get("student_id"),
         }
 
-    # 认证已尝试但失败（防止无限重试）
+    # 防无限重试：失败后直接返回错误
     if session.get("status") == "failed":
         return {"status": "error", "message": session.get("error_message", "认证失败，请重新获取二维码")}
 
-    # 标记为 completing 后再执行（防止并发 poll 竞态）
+    # 标记 completing 防并发 poll 竞态
     session["status"] = "completing"
     await _save_bind_session(session_id, session)
 
@@ -556,9 +525,7 @@ async def unbind_ustb_sso(
     return {"ok": True, "message": "已解绑北科大统一认证"}
 
 
-# ---------------------------------------------------------------------------
-# Login mode endpoints (no auth required)
-# ---------------------------------------------------------------------------
+# 登录端点
 
 
 @router.post("/login/init")
@@ -570,7 +537,7 @@ async def login_sso_init():
         logger.error("SSO login init failed: %s", e)
         raise HTTPException(status_code=500, detail=f"初始化认证失败: {str(e)}")
 
-    session_data["user_id"] = None  # Login mode — no user_id yet
+    session_data["user_id"] = None  # 登录模式，尚未关联用户
     await _save_login_session(session_id, session_data)
 
     return {

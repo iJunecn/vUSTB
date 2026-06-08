@@ -1,21 +1,6 @@
-"""CustomSkinAPI 路由（CustomSkinLoader 兼容）
+"""CustomSkinAPI 路由（CustomSkinLoader 兼容）。
 
-实现 CustomSkinAPI R2 规范，让使用 CustomSkinLoader Mod 的 Minecraft
-客户端能直接从本站加载皮肤。
-
-CustomSkinAPI 与 Yggdrasil 是两套独立的皮肤加载协议：
-- Yggdrasil：authlib-injector 启动器在登录阶段获取皮肤
-- CustomSkinAPI：游戏内 Mod 直接按玩家名查询皮肤
-
-规范文档：CustomSkinLoaderAPI-master/CustomSkinAPI/CustomSkinAPI-zh_CN.md
-
-API 端点（挂载前缀 /api/csl）：
-- GET  /api/csl/{username}.json          获取玩家信息
-- GET  /api/csl/textures/{hash}           获取材质文件
-
-对外路径：
-- Caddy: /csl/* → /api/csl/*
-- 根地址示例: https://mc.ustb.edu.cn/csl/
+实现 CustomSkinAPI R2 规范，端点列表见下方路由注册。
 """
 
 import logging
@@ -38,7 +23,7 @@ logger = logging.getLogger("vustb.csl")
 router = APIRouter(tags=["csl"])
 
 
-# ====== 辅助函数 ======
+# 辅助函数
 
 _DEFAULT_SITE_URL = "http://localhost"
 
@@ -97,7 +82,7 @@ def _file_last_modified(path: Path) -> str:
     return formatdate(timeval=mktime(os.path.localtime(mtime)), localtime=False, usegmt=True)
 
 
-# ====== 获取玩家信息 ======
+# 玩家信息
 
 @router.get("/{username}.json")
 async def get_player_info(
@@ -177,7 +162,7 @@ async def get_player_info(
     )
 
 
-# ====== 获取材质文件 ======
+# 材质文件
 
 @router.head("/textures/{hash}")
 @router.get("/textures/{hash}")
@@ -242,7 +227,7 @@ async def get_texture(
     )
 
 
-# ====== ExtraList（可选） ======
+# ExtraList
 
 @router.get("/ExtraList/vUSTB.json")
 async def extralist_entry(request: Request, db: AsyncSession = Depends(get_db)):

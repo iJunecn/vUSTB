@@ -45,7 +45,6 @@ export default function PrintHomePage() {
     }).catch(() => setLoading(false));
   }, []);
 
-  // Show notice modal on first visit
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const seen = localStorage.getItem('vustb_print_notice_seen');
@@ -67,7 +66,6 @@ export default function PrintHomePage() {
 
   return (
     <div className="page-container flex-col-gap-lg">
-      {/* Hero Section */}
       <div style={{ textAlign: 'center' }}>
         <div style={{ marginBottom: 24, borderRadius: 16, overflow: 'hidden', boxShadow: '0 8px 24px rgba(66,82,105,0.12)' }}>
           <Image
@@ -84,7 +82,6 @@ export default function PrintHomePage() {
         </h1>
       </div>
 
-      {/* Printer status */}
       <div>
         <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--color-heading)', margin: '0 0 16px 0' }}>
           打印机状态
@@ -130,7 +127,6 @@ export default function PrintHomePage() {
         )}
       </div>
 
-      {/* Notice + Pricing buttons */}
       <div style={{ textAlign: 'center', paddingTop: 8, display: 'flex', gap: 8, justifyContent: 'center' }}>
         <button
           onClick={() => setShowNotice(true)}
@@ -148,7 +144,6 @@ export default function PrintHomePage() {
         </button>
       </div>
 
-      {/* Notice Modal */}
       {showNotice && (
         <div
           style={{
@@ -165,7 +160,6 @@ export default function PrintHomePage() {
               animation: 'slideUp 0.3s ease-out',
             }}
           >
-            {/* Header */}
             <div style={{
               background: '#dc2626', color: '#fff', padding: '16px 20px',
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -177,7 +171,6 @@ export default function PrintHomePage() {
                 <X style={{ width: 18, height: 18 }} />
               </button>
             </div>
-            {/* Body */}
             <div style={{ padding: '20px 24px', fontSize: 14, color: 'var(--color-text)', lineHeight: 1.7 }}>
               <div style={{
                 padding: '10px 14px', borderRadius: 8, marginBottom: 16,
@@ -201,7 +194,6 @@ export default function PrintHomePage() {
                 设备为精密贵重机器，所有人必须经过此系统预约使用后方可使用，未经登记允许请勿使用，谨防碰撞！
               </div>
             </div>
-            {/* Footer */}
             <div style={{ padding: '0 24px 20px', textAlign: 'center' }}>
               <button onClick={dismissNotice} className="btn-primary" style={{ padding: '10px 24px' }}>
                 我已知晓
@@ -211,7 +203,6 @@ export default function PrintHomePage() {
         </div>
       )}
 
-      {/* Pricing Modal */}
       {showPricing && (
         <div
           style={{
@@ -228,7 +219,6 @@ export default function PrintHomePage() {
               animation: 'slideUp 0.3s ease-out',
             }}
           >
-            {/* Header */}
             <div style={{
               background: '#3b82f6', color: '#fff', padding: '16px 20px',
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -240,13 +230,11 @@ export default function PrintHomePage() {
                 <X style={{ width: 18, height: 18 }} />
               </button>
             </div>
-            {/* Body */}
             <div style={{ padding: '20px 24px', fontSize: 14, color: 'var(--color-text)', lineHeight: 1.8 }}>
               <p>本系统内的H2D打印机为「像素北科」项目申报经费所购，一切打印安排以「像素北科」为最高优先级，其次为天码智能社、小学期队伍和人工智能学院。</p>
               <p>打印机理论上对内免费使用，与外面的打印工场不同，我们不会收取高额的打印费用，只会收取打印、打印过程中擦料及换料等损耗的耗材费用，使用打印积分的形式进行费用收取。收取的费用用于天码智能社社团经费。</p>
               <p>打印前请先绑定北京科技大学统一验证登录账号，并在积分页面购买积分，再开始打印，打印前请熟读左侧的「使用须知」。</p>
             </div>
-            {/* Footer */}
             <div style={{ padding: '0 24px 20px', textAlign: 'center' }}>
               <button onClick={() => setShowPricing(false)} className="btn-primary" style={{ padding: '10px 24px' }}>
                 我已知晓
@@ -256,7 +244,6 @@ export default function PrintHomePage() {
         </div>
       )}
 
-      {/* Related Links */}
       <div>
         <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--color-heading)', margin: '0 0 16px 0' }}>
           相关链接
@@ -287,7 +274,6 @@ export default function PrintHomePage() {
         </div>
       </div>
 
-      {/* Spinner animation */}
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>

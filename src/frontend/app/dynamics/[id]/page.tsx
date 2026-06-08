@@ -80,7 +80,6 @@ export default function ArticleDetailPage() {
   return (
     <div style={{ minHeight: '100vh', paddingTop: 56 }}>
       <article style={{ maxWidth: 800, margin: '0 auto', padding: '40px 24px' }}>
-        {/* Back + Edit */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
           <button
             onClick={() => router.push('/dynamics')}
@@ -98,7 +97,6 @@ export default function ArticleDetailPage() {
           )}
         </div>
 
-        {/* Cover */}
         {article.cover_image_url && (
           <div style={{
             width: '100%', maxHeight: 400, borderRadius: 12, overflow: 'hidden',
@@ -112,9 +110,7 @@ export default function ArticleDetailPage() {
           </div>
         )}
 
-        {/* Header */}
         <header style={{ marginBottom: 32 }}>
-          {/* Meta */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
             {article.category && (
               <span className="dynamics-cat-pill">{article.category.name}</span>
@@ -144,7 +140,6 @@ export default function ArticleDetailPage() {
           )}
         </header>
 
-        {/* Content */}
         <div className="article-content prose-markdown">
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
@@ -154,7 +149,6 @@ export default function ArticleDetailPage() {
           </ReactMarkdown>
         </div>
 
-        {/* Footer */}
         <footer style={{
           marginTop: 48, paddingTop: 20,
           borderTop: '1px solid var(--color-border)',

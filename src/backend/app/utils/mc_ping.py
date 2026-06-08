@@ -1,8 +1,4 @@
-"""Minecraft Java/Bedrock 服务器状态查询。
-
-迁移自 USTB-Official-Backend/app/utils/serverStatus.py，移除了未用日志格式与
-本项目用不到的 DNS SRV 自动探测，保持并发 Java/Bedrock 双探测的核心能力。
-"""
+"""Minecraft 服务器状态查询（Java/Bedrock 双协议）。"""
 from __future__ import annotations
 
 import json
@@ -18,7 +14,7 @@ BEDROCK_DEFAULT_PORT = 19132
 DEFAULT_TIMEOUT_MS = 2500
 
 
-# ---------- 二进制工具 ----------
+# 二进制工具
 def _varint(b: bytes, off: int = 0) -> tuple[int, int]:
     res = 0
     for i in range(5):

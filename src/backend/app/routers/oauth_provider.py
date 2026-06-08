@@ -1,17 +1,6 @@
-"""OAuth 2.0 Provider：Authorization Code + Device Flow + OpenID Discovery
+"""OAuth 2.0 Provider：授权码 + 设备流 + OpenID Discovery。
 
-端点：
-- GET  /.well-known/openid-configuration
-- GET  /api/yggdrasil/.well-known/openid-configuration   (兼容路径)
-- GET  /oauth/jwks
-- GET  /oauth/authorize/check  (前端授权页预览)
-- GET  /oauth/authorize       (前端跳转入口；实际"批准"通过 /oauth/api/approve)
-- POST /oauth/api/approve     (前端用户登录后调用以发放 code)
-- POST /oauth/token           (code → access_token / device_code → access_token)
-- GET  /oauth/userinfo
-- POST /oauth/device/code     (设备授权初始端点)
-- POST /oauth/device/approve  (前端 device 页用户输入 user_code 后批准)
-- GET  /oauth/profile|avatar|email|permissions|skin
+端点列表见下方路由注册。
 """
 import time
 from datetime import datetime, timedelta, timezone
@@ -116,7 +105,7 @@ async def jwks():
     return crypto.jwks()
 
 
-# ====== Authorize preview (for frontend authorize page) ======
+# 授权预览
 
 @router.get("/oauth/authorize/check")
 async def authorize_check(
@@ -126,11 +115,11 @@ async def authorize_check(
     scope: str = "userinfo",
     db: AsyncSession = Depends(get_db),
 ):
-    """Return app name and scope details for the frontend authorize page."""
+    """返回授权页预览信息。"""
     return await oauth_backend.build_authorize_preview(db, client_id, redirect_uri, state, scope)
 
 
-# ====== Authorization Code Flow ======
+# 授权码模式
 @router.post("/oauth/api/approve")
 async def approve_authorize(
     body: dict = Body(...),
@@ -184,7 +173,7 @@ async def token_endpoint(
         )
 
 
-# ====== Device Flow ======
+# 设备授权流
 @router.post("/oauth/device/code")
 async def device_code_endpoint(
     request: Request,
@@ -206,7 +195,7 @@ async def device_approve(
     return await oauth_backend.decide_device_authorization(db, user.id, user_code, approved)
 
 
-# ====== userinfo & scope 端点 ======
+# 用户信息端点
 async def _get_token_user(authorization: str | None, db: AsyncSession) -> tuple[AccessToken, User]:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="missing bearer token")

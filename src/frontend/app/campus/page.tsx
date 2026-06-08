@@ -9,7 +9,7 @@ const CampusEngine = lazy(() =>
 
 type AccordionKey = 'desktop' | 'mobile' | 'legend' | null;
 
-// Read from environment variable - default to disabled
+
 const CAMPUS_ENABLED = process.env.NEXT_PUBLIC_CAMPUS_ENABLED === 'true';
 const MCA_BASE_URL = process.env.NEXT_PUBLIC_MCA_BASE_URL || '/resource/mca/ustb';
 const RESOURCE_PACK_BASE_URL = process.env.NEXT_PUBLIC_RESOURCE_PACK_BASE_URL || '/packs';
@@ -23,7 +23,6 @@ export default function CampusPage() {
     setActiveAccordion((prev) => (prev === key ? null : key));
   }
 
-  // If campus feature is disabled via env, show disabled page
   if (!CAMPUS_ENABLED && !enableEngine) {
     return (
       <div style={{
@@ -106,7 +105,6 @@ export default function CampusPage() {
 
   return (
     <div className="campus-layout">
-      {/* HUD Panel - Left Side */}
       <div className="campus-panel">
         <div className="glass-card" style={{
           padding: '22px',
@@ -132,7 +130,6 @@ export default function CampusPage() {
             在浏览器中渲染 Minecraft 存档，探索像素重构的北科校园。使用鼠标旋转视角，滚轮缩放距离。
           </p>
 
-          {/* Status indicator */}
           <div style={{
             display: 'flex',
             alignItems: 'center',
@@ -162,9 +159,7 @@ export default function CampusPage() {
             </span>
           </div>
 
-          {/* Accordions */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
-            {/* Desktop Controls Accordion */}
             <Accordion
               title="操作说明"
               isOpen={activeAccordion === 'desktop'}
@@ -187,7 +182,6 @@ export default function CampusPage() {
               </ul>
             </Accordion>
 
-            {/* Mobile Controls Accordion */}
             <Accordion
               title="移动端操作说明"
               isOpen={activeAccordion === 'mobile'}
@@ -209,7 +203,6 @@ export default function CampusPage() {
               </ul>
             </Accordion>
 
-            {/* Legend */}
             <Accordion
               title="渲染引擎说明"
               isOpen={activeAccordion === 'legend'}
@@ -237,7 +230,6 @@ export default function CampusPage() {
         </div>
       </div>
 
-      {/* Right Side - 3D Engine Canvas */}
       <div className="campus-canvas">
         <Suspense
           fallback={
@@ -284,8 +276,6 @@ export default function CampusPage() {
     </div>
   );
 }
-
-// ========== Accordion Component ==========
 
 function Accordion({
   title,
