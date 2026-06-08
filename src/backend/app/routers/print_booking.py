@@ -7,8 +7,10 @@
 from __future__ import annotations
 
 import io
+import logging
 import math
 import os
+import time as _time
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -62,23 +64,44 @@ def _is_slot_past(date_str: str, slot_type: SlotType, now: datetime | None = Non
 
 
 async def _auto_complete_past_running(db: AsyncSession) -> int:
-    """将已过时段的 RUNNING 预约自动标记为 DONE，返回受影响的行数。"""
-    now = datetime.now(timezone(timedelta(hours=8)))
-    running = (
-        await db.execute(
-            select(Booking).where(Booking.status == BookingStatus.RUNNING)
-        )
-    ).scalars().all()
+    """将已过时段的 RUNNING 预约自动标记为 DONE，返回受影响的行数。
 
-    count = 0
-    for b in running:
-        if _is_slot_past(b.date, b.slot_type, now):
-            b.status = BookingStatus.DONE
-            count += 1
+    使用节流（60秒间隔）避免高频请求重复执行，并用 try/except 保护
+    asyncpg 事务——如果 commit 失败则 rollback 恢复连接，避免级联崩溃。
+    """
+    global _last_auto_complete_ts
+    now_ts = _time.time()
+    if now_ts - _last_auto_complete_ts < 60:
+        return 0
+    _last_auto_complete_ts = now_ts
 
-    if count:
-        await db.commit()
-    return count
+    try:
+        now = datetime.now(timezone(timedelta(hours=8)))
+        running = (
+            await db.execute(
+                select(Booking).where(Booking.status == BookingStatus.RUNNING)
+            )
+        ).scalars().all()
+
+        count = 0
+        for b in running:
+            if _is_slot_past(b.date, b.slot_type, now):
+                b.status = BookingStatus.DONE
+                count += 1
+
+        if count:
+            await db.commit()
+        return count
+    except Exception as exc:  # noqa: BLE001
+        logging.getLogger(__name__).warning("auto-complete failed: %s", exc)
+        try:
+            await db.rollback()
+        except Exception:  # noqa: BLE001
+            pass
+        return 0
+
+
+_last_auto_complete_ts: float = 0.0
 
 
 # ──────────────── Pydantic schemas ────────────────
