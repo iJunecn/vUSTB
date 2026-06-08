@@ -3,6 +3,11 @@ const nextConfig = {
   output: 'standalone',
   reactStrictMode: true,
   poweredByHeader: false,
+  experimental: {
+    outputFileTracingIncludes: {
+      './': ['./node_modules/sharp/**/*', './node_modules/@img/**/*'],
+    },
+  },
   async headers() {
     return [
       {
