@@ -42,6 +42,45 @@ def _shell_cost(weight: float) -> int:
     return math.ceil(weight / 10)
 
 
+def _is_slot_past(date_str: str, slot_type: SlotType, now: datetime | None = None) -> bool:
+    """判断指定日期+时段是否已过去（北京时间 UTC+8）。
+
+    AM 时段在当天 12:00 后视为已过；PM 时段在当天内不会过期（次日才算过去）。
+    过去日期的所有时段均视为已过。
+    """
+    if now is None:
+        now = datetime.now(timezone(timedelta(hours=8)))
+    today = now.strftime("%Y-%m-%d")
+    current_time = now.strftime("%H:%M")
+
+    if date_str < today:
+        return True
+    if date_str == today:
+        if slot_type == SlotType.AM and current_time >= "12:00":
+            return True
+    return False
+
+
+async def _auto_complete_past_running(db: AsyncSession) -> int:
+    """将已过时段的 RUNNING 预约自动标记为 DONE，返回受影响的行数。"""
+    now = datetime.now(timezone(timedelta(hours=8)))
+    running = (
+        await db.execute(
+            select(Booking).where(Booking.status == BookingStatus.RUNNING)
+        )
+    ).scalars().all()
+
+    count = 0
+    for b in running:
+        if _is_slot_past(b.date, b.slot_type, now):
+            b.status = BookingStatus.DONE
+            count += 1
+
+    if count:
+        await db.commit()
+    return count
+
+
 # ──────────────── Pydantic schemas ────────────────
 
 class PrinterOut(BaseModel):
@@ -121,6 +160,9 @@ async def list_printers(db: AsyncSession = Depends(get_db)):
 
 @router.get("/printers/{printer_id}/status")
 async def printer_status(printer_id: int, db: AsyncSession = Depends(get_db)):
+    # 自动完成已过时段的 RUNNING 预约
+    await _auto_complete_past_running(db)
+
     printer = (await db.execute(select(Printer3D).where(Printer3D.id == printer_id))).scalar_one_or_none()
     if not printer:
         raise HTTPException(status_code=404, detail="打印机不存在")
@@ -243,6 +285,9 @@ async def list_bookings(
     user: User = Depends(get_current_user),
 ):
     """获取预约列表。mine=true 只返回当前用户的。"""
+    # 自动完成已过时段的 RUNNING 预约
+    await _auto_complete_past_running(db)
+
     q = select(Booking, User).join(User, Booking.user_id == User.id, isouter=True)
     if mine:
         q = q.where(Booking.user_id == user.id)
@@ -275,6 +320,10 @@ async def create_booking(
             status_code=403,
             detail="请先绑定北京科技大学统一验证登录后再创建预约",
         )
+
+    # 检查时段是否已过去
+    if _is_slot_past(body.date, body.slot_type):
+        raise HTTPException(status_code=400, detail="该时段已过去，无法预约")
 
     # 检查打印机是否暂停
     if body.printer_id:
@@ -581,6 +630,8 @@ async def list_pending_approvals(
 ):
     if not _can_manage_printer(user):
         raise HTTPException(status_code=403, detail="需要管理员或教师权限")
+    # 自动完成已过时段的 RUNNING 预约
+    await _auto_complete_past_running(db)
     rows = (
         await db.execute(
             select(Booking, User)
@@ -831,6 +882,9 @@ async def get_weekly_schedule(
     db: AsyncSession = Depends(get_db),
 ):
     """获取指定日期范围的预约时间表（公开）。"""
+    # 自动完成已过时段的 RUNNING 预约
+    await _auto_complete_past_running(db)
+
     q = select(Booking, User).join(User, Booking.user_id == User.id)
     q = q.where(
         Booking.date >= date_from,

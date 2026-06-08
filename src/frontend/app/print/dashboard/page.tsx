@@ -86,6 +86,19 @@ function renderCost(weight: number): string {
   return String(Math.ceil(weight / 10));
 }
 
+/** 判断指定日期+时段是否已过去（北京时间）。 */
+function isSlotPast(date: string, slot: string): boolean {
+  const bjNow = getBeijingNow();
+  const today = toBeijingDateStr(bjNow);
+  const currentHour = bjNow.getHours();
+
+  if (date < today) return true;
+  if (date === today) {
+    if (slot === 'AM' && currentHour >= 12) return true;
+  }
+  return false;
+}
+
 export default function PrintDashboard() {
   const router = useRouter();
   const { user, loaded, hydrate } = useUserStore();
@@ -312,7 +325,7 @@ export default function PrintDashboard() {
                 </td>
                 {weekDates.map((d) => {
                   const b = grid[d]?.[slot];
-                  const isPast = new Date(d + 'T23:59:59+08:00') < new Date();
+                  const slotPast = isSlotPast(d, slot);
                   const isMyBooking = b && b.user_id === user.id;
                   return (
                     <td key={d + slot} style={{ padding: 8, borderBottom: '1px solid var(--color-border)', textAlign: 'center', verticalAlign: 'top' }}>
@@ -377,7 +390,7 @@ export default function PrintDashboard() {
                           )}
                         </div>
                       ) : (
-                        !isPast && (
+                        !slotPast && (
                           <button
                             onClick={() => handleNewBooking(`date=${d}&slot=${slot}`)}
                             style={{

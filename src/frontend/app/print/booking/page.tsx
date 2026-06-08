@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, Suspense } from 'react';
+import { useEffect, useState, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import { useUserStore } from '@/stores/user';
@@ -89,6 +89,30 @@ function PrintBookingPage() {
     const cost = form.weight > 0 ? Math.ceil(form.weight / 10) : 0;
     setShellCost(cost);
   }, [form.weight]);
+
+  // 计算当前可选的时段（基于北京时间）
+  const availableSlots = useMemo(() => {
+    if (!form.date) return { AM: true, PM: true };
+    const today = toBeijingDateStr(new Date());
+    const bjNow = new Date(new Date().getTime() + (8 + new Date().getTimezoneOffset() / -60) * 3600000);
+    const currentHour = bjNow.getHours();
+
+    if (form.date < today) return { AM: false, PM: false };
+    if (form.date === today) {
+      return { AM: currentHour < 12, PM: true };
+    }
+    return { AM: true, PM: true };
+  }, [form.date]);
+
+  // 如果当前选中的时段变得不可用，自动清空
+  useEffect(() => {
+    if (form.slot_type === 'AM' && !availableSlots.AM) {
+      setForm((f) => ({ ...f, slot_type: '' }));
+    }
+    if (form.slot_type === 'PM' && !availableSlots.PM) {
+      setForm((f) => ({ ...f, slot_type: '' }));
+    }
+  }, [availableSlots, form.slot_type]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -199,8 +223,8 @@ function PrintBookingPage() {
             className="input"
           >
             <option value="">请选择时段</option>
-            <option value="AM">白天 (00:00-11:59)</option>
-            <option value="PM">下午 (12:00-23:59)</option>
+            <option value="AM" disabled={!availableSlots.AM}>白天 (00:00-11:59){!availableSlots.AM ? '（已过期）' : ''}</option>
+            <option value="PM" disabled={!availableSlots.PM}>下午 (12:00-23:59){!availableSlots.PM ? '（已过期）' : ''}</option>
           </select>
         </label>
 
