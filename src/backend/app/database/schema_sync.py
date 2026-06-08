@@ -132,9 +132,14 @@ async def sync_schema(conn: AsyncConnection) -> None:
 
     # 确保新增的 enum 类型在 ALTER TABLE 之前就已存在
     # create_all 只为新表创建 enum，已有数据库需要手动创建
+    # PostgreSQL 不支持 CREATE TYPE IF NOT EXISTS，用 DO 块 + pg_type 判断
     await _safe_execute(
         conn,
-        "CREATE TYPE IF NOT EXISTS \"article_status\" AS ENUM ('draft', 'published')",
+        'DO $$ BEGIN'
+        '  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = \'article_status\') THEN'
+        '    CREATE TYPE "article_status" AS ENUM (\'draft\', \'published\');'
+        '  END IF;'
+        ' END $$',
         "created enum type article_status",
     )
 
@@ -161,7 +166,7 @@ async def sync_schema(conn: AsyncConnection) -> None:
             if isinstance(constraint, CheckConstraint) and constraint.name:
                 await _safe_execute(
                     conn,
-                    f'ALTER TABLE "{table.name}" ADD CONSTRAINT "{constraint.name}" '
+                    f'ALTER TABLE "{table.name}" ADD CONSTRAINT IF NOT EXISTS "{constraint.name}" '
                     f'CHECK ({constraint.sqltext})',
                     f"added constraint {constraint.name} on {table.name}",
                 )
@@ -177,7 +182,7 @@ async def sync_schema(conn: AsyncConnection) -> None:
     # ON CONFLICT (address) 依赖此约束
     await _safe_execute(
         conn,
-        'ALTER TABLE "mc_servers" ADD CONSTRAINT "uq_mc_servers_address" UNIQUE ("address")',
+        'ALTER TABLE "mc_servers" ADD CONSTRAINT IF NOT EXISTS "uq_mc_servers_address" UNIQUE ("address")',
         "added unique constraint on mc_servers.address",
     )
 

@@ -43,7 +43,7 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-vustb}:${POSTGRES_PASSWORD:-vustb}@postgres:5432/${POSTGRES_DB:-vustb}
       REDIS_URL: redis://redis:6379/0
-      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-use-32bytes}
       SITE_URL: ${SITE_URL:-https://www.ustb.world}
       API_URL: ${API_URL:-https://www.ustb.world/skinapi}
       CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-["http://localhost","http://localhost:3000"]}
@@ -73,7 +73,7 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-vustb}:${POSTGRES_PASSWORD:-vustb}@postgres:5432/${POSTGRES_DB:-vustb}
       REDIS_URL: redis://redis:6379/0
-      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-use-32bytes}
     volumes:
       - vustb_data:/data
     command: ["celery", "-A", "app.workers.celery_app:celery_app", "worker", "--loglevel=info", "--beat"]
