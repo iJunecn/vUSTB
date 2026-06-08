@@ -129,20 +129,8 @@ export default function HomePage() {
       </div>
 
       {/* Footer on homepage */}
-      <div className="home-footer--mobile-relative" style={{
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        zIndex: 2,
-        padding: '12px 0',
-        textAlign: 'center',
-      }}>
-        <p style={{
-          fontSize: 12,
-          color: 'rgba(255, 255, 255, 0.6)',
-          margin: 0,
-        }}>
+      <div className="home-footer--mobile-relative">
+        <p className="home-footer-text">
           北京科技大学学生天码智能社 &copy; {new Date().getFullYear()} 像素北科
         </p>
       </div>

@@ -426,6 +426,29 @@
   -webkit-backdrop-filter: blur(14px);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
   animation: slideUp 0.6s ease-out;
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
+  /* Hidden scrollbar — only visible when hovering and content overflows */
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 0.3s ease;
+}
+.home-card:hover {
+  scrollbar-color: var(--color-border) transparent;
+}
+.home-card::-webkit-scrollbar {
+  width: 6px;
+}
+.home-card::-webkit-scrollbar-track {
+  background: transparent;
+}
+.home-card::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 3px;
+  transition: background 0.3s ease;
+}
+.home-card:hover::-webkit-scrollbar-thumb {
+  background: var(--color-border);
 }
 
 .dark .home-card {
@@ -518,6 +541,23 @@
   transform: translateY(-1px);
 }
 
+/* Homepage footer — absolute positioned on desktop, relative on mobile */
+.home-footer--mobile-relative {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  padding: 12px 0;
+  text-align: center;
+}
+
+.home-footer-text {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  margin: 0;
+}
+
 @media (max-width: 768px) {
   /* Homepage: switch from fixed overlay to scrollable top-bottom layout */
   .home-container {
@@ -531,6 +571,19 @@
     height: 42vh;
     min-height: 220px;
     max-height: 360px;
+    overflow: hidden;
+  }
+  /* Bottom gradient fade: blends image bottom into the page background */
+  .home-bg::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 40%;
+    background: linear-gradient(180deg, transparent 0%, var(--color-background) 100%);
+    z-index: 1;
+    pointer-events: none;
   }
   .home-bg-overlay {
     background: linear-gradient(
@@ -549,13 +602,21 @@
   }
   .home-card {
     max-width: 100%;
+    max-height: none;
+    overflow-y: visible;
     padding: 24px 20px;
+    scrollbar-width: auto;
+    scrollbar-color: initial;
   }
   .home-card-title {
     font-size: 26px;
   }
   .home-footer--mobile-relative {
     position: relative;
+    padding: 24px 0 12px;
+  }
+  .home-footer-text {
+    color: var(--color-text-light);
   }
 }
 
@@ -959,6 +1020,13 @@
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
   animation: slideUp 0.6s ease-out;
   overflow-y: auto;
+  /* Hidden scrollbar — only visible when hovering and content overflows */
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 0.3s ease;
+}
+.servers-page-card:hover {
+  scrollbar-color: var(--color-border) transparent;
 }
 
 .dark .servers-page-card {
@@ -967,14 +1035,18 @@
 }
 
 .servers-page-card::-webkit-scrollbar {
-  width: 4px;
+  width: 6px;
 }
 .servers-page-card::-webkit-scrollbar-track {
   background: transparent;
 }
 .servers-page-card::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 3px;
+  transition: background 0.3s ease;
+}
+.servers-page-card:hover::-webkit-scrollbar-thumb {
   background: var(--color-border);
-  border-radius: 2px;
 }
 
 @media (max-width: 768px) {
@@ -991,6 +1063,8 @@
     max-width: 100%;
     max-height: none;
     overflow-y: visible;
+    scrollbar-width: auto;
+    scrollbar-color: initial;
   }
 }
 
