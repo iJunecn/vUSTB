@@ -50,11 +50,12 @@ export function SiteHeader() {
 
   if (isAuthPage) return null;
 
-  const isAdmin = user && ['super_admin', 'admin', 'teacher'].includes(user.user_group);
+  const isAdmin = user && ['super_admin', 'admin', 'teacher', 'server_manager'].includes(user.user_group);
   const groupLabel: Record<string, string> = {
     super_admin: '超级管理员',
     admin: '管理员',
     teacher: '老师',
+    server_manager: '服务器管理员',
     user: '用户',
   };
 

@@ -58,7 +58,7 @@ export default function ArticleDetailPage() {
     });
   };
 
-  const isAdmin = loaded && user && ['super_admin', 'admin'].includes(user.user_group);
+  const isAdmin = loaded && user && ['super_admin', 'admin', 'server_manager'].includes(user.user_group);
 
   if (loading) {
     return (
