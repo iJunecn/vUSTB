@@ -1,4 +1,4 @@
-"""管理员业务逻辑 — 从 vSkin AdminBackend 搬运，适配 SQLAlchemy + PostgreSQL。"""
+"""管理员业务逻辑 — 分组设置、用户管理、邀请码、轮播图、回退服务。"""
 import os
 import re
 import secrets
@@ -45,7 +45,7 @@ class AdminBackend:
             return f"/static/textures/{avatar_hash}.png"
         return "/api/public/default-avatar"
 
-    # ========== Settings Management (Granular) ==========
+    # 分组设置
 
     async def get_site_settings(self, db: AsyncSession):
         s = await self._get_all_settings(db)
@@ -118,7 +118,7 @@ class AdminBackend:
                 await self._set_setting(db, key, value)
         await db.commit()
 
-    # ========== Users ==========
+    # 用户
 
     async def get_admin_users(self, db: AsyncSession):
         users = (await db.execute(select(User).order_by(User.id))).scalars().all()

@@ -11,7 +11,7 @@ export type User = {
   student_id: string | null;
   github_id: string | null;
   github_name: string | null;
-  user_group: 'super_admin' | 'admin' | 'teacher' | 'user';
+  user_group: 'super_admin' | 'admin' | 'teacher' | 'server_manager' | 'user';
   avatar_hash: string | null;
   email_verified: boolean;
   is_banned: boolean;

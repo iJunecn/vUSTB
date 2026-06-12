@@ -98,15 +98,12 @@ export default function AdminPrintPage() {
   const [weeklyReports, setWeeklyReports] = useState<WeeklyReport[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Printer form
   const [showPrinterForm, setShowPrinterForm] = useState(false);
   const [printerForm, setPrinterForm] = useState({ name: '', location: '', model: '' });
 
-  // Report form
   const [reportFrom, setReportFrom] = useState('');
   const [reportTo, setReportTo] = useState('');
 
-  // Confirm dialog state
   const [confirmState, setConfirmState] = useState<{ open: boolean; options: ConfirmOptions; onConfirm: () => void }>({
     open: false, options: { message: '' }, onConfirm: () => {},
   });
@@ -282,13 +279,11 @@ export default function AdminPrintPage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      {/* Header */}
       <div>
         <p className="section-kicker" style={{ marginBottom: 8 }}>PRINT ADMIN</p>
         <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--color-heading)', margin: 0 }}>打印预约管理</h1>
       </div>
 
-      {/* Tabs */}
       <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--color-border)', paddingBottom: 8, flexWrap: 'nowrap', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
         {tabs.map((t) => (
           <button
@@ -312,7 +307,6 @@ export default function AdminPrintPage() {
         </div>
       ) : (
         <>
-          {/* Overview */}
           {tab === 'overview' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
@@ -321,7 +315,6 @@ export default function AdminPrintPage() {
                 <StatCard icon={<Printer style={{ width: 24, height: 24 }} />} label="打印机" value={stats?.printers} />
               </div>
 
-              {/* Quick report export */}
               <div className="surface-card" style={{ padding: 20 }}>
                 <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--color-heading)', margin: '0 0 12px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <FileDown style={{ width: 16, height: 16 }} /> 导出周报
@@ -336,7 +329,6 @@ export default function AdminPrintPage() {
                 </div>
               </div>
 
-              {/* Quick pending list */}
               {approvals.length > 0 && (
                 <div>
                   <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--color-heading)', margin: '0 0 8px 0' }}>
@@ -359,7 +351,6 @@ export default function AdminPrintPage() {
             </div>
           )}
 
-          {/* Printers management */}
           {tab === 'printers' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -429,7 +420,6 @@ export default function AdminPrintPage() {
             </div>
           )}
 
-          {/* Approvals */}
           {tab === 'approvals' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {approvals.length === 0 ? (
@@ -466,7 +456,6 @@ export default function AdminPrintPage() {
             </div>
           )}
 
-          {/* All bookings */}
           {tab === 'all' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {allBookings.length === 0 ? (
@@ -510,7 +499,6 @@ export default function AdminPrintPage() {
             </div>
           )}
 
-          {/* Users management */}
           {tab === 'users' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--color-heading)', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -579,10 +567,8 @@ export default function AdminPrintPage() {
             </div>
           )}
 
-          {/* Reports management */}
           {tab === 'reports' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {/* Real-time export */}
               <div className="surface-card" style={{ padding: 20 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
                   <div>
@@ -602,7 +588,6 @@ export default function AdminPrintPage() {
                 </div>
               </div>
 
-              {/* Generate weekly report */}
               <div className="surface-card" style={{ padding: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
                   <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--color-heading)', margin: '0 0 4px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -615,7 +600,6 @@ export default function AdminPrintPage() {
                 </button>
               </div>
 
-              {/* Historical reports */}
               <div className="surface-card" style={{ overflowX: 'auto' }}>
                 <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--color-border)', fontWeight: 600, color: 'var(--color-heading)', fontSize: 14 }}>
                   历史周报记录
@@ -652,7 +636,7 @@ export default function AdminPrintPage() {
                             <button
                               onClick={() => {
                                 handleExport;
-                                // Quick export for this report's date range
+
                                 setReportFrom(r.start_date);
                                 setReportTo(r.end_date);
                                 rawApi.get('/api/print/admin/reports/export', {
@@ -691,7 +675,6 @@ export default function AdminPrintPage() {
         </>
       )}
 
-      {/* Confirm Dialog */}
       <ConfirmDialog
         open={confirmState.open}
         onConfirm={confirmState.onConfirm}

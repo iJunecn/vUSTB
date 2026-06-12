@@ -1,7 +1,4 @@
-"""OAuth 2.0 业务逻辑 — 从 vSkin OAuthBackend 搬运，适配 SQLAlchemy + PostgreSQL。
-
-支持授权码模式、设备授权流、JWKS、id_token RS256 签名等。
-"""
+"""OAuth 2.0 业务逻辑 — 授权码模式、设备流、JWKS、id_token RS256 签名。"""
 import base64
 import hashlib
 import json
@@ -46,7 +43,7 @@ class OAuthBackend:
     DEVICE_DEFAULT_SCOPE = "openid offline_access Yggdrasil.PlayerProfiles.Select Yggdrasil.Server.Join"
     DEVICE_SCOPE_KEYS = {"openid", "offline_access", "Yggdrasil.PlayerProfiles.Select", "Yggdrasil.Server.Join"}
 
-    # ====== Settings helpers ======
+    # 设置
 
     async def _get_setting(self, db: AsyncSession, key: str, default: str = "") -> str:
         row = (await db.execute(select(SiteSetting).where(SiteSetting.key == key))).scalar_one_or_none()
@@ -72,7 +69,7 @@ class OAuthBackend:
         site_url = self._site_url()
         return f"{site_url}/device" if site_url else "/device"
 
-    # ====== Device flow settings ======
+    # 设备流设置
 
     async def _device_default_redirect_uri(self, db: AsyncSession) -> str:
         return await self._get_setting(db, "oauth_device_default_redirect_uri", "https://www.ustb.world/oauth/device-callback")
@@ -189,7 +186,7 @@ class OAuthBackend:
         await db.commit()
         return await self.get_admin_device_settings(db)
 
-    # ====== Scope helpers ======
+    # Scope
 
     def _parse_scope(self, scope: str, default_scope: str = "userinfo", allowed_scopes: set[str] | None = None) -> tuple[str, list[str]]:
         raw = (scope or default_scope).replace(",", " ")
@@ -222,7 +219,7 @@ class OAuthBackend:
             items.append({"key": key, "label": meta.get("label", key), "description": meta.get("description", "")})
         return items
 
-    # ====== Secret/code helpers ======
+    # 密钥/授权码
 
     def _hash_secret(self, secret: str) -> str:
         return hashlib.sha256(secret.encode("utf-8")).hexdigest()
@@ -266,7 +263,7 @@ class OAuthBackend:
             return "*" * len(secret)
         return secret[:4] + "*" * (len(secret) - 8) + secret[-4:]
 
-    # ====== Avatar/Skin URL helpers ======
+    # 头像/皮肤 URL
 
     def _avatar_url_from_hash(self, avatar_hash: str | None) -> str:
         site = self._site_url()
@@ -288,7 +285,7 @@ class OAuthBackend:
             return file_path
         return None
 
-    # ====== App management ======
+    # 应用管理
 
     async def list_apps(self, db: AsyncSession) -> list[dict]:
         rows = (await db.execute(select(OAuthApp).order_by(OAuthApp.app_id.asc()))).scalars().all()
@@ -384,7 +381,7 @@ class OAuthBackend:
         await db.delete(app)
         await db.commit()
 
-    # ====== Admin meta ======
+    # 管理元信息
 
     async def admin_meta(self, db: AsyncSession) -> dict:
         site_url = self._site_url()
@@ -402,7 +399,7 @@ class OAuthBackend:
             "device_settings": device_settings,
         }
 
-    # ====== OpenID Configuration ======
+    # OpenID 配置
 
     async def openid_configuration(self, db: AsyncSession) -> dict:
         issuer = self._issuer()
@@ -431,7 +428,7 @@ class OAuthBackend:
     def jwks(self) -> dict:
         return crypto.jwks()
 
-    # ====== Authorization flow ======
+    # 授权流程
 
     async def build_authorize_preview(self, db: AsyncSession, client_id: int, redirect_uri: str, state: str = "", scope: str = "userinfo") -> dict:
         app = (await db.execute(select(OAuthApp).where(OAuthApp.app_id == client_id))).scalar_one_or_none()
@@ -482,7 +479,7 @@ class OAuthBackend:
             params["state"] = state
         return {"redirect_url": f"{final_redirect_uri}?{urlencode(params)}"}
 
-    # ====== Token endpoint ======
+    # 令牌端点
 
     async def _issue_tokens(self, db: AsyncSession, app_id: int, user_id: int, scope_text: str) -> dict:
         now = int(time.time())
@@ -578,7 +575,7 @@ class OAuthBackend:
 
         raise OAuthProtocolError("unsupported_grant_type", "unsupported grant_type")
 
-    # ====== Device flow ======
+    # 设备流
 
     async def create_device_authorization(self, db: AsyncSession, client_id: int, scope: str) -> dict:
         normalized_scope, _ = self._parse_scope(scope, default_scope=self.DEVICE_DEFAULT_SCOPE, allowed_scopes=self.DEVICE_SCOPE_KEYS)
@@ -668,7 +665,7 @@ class OAuthBackend:
         await db.commit()
         return payload
 
-    # ====== Userinfo ======
+    # 用户信息
 
     async def get_userinfo(self, db: AsyncSession, access_token: str) -> dict:
         at = (await db.execute(select(OAuthAccessTokenModel).where(OAuthAccessTokenModel.access_token == access_token))).scalar_one_or_none()
@@ -732,7 +729,7 @@ class OAuthBackend:
             "model": "slim" if skin_tex.model == "slim" else "default",
         }
 
-    # ====== Refresh token ======
+    # 刷新令牌
 
     async def _refresh_token(self, db: AsyncSession, client_id: int, refresh_token: str) -> dict:
         at = (await db.execute(select(OAuthAccessTokenModel).where(OAuthAccessTokenModel.refresh_token == refresh_token, OAuthAccessTokenModel.app_id == client_id))).scalar_one_or_none()
@@ -749,10 +746,10 @@ class OAuthBackend:
         await db.commit()
         return await self._issue_tokens(db, client_id, user_id, scope)
 
-    # ====== Profile helpers ======
+    # 角色工具
 
     async def _get_selected_profile_for_user(self, db: AsyncSession, user_id: int):
-        """Get the most recently used player for a user, fallback to first player with skin."""
+        """获取用户最近使用的角色。"""
         players = (await db.execute(select(Player).where(Player.owner_id == user_id))).scalars().all()
         if not players:
             return None

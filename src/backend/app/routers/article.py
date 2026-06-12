@@ -1,8 +1,4 @@
-"""动态 / 文章发布系统 API。
-
-公开路由：文章列表、文章详情、分类列表、RSS 订阅源
-管理员路由：文章 CRUD、分类 CRUD、媒体上传
-"""
+"""动态 / 文章发布系统。"""
 from __future__ import annotations
 
 import os
@@ -20,16 +16,16 @@ from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.database import get_db
-from app.deps import get_current_admin, get_current_user
+from app.deps import get_current_server_content_manager, get_current_user
 from app.models import User, SiteSetting
 from app.models.article import Article, ArticleCategory, ArticleMedia
 
-# ========== 公开路由 ==========
+# 公开路由
 public_router = APIRouter(prefix="/api/articles", tags=["articles-public"])
 admin_router = APIRouter(prefix="/api/admin/articles", tags=["articles-admin"])
 
 
-# --------------- Pydantic Schemas ---------------
+# schemas
 
 class CategoryOut(BaseModel):
     id: int
@@ -49,6 +45,7 @@ class CategoryUpdate(BaseModel):
 class ArticleListOut(BaseModel):
     id: int
     title: str
+    status: str = "published"
     summary: str | None = None
     category_id: int | None = None
     category: CategoryOut | None = None
@@ -68,12 +65,14 @@ class ArticleListOut(BaseModel):
 class ArticleDetailOut(ArticleListOut):
     content: str = ""
     content_type: str = "markdown"
+    status: str = "published"
     pinned_at: datetime | None = None
 
 class ArticleCreate(BaseModel):
     title: str = Field(..., max_length=255)
     content: str
     content_type: str = "markdown"
+    status: str = "published"
     summary: str | None = None
     category_id: int | None = None
     cover_image_url: str | None = None
@@ -89,6 +88,7 @@ class ArticleUpdate(BaseModel):
     title: str | None = Field(None, max_length=255)
     content: str | None = None
     content_type: str | None = None
+    status: str | None = None
     summary: str | None = None
     category_id: int | None = None
     cover_image_url: str | None = None
@@ -101,13 +101,13 @@ class ArticleUpdate(BaseModel):
     seo_slug: str | None = None
 
 
-# --------------- Helper ---------------
+# helper
 
 def _article_to_list_out(a: Article) -> ArticleListOut:
     cat = CategoryOut(id=a.category.id, name=a.category.name, description=a.category.description,
                       created_at=a.category.created_at, updated_at=a.category.updated_at) if a.category else None
     return ArticleListOut(
-        id=a.id, title=a.title, summary=a.summary,
+        id=a.id, title=a.title, status=a.status, summary=a.summary,
         category_id=a.category_id, category=cat,
         author_id=a.author_id, view_count=a.view_count,
         cover_image_url=a.cover_image_url, cover_image_alt=a.cover_image_alt,
@@ -123,6 +123,7 @@ def _article_to_detail_out(a: Article) -> ArticleDetailOut:
                       created_at=a.category.created_at, updated_at=a.category.updated_at) if a.category else None
     return ArticleDetailOut(
         id=a.id, title=a.title, content=a.content, content_type=a.content_type,
+        status=a.status,
         summary=a.summary, category_id=a.category_id, category=cat,
         author_id=a.author_id, view_count=a.view_count,
         cover_image_url=a.cover_image_url, cover_image_alt=a.cover_image_alt,
@@ -133,7 +134,7 @@ def _article_to_detail_out(a: Article) -> ArticleDetailOut:
     )
 
 
-# ============ 公开 API ============
+# 公开 API
 
 @public_router.get("", response_model=list[ArticleListOut])
 async def list_articles(
@@ -144,7 +145,8 @@ async def list_articles(
 ):
     """公开：获取文章列表（不含正文，用于列表页）。"""
     q = select(Article).options(selectinload(Article.category)).where(
-        Article.created_at <= datetime.now(timezone.utc)
+        Article.status == "published",
+        Article.created_at <= datetime.now(timezone.utc),
     )
     if category_id is not None:
         q = q.where(Article.category_id == category_id)
@@ -173,7 +175,8 @@ async def search_articles(
 ):
     """公开：搜索文章。"""
     query = select(Article).options(selectinload(Article.category)).where(
-        Article.created_at <= datetime.now(timezone.utc)
+        Article.status == "published",
+        Article.created_at <= datetime.now(timezone.utc),
     )
     if q:
         pattern = f"%{q}%"
@@ -192,7 +195,10 @@ async def search_articles(
 async def count_articles(db: AsyncSession = Depends(get_db)):
     """公开：文章总数。"""
     cnt = (await db.execute(
-        select(func.count(Article.id)).where(Article.created_at <= datetime.now(timezone.utc))
+        select(func.count(Article.id)).where(
+            Article.status == "published",
+            Article.created_at <= datetime.now(timezone.utc),
+        )
     )).scalar() or 0
     return {"count": cnt}
 
@@ -245,7 +251,10 @@ async def rss_feed(
     q = (
         select(Article)
         .options(selectinload(Article.category))
-        .where(Article.created_at <= datetime.now(timezone.utc))
+        .where(
+            Article.status == "published",
+            Article.created_at <= datetime.now(timezone.utc),
+        )
         .order_by(Article.is_pinned.desc(), Article.pin_order.asc(), Article.created_at.desc())
         .limit(20)
     )
@@ -308,8 +317,10 @@ async def get_article(
     article_id: int | str,
     db: AsyncSession = Depends(get_db),
 ):
-    """公开：获取文章详情（含正文），支持数字 ID 或 seo_slug 查询。"""
-    q = select(Article).options(selectinload(Article.category))
+    """公开：获取文章详情（含正文），支持数字 ID 或 seo_slug 查询。仅返回已发布文章。"""
+    q = select(Article).options(selectinload(Article.category)).where(
+        Article.status == "published",
+    )
     try:
         numeric_id = int(article_id)
         q = q.where(Article.id == numeric_id)
@@ -330,7 +341,7 @@ async def get_article(
     return _article_to_detail_out(article)
 
 
-# ============ 管理 API ============
+# 管理 API
 
 @admin_router.get("", response_model=list[ArticleDetailOut])
 async def admin_list_articles(
@@ -338,7 +349,7 @@ async def admin_list_articles(
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin),
+    _: User = Depends(get_current_server_content_manager),
 ):
     """管理：获取所有文章（含定时发布）。"""
     q = select(Article).options(selectinload(Article.category))
@@ -353,7 +364,7 @@ async def admin_list_articles(
 @admin_router.get("/count")
 async def admin_count_articles(
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin),
+    _: User = Depends(get_current_server_content_manager),
 ):
     """管理：文章总数（含定时发布）。"""
     cnt = (await db.execute(select(func.count(Article.id)))).scalar() or 0
@@ -364,7 +375,7 @@ async def admin_count_articles(
 async def create_article(
     body: ArticleCreate,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_admin),
+    user: User = Depends(get_current_server_content_manager),
 ):
     """管理：创建文章。"""
     # 检查 seo_slug 唯一性
@@ -387,6 +398,7 @@ async def create_article(
         title=body.title,
         content=body.content,
         content_type=body.content_type,
+        status=body.status,
         summary=body.summary,
         category_id=body.category_id,
         author_id=user.id,
@@ -414,7 +426,7 @@ async def create_article(
 async def admin_get_article(
     article_id: int,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin),
+    _: User = Depends(get_current_server_content_manager),
 ):
     """管理：获取文章详情（含定时发布）。"""
     article = (await db.execute(
@@ -430,7 +442,7 @@ async def update_article(
     article_id: int,
     body: ArticleUpdate,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin),
+    _: User = Depends(get_current_server_content_manager),
 ):
     """管理：更新文章。"""
     article = (await db.execute(
@@ -477,7 +489,7 @@ async def update_article(
 async def delete_article(
     article_id: int,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin),
+    _: User = Depends(get_current_server_content_manager),
 ):
     """管理：删除文章。"""
     article = (await db.execute(
@@ -490,7 +502,7 @@ async def delete_article(
     return {"ok": True}
 
 
-# ============ 分类管理 API ============
+# 分类管理
 
 cat_admin_router = APIRouter(prefix="/api/admin/article-categories", tags=["article-categories-admin"])
 
@@ -498,7 +510,7 @@ cat_admin_router = APIRouter(prefix="/api/admin/article-categories", tags=["arti
 @cat_admin_router.get("", response_model=list[CategoryOut])
 async def admin_list_categories(
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin),
+    _: User = Depends(get_current_server_content_manager),
 ):
     rows = (await db.execute(
         select(ArticleCategory).order_by(ArticleCategory.id)
@@ -511,7 +523,7 @@ async def admin_list_categories(
 async def admin_create_category(
     body: CategoryCreate,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin),
+    _: User = Depends(get_current_server_content_manager),
 ):
     existing = (await db.execute(
         select(ArticleCategory).where(ArticleCategory.name == body.name)
@@ -531,7 +543,7 @@ async def admin_update_category(
     cat_id: int,
     body: CategoryUpdate,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin),
+    _: User = Depends(get_current_server_content_manager),
 ):
     cat = (await db.execute(
         select(ArticleCategory).where(ArticleCategory.id == cat_id)
@@ -558,7 +570,7 @@ async def admin_update_category(
 async def admin_delete_category(
     cat_id: int,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin),
+    _: User = Depends(get_current_server_content_manager),
 ):
     cat = (await db.execute(
         select(ArticleCategory).where(ArticleCategory.id == cat_id)
@@ -576,7 +588,7 @@ async def admin_delete_category(
     return {"ok": True}
 
 
-# ============ 媒体上传 API ============
+# 媒体上传
 
 media_router = APIRouter(prefix="/api/admin/article-media", tags=["article-media-admin"])
 
@@ -595,7 +607,7 @@ class MediaOut(BaseModel):
 @media_router.get("", response_model=list[MediaOut])
 async def list_media(
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin),
+    _: User = Depends(get_current_server_content_manager),
 ):
     rows = (await db.execute(
         select(ArticleMedia).order_by(ArticleMedia.created_at.desc())
@@ -609,7 +621,7 @@ async def list_media(
 async def upload_media(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_admin),
+    user: User = Depends(get_current_server_content_manager),
 ):
     """上传文章媒体文件。"""
     allowed_types = {"image/png", "image/jpeg", "image/gif", "image/svg+xml", "image/webp", "video/mp4"}
@@ -657,7 +669,7 @@ async def upload_media(
 async def delete_media(
     media_id: int,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin),
+    _: User = Depends(get_current_server_content_manager),
 ):
     media = (await db.execute(
         select(ArticleMedia).where(ArticleMedia.id == media_id)

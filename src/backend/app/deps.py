@@ -41,3 +41,12 @@ async def get_current_super_admin(user: User = Depends(get_current_user)) -> Use
     if user.user_group != UserGroup.SUPER_ADMIN:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="需要超级管理员权限")
     return user
+
+
+async def get_current_server_content_manager(user: User = Depends(get_current_user)) -> User:
+    """服务器内容管理员：super_admin / admin / server_manager。
+    用于材质、角色、动态、服务器列表等端点。
+    """
+    if user.user_group not in (UserGroup.SUPER_ADMIN, UserGroup.ADMIN, UserGroup.SERVER_MANAGER):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="需要管理员或服务器管理员权限")
+    return user

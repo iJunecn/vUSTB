@@ -93,7 +93,6 @@ const ARCHIVE_ITEMS = [
   },
 ];
 
-/* ---- Letter modal content (方块里的北科) ---- */
 
 const LETTER_IMAGES = [
   { src: '/img/skycode/0.png', alt: '像素北科早期' },
@@ -110,7 +109,6 @@ export default function AboutPage() {
 
   return (
     <div className="page-container" style={{ maxWidth: '1120px', paddingBottom: 60 }}>
-      {/* Hero Section */}
       <section className="section-gap-lg">
         <p className="section-kicker" style={{ margin: '0 0 10px' }}>
           「像素北科」项目发起方
@@ -184,7 +182,6 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* Department Structure */}
       <section className="section-gap-lg">
         <p className="section-kicker" style={{ margin: '0 0 8px' }}>部门结构</p>
         <h2 style={{
@@ -222,7 +219,6 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* Core Department Detail */}
       <section className="section-gap-lg">
         <p className="section-kicker" style={{ margin: '0 0 8px' }}>核心部门</p>
         <h2 style={{
@@ -340,7 +336,6 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* Development Timeline */}
       <section className="section-gap-lg">
         <p className="section-kicker" style={{ margin: '0 0 8px' }}>发展时间线</p>
         <h2 style={{
@@ -402,7 +397,6 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* Activities / Archive Section */}
       <section id="activities">
         <p className="section-kicker" style={{ margin: '0 0 8px' }}>活动归档</p>
         <h2 style={{
@@ -468,7 +462,6 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* ====== Letter Modal: 方块里的北科 ====== */}
       {letterOpen && (
         <div
           className="modal-overlay"
@@ -477,7 +470,6 @@ export default function AboutPage() {
           <div
             className="modal-content"
           >
-            {/* Header */}
             <div style={{
               position: 'sticky', top: 0, zIndex: 1,
               background: 'var(--color-card-background)',
@@ -493,7 +485,6 @@ export default function AboutPage() {
               </button>
             </div>
 
-            {/* Body */}
             <div className="letter-body">
               <h3 className="letter-heading">
                 方块里的北科——一个名为像素北科的故事

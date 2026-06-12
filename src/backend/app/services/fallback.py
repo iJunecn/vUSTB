@@ -1,8 +1,4 @@
-"""Fallback 后端 — 从 vSkin 搬运，适配 SQLAlchemy + PostgreSQL。
-
-支持配置多个 Fallback 端点（如 Mojang 官方），串行或并行转发
-hasJoined、getProfile、bulkLookup 等请求。
-"""
+"""Fallback 转发后端。"""
 import asyncio
 import logging
 from typing import Optional, List, Dict, Any, Callable

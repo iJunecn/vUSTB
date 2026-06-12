@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.deps import get_current_user
-from app.models import User, UserGroup, VerificationCode, InviteCode
+from app.models import User, UserGroup, VerificationCode, InviteCode, PointAccount, PointTransaction, PointType, PointReason
 from app.services.auth import create_jwt, hash_password, verify_password
 from app.config import settings
 from app.utils.schemas import (
@@ -155,6 +155,19 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
         invite.used_count = (invite.used_count or 0) + 1
         if not invite.used_by:
             invite.used_by = req.email
+
+    # 赠送 10 像素积分
+    acct = PointAccount(user_id=user.id, pixel_points=10, shell_points=0)
+    db.add(acct)
+    await db.flush()
+    tx = PointTransaction(
+        user_id=user.id,
+        type=PointType.PIXEL,
+        amount=10,
+        reason=PointReason.REGISTER,
+        balance_after=10,
+    )
+    db.add(tx)
 
     await db.commit()
     await db.refresh(user)

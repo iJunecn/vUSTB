@@ -1,89 +1,61 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { queryMotdApi, formatRelativeTime, McStatus, getMotdSegmentStyle, normalizeIconSrc } from '@/lib/mc-status';
+import { formatRelativeTime, McStatus, getMotdSegmentStyle, normalizeIconSrc } from '@/lib/mc-status';
 import { Wifi, WifiOff } from 'lucide-react';
 
 const POLL_INTERVAL_MS = 125_000;
 
-type ServerGroupConfig = {
-  label: string;
-  address: string;
-  port?: number;
-  versionOverride?: string;
-  themeOverride?: string;
-  subs?: { name: string; address: string; port?: number }[];
+type ServerStatus = {
+  id: number;
+  name: string;
+  address: string | null;
+  icon_url: string | null;
+  version_hint: string | null;
+  theme: string | null;
+  motd_segments: { text: string; styles?: string[] }[] | null;
+  server_status: string;
+  players_online: number | null;
+  players_max: number | null;
+  last_update: string | null;
+  type: string | null;
+  version: string | null;
+  icon: string | null;
 };
 
-const SERVER_GROUPS: ServerGroupConfig[] = [
-  {
-    label: '主服',
-    address: 'mc.ustb.world',
-    versionOverride: 'Java Edition 1.21.11',
-    subs: [
-      { name: '主服', address: '47.94.48.113', port: 12002 },
-      { name: '建筑服', address: '47.94.48.113', port: 12003 },
-      { name: '像素北科服务器', address: '47.94.48.113', port: 12006 },
-    ],
-  },
-  {
-    label: '模组服',
-    address: 'mod.ustb.world',
-    themeOverride: '重度机械症',
-  },
-  {
-    label: '休闲服',
-    address: 'utb.ustb.world',
-    themeOverride: '乌托邦探险之旅',
-  },
-];
-
 export default function ServersPage() {
-  const [mainStatuses, setMainStatuses] = useState<Map<string, McStatus>>(new Map());
-  const [subStatuses, setSubStatuses] = useState<Map<string, McStatus>>(new Map());
+  const [servers, setServers] = useState<ServerStatus[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const loadStatuses = useCallback(async () => {
-    const newMain = new Map<string, McStatus>();
-    const newSub = new Map<string, McStatus>();
+  const loadServers = useCallback(async () => {
+    try {
+      const res = await fetch('/api/mc-servers/statuses');
+      if (res.ok) {
+        const data = await res.json();
+        setServers(data);
+      }
+    } catch {
 
-    const mainPromises = SERVER_GROUPS.map(async (group) => {
-      const status = await queryMotdApi(group.address, group.port);
-      newMain.set(group.address, status);
-    });
-
-    const subPromises = SERVER_GROUPS.flatMap((group) =>
-      (group.subs ?? []).map(async (sub) => {
-        const key = `${sub.address}:${sub.port ?? 25565}`;
-        const status = await queryMotdApi(sub.address, sub.port);
-        newSub.set(key, status);
-      })
-    );
-
-    await Promise.all([...mainPromises, ...subPromises]);
-
-    setMainStatuses(newMain);
-    setSubStatuses(newSub);
-    setLoading(false);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
-    loadStatuses();
-    const timer = setInterval(loadStatuses, POLL_INTERVAL_MS);
+    loadServers();
+    const timer = setInterval(loadServers, POLL_INTERVAL_MS);
     return () => clearInterval(timer);
-  }, [loadStatuses]);
+  }, [loadServers]);
 
-  const allStatuses = [...mainStatuses.values(), ...subStatuses.values()];
-  const onlineCount = allStatuses.filter((s) => s.server_status === 'online').length;
-  const totalCount = allStatuses.length;
-  const lastUpdated = allStatuses
+  const onlineCount = servers.filter((s) => s.server_status === 'online').length;
+  const totalCount = servers.length;
+  const lastUpdated = servers
     .map((s) => s.last_update)
     .filter((v): v is string => Boolean(v))
     .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0];
 
   return (
     <div className="servers-page-container">
-      {/* Background */}
       <div className="home-bg">
         <picture>
           <source srcSet="/img/background.webp" type="image/webp" />
@@ -92,10 +64,8 @@ export default function ServersPage() {
       </div>
       <div className="home-bg-overlay" />
 
-      {/* Content */}
       <div className="servers-page-content">
         <div className="servers-page-card">
-          {/* Header */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
             <div>
               <p className="section-kicker" style={{ marginBottom: 4 }}>SERVER STATUS</p>
@@ -121,7 +91,6 @@ export default function ServersPage() {
             </div>
           </div>
 
-          {/* Server cards */}
           {loading ? (
             <div style={{ display: 'flex', justifyContent: 'center', padding: '32px 0' }}>
               <div
@@ -134,23 +103,25 @@ export default function ServersPage() {
                 }}
               />
             </div>
+          ) : totalCount === 0 ? (
+            <p style={{ textAlign: 'center', color: 'var(--color-text-light)', padding: '32px 0' }}>
+              暂无服务器
+            </p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
-              {SERVER_GROUPS.map((group) => {
-                const mainStatus = mainStatuses.get(group.address);
-                const isOnline = mainStatus?.server_status === 'online';
-                const iconSrc = normalizeIconSrc(mainStatus?.icon);
+              {servers.map((server) => {
+                const isOnline = server.server_status === 'online';
+                const iconSrc = normalizeIconSrc(server.icon);
 
                 return (
                   <div
-                    key={group.address}
+                    key={server.id}
                     style={{
                       padding: 14, borderRadius: 10,
                       background: 'var(--color-background-soft)',
                       border: '1px solid var(--color-border)',
                     }}
                   >
-                    {/* Main server row */}
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                         {iconSrc ? (
@@ -160,8 +131,8 @@ export default function ServersPage() {
                         )}
                         <div style={{ minWidth: 0 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-heading)' }}>{group.label}</span>
-                            <span style={{ fontSize: 11, color: 'var(--color-text-light)', fontFamily: 'monospace' }}>{group.address}{group.port ? `:${group.port}` : ''}</span>
+                            <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-heading)' }}>{server.name}</span>
+                            {server.address && <span style={{ fontSize: 11, color: 'var(--color-text-light)', fontFamily: 'monospace' }}>{server.address}</span>}
                           </div>
                         </div>
                       </div>
@@ -180,58 +151,32 @@ export default function ServersPage() {
                       </span>
                     </div>
 
-                    {mainStatus && isOnline && (
+                    {isOnline && (
                       <div style={{ marginTop: 8 }}>
-                        {/* MOTD */}
-                        {mainStatus.motdSegments && mainStatus.motdSegments.length > 0 && (
+                        {server.motd_segments && server.motd_segments.length > 0 && (
                           <p style={{ fontSize: 11, color: 'var(--color-text)', margin: '0 0 4px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {mainStatus.motdSegments.map((seg, i) => (
+                            {server.motd_segments.map((seg, i) => (
                               <span key={i} style={getMotdSegmentStyle(seg)}>{seg.text}</span>
                             ))}
                           </p>
                         )}
-                        {/* Metrics row */}
                         <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--color-text-light)', flexWrap: 'wrap' }}>
-                          {group.versionOverride && <span>{group.versionOverride}</span>}
-                          {group.themeOverride && <span>主题：{group.themeOverride}</span>}
-                          {!group.versionOverride && !group.themeOverride && mainStatus.version && (
-                            <span>{mainStatus.type === 'java' ? 'Java' : 'Bedrock'} {mainStatus.version}</span>
+                          {server.version_hint && <span>{server.version_hint}</span>}
+                          {server.theme && <span>主题：{server.theme}</span>}
+                          {!server.version_hint && !server.theme && server.version && (
+                            <span>{server.type === 'java' ? 'Java' : 'Bedrock'} {server.version}</span>
+                          )}
+                          {server.players_online !== null && server.players_max !== null && (
+                            <span>玩家：{server.players_online}/{server.players_max}</span>
                           )}
                         </div>
                       </div>
                     )}
 
-                    {/* Version/theme when offline */}
-                    {!(mainStatus && isOnline) && (
+                    {!isOnline && (
                       <div style={{ marginTop: 6, fontSize: 11, color: 'var(--color-text-light)' }}>
-                        {group.versionOverride && <span>{group.versionOverride}</span>}
-                        {group.themeOverride && <span>主题：{group.themeOverride}</span>}
-                      </div>
-                    )}
-
-                    {/* Sub-servers */}
-                    {group.subs && group.subs.length > 0 && (
-                      <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        {group.subs.map((sub) => {
-                          const key = `${sub.address}:${sub.port ?? 25565}`;
-                          const subStatus = subStatuses.get(key);
-                          const subOnline = subStatus?.server_status === 'online';
-                          return (
-                            <div
-                              key={key}
-                              style={{
-                                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                                padding: '4px 8px', borderRadius: 6,
-                                background: 'var(--color-background-mute)',
-                              }}
-                            >
-                              <span style={{ fontSize: 12, color: 'var(--color-text)' }}>{sub.name}</span>
-                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10, fontWeight: 600, color: subOnline ? '#16a34a' : '#dc2626' }}>
-                                {subOnline ? <><Wifi style={{ width: 9, height: 9 }} /> 在线</> : <><WifiOff style={{ width: 9, height: 9 }} /> 离线</>}
-                              </span>
-                            </div>
-                          );
-                        })}
+                        {server.version_hint && <span>{server.version_hint}</span>}
+                        {server.theme && <span>主题：{server.theme}</span>}
                       </div>
                     )}
                   </div>

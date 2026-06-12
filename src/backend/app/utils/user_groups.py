@@ -1,12 +1,13 @@
 """用户组权限模型 — 从 vSkin 搬运。
 
-内置超级管理员、管理员、用户、老师四种用户组，支持可视化展示与后台分组管理。
+内置超级管理员、管理员、用户、老师、服务器管理员五种用户组，支持可视化展示与后台分组管理。
 """
 
 SUPER_ADMIN_GROUP = "super_admin"
 ADMIN_GROUP = "admin"
 USER_GROUP = "user"
 TEACHER_GROUP = "teacher"
+SERVER_MANAGER_GROUP = "server_manager"
 
 USER_GROUP_META = {
     SUPER_ADMIN_GROUP: {
@@ -23,17 +24,24 @@ USER_GROUP_META = {
         "is_admin": True,
         "can_grant_admin": False,
     },
-    USER_GROUP: {
-        "title": "用户",
-        "color": "#67C23A",
-        "tag_type": "success",
-        "is_admin": False,
-        "can_grant_admin": False,
-    },
     TEACHER_GROUP: {
         "title": "老师",
         "color": "#9B59B6",
         "tag_type": "info",
+        "is_admin": False,
+        "can_grant_admin": False,
+    },
+    SERVER_MANAGER_GROUP: {
+        "title": "服务器管理员",
+        "color": "#E6A23C",
+        "tag_type": "warning",
+        "is_admin": False,
+        "can_grant_admin": False,
+    },
+    USER_GROUP: {
+        "title": "用户",
+        "color": "#67C23A",
+        "tag_type": "success",
         "is_admin": False,
         "can_grant_admin": False,
     },

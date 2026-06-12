@@ -7,10 +7,16 @@
 from datetime import datetime
 from enum import Enum as PyEnum
 
-from sqlalchemy import String, Integer, Boolean, DateTime, Text, ForeignKey, func
+from sqlalchemy import String, Integer, Boolean, DateTime, Text, ForeignKey, func, Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+
+
+class ArticleStatus(str, PyEnum):
+    """文章状态：草稿 / 已发布。"""
+    draft = "draft"
+    published = "published"
 
 
 class ArticleCategory(Base):
@@ -49,6 +55,11 @@ class Article(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False, comment="标题")
     content: Mapped[str] = mapped_column(Text, nullable=False, comment="内容 (markdown)")
+    status: Mapped[str] = mapped_column(
+        SAEnum(ArticleStatus, name="article_status", create_constraint=False),
+        default=ArticleStatus.published, server_default="published",
+        nullable=False, comment="文章状态: draft / published"
+    )
     content_type: Mapped[str] = mapped_column(
         String(20), default="markdown", server_default="markdown", nullable=False, comment="内容类型"
     )
@@ -90,6 +101,7 @@ class Article(Base):
         d = {
             "id": self.id,
             "title": self.title,
+            "status": self.status,
             "content_type": self.content_type,
             "summary": self.summary,
             "category_id": self.category_id,

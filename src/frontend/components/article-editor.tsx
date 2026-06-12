@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
-import { ArrowLeft, Save, Eye, Loader2, ImagePlus } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, ImagePlus, FileText, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -18,7 +18,6 @@ type Category = {
 export function ArticleEditor({ articleId }: { articleId: number | null }) {
   const router = useRouter();
 
-  // Form state
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [summary, setSummary] = useState('');
@@ -31,13 +30,13 @@ export function ArticleEditor({ articleId }: { articleId: number | null }) {
   const [seoKeywords, setSeoKeywords] = useState('');
   const [seoSlug, setSeoSlug] = useState('');
 
-  // UI state
+  const [articleStatus, setArticleStatus] = useState<string>('published');
+
   const [categories, setCategories] = useState<Category[]>([]);
   const [saving, setSaving] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
   const [loading, setLoading] = useState(articleId !== null);
-  const [showPreview, setShowPreview] = useState(false);
 
-  // Textarea ref + cursor tracking for image insertion at cursor position
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const cursorPosRef = useRef(0);
 
@@ -63,7 +62,7 @@ export function ArticleEditor({ articleId }: { articleId: number | null }) {
   const insertAtCursor = useCallback((insertText: string) => {
     const ta = textareaRef.current;
     if (!ta) {
-      // fallback: append at end
+
       setContent((prev) => prev + insertText);
       return;
     }
@@ -75,7 +74,7 @@ export function ArticleEditor({ articleId }: { articleId: number | null }) {
     const newContent = before + insertText + after;
     setContent(newContent);
 
-    // Set cursor after inserted text on next frame
+
     const newPos = pos + insertText.length;
     requestAnimationFrame(() => {
       ta.focus();
@@ -96,7 +95,7 @@ export function ArticleEditor({ articleId }: { articleId: number | null }) {
         id: number; title: string; content: string; summary: string;
         category_id: number | null; cover_image_url: string | null; cover_image_alt: string | null;
         is_pinned: boolean; seo_title: string | null; seo_description: string | null;
-        seo_keywords: string | null; seo_slug: string | null;
+        seo_keywords: string | null; seo_slug: string | null; status: string;
       }>(`/admin/articles/${articleId}`)
         .then((r) => {
           const d = r.data;
@@ -111,7 +110,8 @@ export function ArticleEditor({ articleId }: { articleId: number | null }) {
           setSeoDescription(d.seo_description || '');
           setSeoKeywords(d.seo_keywords || '');
           setSeoSlug(d.seo_slug || '');
-          // Initialize cursor at end
+          setArticleStatus(d.status || 'published');
+
           cursorPosRef.current = d.content.length;
         })
         .catch(() => toast.error('加载文章失败'))
@@ -119,7 +119,24 @@ export function ArticleEditor({ articleId }: { articleId: number | null }) {
     }
   }, [articleId]);
 
-  const handleSave = async () => {
+  const buildPayload = (status: string) => ({
+    title: title.trim(),
+    content: content,
+    content_type: 'markdown',
+    status,
+    summary: summary.trim() || null,
+    category_id: categoryId,
+    cover_image_url: coverImageUrl.trim() || null,
+    cover_image_alt: coverImageAlt.trim() || null,
+    is_pinned: isPinned,
+    pin_order: isPinned ? 1 : 0,
+    seo_title: seoTitle.trim() || null,
+    seo_description: seoDescription.trim() || null,
+    seo_keywords: seoKeywords.trim() || null,
+    seo_slug: seoSlug.trim() || null,
+  });
+
+  const handlePublish = async () => {
     if (!title.trim()) {
       toast.error('请输入标题');
       return;
@@ -130,34 +147,48 @@ export function ArticleEditor({ articleId }: { articleId: number | null }) {
     }
     setSaving(true);
     try {
-      const payload = {
-        title: title.trim(),
-        content: content,
-        content_type: 'markdown',
-        summary: summary.trim() || null,
-        category_id: categoryId,
-        cover_image_url: coverImageUrl.trim() || null,
-        cover_image_alt: coverImageAlt.trim() || null,
-        is_pinned: isPinned,
-        pin_order: isPinned ? 1 : 0,
-        seo_title: seoTitle.trim() || null,
-        seo_description: seoDescription.trim() || null,
-        seo_keywords: seoKeywords.trim() || null,
-        seo_slug: seoSlug.trim() || null,
-      };
-
+      const payload = buildPayload('published');
       if (articleId) {
         await api.put(`/admin/articles/${articleId}`, payload);
-        toast.success('文章已更新');
+        toast.success('文章已发布');
       } else {
         await api.post('/admin/articles', payload);
-        toast.success('文章已创建');
+        toast.success('文章已创建并发布');
       }
       router.push('/admin/dynamics');
     } catch (e: any) {
-      toast.error(e.response?.data?.detail || '保存失败');
+      toast.error(e.response?.data?.detail || '发布失败');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSaveDraft = async () => {
+    if (!title.trim()) {
+      toast.error('请输入标题');
+      return;
+    }
+    setSavingDraft(true);
+    try {
+      const payload = buildPayload('draft');
+      if (articleId) {
+        await api.put(`/admin/articles/${articleId}`, payload);
+        toast.success('草稿已保存');
+        setArticleStatus('draft');
+      } else {
+        const res = await api.post('/admin/articles', payload);
+        toast.success('草稿已保存');
+
+        const newId = res.data?.id;
+        if (newId) {
+          router.replace(`/admin/dynamics/${newId}`);
+        }
+        setArticleStatus('draft');
+      }
+    } catch (e: any) {
+      toast.error(e.response?.data?.detail || '保存草稿失败');
+    } finally {
+      setSavingDraft(false);
     }
   };
 
@@ -177,7 +208,6 @@ export function ArticleEditor({ articleId }: { articleId: number | null }) {
     } catch {
       toast.error('图片上传失败');
     }
-    // Reset the file input so the same file can be re-selected
     e.target.value = '';
   };
 
@@ -191,8 +221,7 @@ export function ArticleEditor({ articleId }: { articleId: number | null }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button onClick={() => router.push('/admin/dynamics')} className="btn-ghost" style={{ padding: '6px 12px', fontSize: 13 }}>
             <ArrowLeft style={{ width: 14, height: 14 }} /> 返回
@@ -200,31 +229,40 @@ export function ArticleEditor({ articleId }: { articleId: number | null }) {
           <h2 style={{ fontSize: 20, fontWeight: 600, color: 'var(--color-heading)', margin: 0 }}>
             {articleId ? '编辑文章' : '创建文章'}
           </h2>
+          {articleStatus === 'draft' && (
+            <span style={{
+              fontSize: 12, fontWeight: 600, color: '#d97706',
+              background: '#fef3c7', padding: '2px 8px',
+              borderRadius: 6, border: '1px solid #fcd34d',
+            }}>
+              草稿
+            </span>
+          )}
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button
-            onClick={() => setShowPreview(!showPreview)}
+            onClick={handleSaveDraft}
             className="btn-ghost"
             style={{ padding: '8px 14px', fontSize: 13 }}
+            disabled={savingDraft}
           >
-            <Eye style={{ width: 14, height: 14 }} /> {showPreview ? '编辑' : '预览'}
+            {savingDraft ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText style={{ width: 14, height: 14 }} />}
+            {' '}{savingDraft ? '保存中...' : '保存草稿'}
           </button>
           <button
-            onClick={handleSave}
+            onClick={handlePublish}
             className="btn-primary"
             style={{ padding: '8px 18px', fontSize: 13 }}
             disabled={saving}
           >
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save style={{ width: 14, height: 14 }} />}
-            {' '}{saving ? '保存中...' : '保存'}
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send style={{ width: 14, height: 14 }} />}
+            {' '}{saving ? '发布中...' : '发布'}
           </button>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: showPreview ? '1fr 1fr' : '1fr', gap: 20, alignItems: 'start' }}>
-        {/* Editor */}
+      <div className="article-editor-split">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {/* Title */}
           <input
             className="input"
             value={title}
@@ -233,7 +271,6 @@ export function ArticleEditor({ articleId }: { articleId: number | null }) {
             style={{ fontSize: 18, fontWeight: 600, padding: '12px 16px' }}
           />
 
-          {/* Category + Pin */}
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             <select
               className="input"
@@ -252,7 +289,6 @@ export function ArticleEditor({ articleId }: { articleId: number | null }) {
             </label>
           </div>
 
-          {/* Summary */}
           <input
             className="input"
             value={summary}
@@ -260,7 +296,6 @@ export function ArticleEditor({ articleId }: { articleId: number | null }) {
             placeholder="摘要（可选，显示在列表中）"
           />
 
-          {/* Content editor */}
           <div style={{ position: 'relative' }}>
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
               <label className="btn-ghost" style={{ padding: '4px 10px', fontSize: 12, cursor: 'pointer' }}>
@@ -287,7 +322,6 @@ export function ArticleEditor({ articleId }: { articleId: number | null }) {
             />
           </div>
 
-          {/* Cover Image URL */}
           <input
             className="input"
             value={coverImageUrl}
@@ -295,7 +329,6 @@ export function ArticleEditor({ articleId }: { articleId: number | null }) {
             placeholder="封面图 URL（可选）"
           />
 
-          {/* SEO Section (collapsible) */}
           <details style={{ border: '1px solid var(--color-border)', borderRadius: 10, overflow: 'hidden' }}>
             <summary style={{ padding: '10px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--color-text-light)', background: 'var(--color-background-soft)' }}>
               SEO 设置（可选）
@@ -309,25 +342,30 @@ export function ArticleEditor({ articleId }: { articleId: number | null }) {
           </details>
         </div>
 
-        {/* Preview */}
-        {showPreview && (
-          <div className="surface-card" style={{ padding: 24, maxHeight: '80vh', overflowY: 'auto' }}>
-            <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--color-heading)', margin: '0 0 16px' }}>
-              {title || '文章标题'}
-            </h1>
-            {summary && (
-              <p style={{ fontSize: 14, color: 'var(--color-text-light)', marginBottom: 16 }}>{summary}</p>
-            )}
-            <div className="article-content prose-markdown">
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                rehypePlugins={[rehypeRaw, rehypeSlug]}
-              >
-                {content || '*暂无内容*'}
-              </ReactMarkdown>
-            </div>
+        <div className="surface-card" style={{ padding: 24, maxHeight: '80vh', overflowY: 'auto', position: 'sticky', top: 20 }}>
+          <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--color-heading)', margin: '0 0 8px' }}>
+            {title || '文章标题'}
+          </h1>
+          {articleStatus === 'draft' && (
+            <span style={{
+              display: 'inline-block', fontSize: 11, fontWeight: 600, color: '#d97706',
+              background: '#fef3c7', padding: '1px 6px', borderRadius: 4, marginBottom: 8,
+            }}>
+              草稿
+            </span>
+          )}
+          {summary && (
+            <p style={{ fontSize: 14, color: 'var(--color-text-light)', marginBottom: 16, borderLeft: '3px solid var(--color-primary)', paddingLeft: 12 }}>{summary}</p>
+          )}
+          <div className="article-content prose-markdown">
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              rehypePlugins={[rehypeRaw, rehypeSlug]}
+            >
+              {content || '*暂无内容*'}
+            </ReactMarkdown>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

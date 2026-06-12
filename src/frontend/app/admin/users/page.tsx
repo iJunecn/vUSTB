@@ -11,16 +11,21 @@ type AdminUser = {
   id: number;
   email: string;
   username: string;
-  user_group: 'super_admin' | 'admin' | 'teacher' | 'user';
+  user_group: 'super_admin' | 'admin' | 'teacher' | 'server_manager' | 'user';
   email_verified: boolean;
   is_banned: boolean;
   created_at: string;
+  phone: string | null;
+  real_name: string | null;
+  student_id: string | null;
+  github_name: string | null;
 };
 
-const GROUPS = ['user', 'teacher', 'admin', 'super_admin'] as const;
+const GROUPS = ['user', 'server_manager', 'teacher', 'admin', 'super_admin'] as const;
 
 const GROUP_LABELS: Record<string, string> = {
   user: '用户',
+  server_manager: '服务器管理员',
   teacher: '教师',
   admin: '管理员',
   super_admin: '超管',
@@ -175,6 +180,9 @@ export default function AdminUsersPage() {
                 <ThCell>ID</ThCell>
                 <ThCell>用户名</ThCell>
                 <ThCell>邮箱</ThCell>
+                <ThCell>手机号</ThCell>
+                <ThCell>USTB-SSO</ThCell>
+                <ThCell>GitHub</ThCell>
                 <ThCell>用户组</ThCell>
                 <ThCell>状态</ThCell>
                 <ThCell style={{ textAlign: 'right' }}>操作</ThCell>
@@ -186,6 +194,19 @@ export default function AdminUsersPage() {
                   <TdCell style={{ color: 'var(--color-text-light)' }}>{u.id}</TdCell>
                   <TdCell style={{ fontWeight: 600, color: 'var(--color-heading)' }}>{u.username}</TdCell>
                   <TdCell>{u.email}</TdCell>
+                  <TdCell style={{ fontSize: 13, color: u.phone ? 'var(--color-text)' : 'var(--color-text-light)' }}>{u.phone || '—'}</TdCell>
+                  <TdCell style={{ fontSize: 13 }}>
+                    {u.real_name || u.student_id ? (
+                      <span>
+                        {u.real_name && <span style={{ fontWeight: 500 }}>{u.real_name}</span>}
+                        {u.real_name && u.student_id && <span style={{ color: 'var(--color-text-light)', margin: '0 4px' }}>|</span>}
+                        {u.student_id && <span style={{ color: 'var(--color-text-light)' }}>{u.student_id}</span>}
+                      </span>
+                    ) : (
+                      <span style={{ color: 'var(--color-text-light)' }}>未绑定</span>
+                    )}
+                  </TdCell>
+                  <TdCell style={{ fontSize: 13, color: u.github_name ? 'var(--color-text)' : 'var(--color-text-light)' }}>{u.github_name || '未绑定'}</TdCell>
                   <TdCell>
                     <select
                       value={u.user_group}

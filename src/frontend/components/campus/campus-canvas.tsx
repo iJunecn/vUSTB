@@ -291,7 +291,6 @@ export function CampusCanvas({ onEngineReady }: CampusCanvasProps) {
     };
     window.addEventListener('resize', onResize);
 
-    // Cleanup references
     (renderer.domElement as HTMLCanvasElement & {
       _cleanup: () => void;
     })._cleanup = () => {

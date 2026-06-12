@@ -1,7 +1,4 @@
-"""远程 Yggdrasil 皮肤站导入 — 从 element-skin profile_import_backend 搬运，适配 SQLAlchemy。
-
-允许用户从其他 Yggdrasil 皮肤站导入角色和材质到本站。
-"""
+"""远程 Yggdrasil 皮肤站导入。"""
 import base64
 import json
 import logging

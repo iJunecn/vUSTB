@@ -3,7 +3,7 @@
 from datetime import datetime
 from enum import Enum as PyEnum
 
-from sqlalchemy import String, Integer, DateTime, Enum, Text, ForeignKey, func
+from sqlalchemy import String, Integer, DateTime, Enum, Text, ForeignKey, func, CheckConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -29,12 +29,16 @@ class PointReason(str, PyEnum):
 class PointAccount(Base):
     """用户积分账户 — 每用户一行。"""
     __tablename__ = "point_accounts"
+    __table_args__ = (
+        CheckConstraint("pixel_points >= 0", name="ck_pixel_points_nonneg"),
+        CheckConstraint("shell_points >= 0", name="ck_shell_points_nonneg"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("users.id"), unique=True, nullable=False, index=True
     )
-    pixel_points: Mapped[int] = mapped_column(Integer, default=0, nullable=False, server_default="0")
+    pixel_points: Mapped[int] = mapped_column(Integer, default=10, nullable=False, server_default="10")
     shell_points: Mapped[int] = mapped_column(Integer, default=0, nullable=False, server_default="0")
     last_checkin: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, default=None

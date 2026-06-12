@@ -1,7 +1,4 @@
-"""站点用户业务逻辑 — 从 vSkin SiteBackend 搬运，适配 SQLAlchemy。
-
-包含：登录/注册、验证码、用户信息、角色管理、材质应用、头像设置等。
-"""
+"""站点用户业务逻辑 — 登录/注册、验证码、用户信息、角色管理、材质应用、头像设置。"""
 import hashlib
 import os
 import random
@@ -51,7 +48,7 @@ class SiteBackend:
     def build_avatar_url(self, avatar_hash: str | None) -> str:
         return self._avatar_url_from_hash(avatar_hash)
 
-    # ========== Settings helpers ==========
+    # 设置
 
     # 硬编码设置映射 — 这些值不可通过管理面板修改
     _HARDCODED_SETTINGS: dict[str, str] = {}
@@ -130,7 +127,7 @@ class SiteBackend:
                 return True
         return False
 
-    # ========== Auth & User ==========
+    # 认证与用户
 
     async def send_verification_code(self, db: AsyncSession, email: str, type: str):
         enabled = await self._get_setting(db, "email_verify_enabled", "false")
@@ -463,7 +460,7 @@ class SiteBackend:
 
         await db.commit()
 
-    # ========== Profile ==========
+    # 角色
 
     async def create_profile(self, db: AsyncSession, user_id: int, name: str, model: str = "default") -> dict:
         if not name:
@@ -582,7 +579,7 @@ class SiteBackend:
         return [*external_urls, *images]
 
 
-# ====== Helpers ======
+# 工具函数
 
 def _validate_strong_password(password: str) -> list[str]:
     errors: list[str] = []

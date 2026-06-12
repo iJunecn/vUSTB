@@ -1,11 +1,23 @@
 'use client';
 
-import { useEffect, useState, Suspense } from 'react';
+import { useEffect, useState, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import { useUserStore } from '@/stores/user';
 import { rawApi } from '@/lib/api';
 import { Loader2, CalendarCheck, X, AlertCircle, Shield } from 'lucide-react';
+
+/** 将 Date 格式化为北京时间的 YYYY-MM-DD */
+function toBeijingDateStr(d: Date): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(d);
+  const y = parts.find(p => p.type === 'year')!.value;
+  const m = parts.find(p => p.type === 'month')!.value;
+  const dd = parts.find(p => p.type === 'day')!.value;
+  return `${y}-${m}-${dd}`;
+}
 
 export default function PrintBookingPageWrapper() {
   return (
@@ -78,11 +90,33 @@ function PrintBookingPage() {
     setShellCost(cost);
   }, [form.weight]);
 
+  const availableSlots = useMemo(() => {
+    if (!form.date) return { AM: true, PM: true };
+    const today = toBeijingDateStr(new Date());
+    const bjNow = new Date(new Date().getTime() + (8 + new Date().getTimezoneOffset() / -60) * 3600000);
+    const currentHour = bjNow.getHours();
+
+    if (form.date < today) return { AM: false, PM: false };
+    if (form.date === today) {
+      return { AM: currentHour < 12, PM: true };
+    }
+    return { AM: true, PM: true };
+  }, [form.date]);
+
+  useEffect(() => {
+    if (form.slot_type === 'AM' && !availableSlots.AM) {
+      setForm((f) => ({ ...f, slot_type: '' }));
+    }
+    if (form.slot_type === 'PM' && !availableSlots.PM) {
+      setForm((f) => ({ ...f, slot_type: '' }));
+    }
+  }, [availableSlots, form.slot_type]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    // Check USTB SSO binding before creating booking
+
     if (!user?.real_name || !user?.student_id) {
       setShowSsoModal(true);
       return;
@@ -131,7 +165,6 @@ function PrintBookingPage() {
         <h1 style={{ fontSize: 26, fontWeight: 800, color: 'var(--color-heading)', margin: 0 }}>创建预约</h1>
       </div>
 
-      {/* Shell points balance */}
       <div style={{ padding: '12px 16px', borderRadius: 10, background: 'color-mix(in srgb, #3b82f6 8%, transparent)', border: '1px solid color-mix(in srgb, #3b82f6 20%, transparent)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-heading)' }}>当前贝壳积分</span>
         <span style={{ fontSize: 20, fontWeight: 700, color: '#3b82f6' }}>{shellPoints}</span>
@@ -144,7 +177,6 @@ function PrintBookingPage() {
       )}
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-        {/* Printer */}
         {printers.length > 0 && (
           <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-heading)' }}>打印机</span>
@@ -164,7 +196,6 @@ function PrintBookingPage() {
           </label>
         )}
 
-        {/* Date */}
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-heading)' }}>预约日期</span>
           <input
@@ -172,12 +203,11 @@ function PrintBookingPage() {
             value={form.date}
             onChange={(e) => setForm({ ...form, date: e.target.value })}
             required
-            min={new Date().toISOString().slice(0, 10)}
+            min={toBeijingDateStr(new Date())}
             className="input"
           />
         </label>
 
-        {/* Slot */}
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-heading)' }}>时段</span>
           <select
@@ -187,12 +217,11 @@ function PrintBookingPage() {
             className="input"
           >
             <option value="">请选择时段</option>
-            <option value="AM">白天 (00:00-11:59)</option>
-            <option value="PM">下午 (12:00-23:59)</option>
+            <option value="AM" disabled={!availableSlots.AM}>白天 (00:00-11:59){!availableSlots.AM ? '（已过期）' : ''}</option>
+            <option value="PM" disabled={!availableSlots.PM}>下午 (12:00-23:59){!availableSlots.PM ? '（已过期）' : ''}</option>
           </select>
         </label>
 
-        {/* File name */}
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-heading)' }}>文件名</span>
           <input
@@ -204,7 +233,6 @@ function PrintBookingPage() {
           />
         </label>
 
-        {/* Purpose */}
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-heading)' }}>用途</span>
           <textarea
@@ -217,7 +245,6 @@ function PrintBookingPage() {
           />
         </label>
 
-        {/* Weight */}
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-heading)' }}>预估重量 (g)</span>
           <input
@@ -233,7 +260,6 @@ function PrintBookingPage() {
           <p style={{ fontSize: 11, color: 'var(--color-text-light)', margin: '2px 0 0' }}>请务必如实填写，管理员将会核对。</p>
         </label>
 
-        {/* Cost preview */}
         <div style={{ padding: '16px 20px', borderRadius: 12, background: 'var(--color-background-soft)', border: '2px solid var(--color-primary)', textAlign: 'center' }}>
           <div style={{ color: 'var(--color-text-light)', fontSize: 13, marginBottom: 4 }}>消耗贝壳积分</div>
           <div>
@@ -267,7 +293,6 @@ function PrintBookingPage() {
         </div>
       </form>
 
-      {/* Insufficient points modal */}
       {showInsufficientModal && (
         <div
           style={{ position: 'fixed', inset: 0, zIndex: 110, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
@@ -306,7 +331,6 @@ function PrintBookingPage() {
         </div>
       )}
 
-      {/* SSO binding required modal */}
       {showSsoModal && (
         <div
           style={{ position: 'fixed', inset: 0, zIndex: 110, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}

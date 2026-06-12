@@ -19,7 +19,7 @@ _AF_TOK_B64 = "ZDZESnVVa0g0RXN3Uld5WWJRTjhCamNGVENoQXZuM2U="
 # SMTP 邮件服务 — base64 编码存储敏感字段
 _SMTP_HOST = "mx.jianyuelab.net"
 _SMTP_PORT = 465
-_SMTP_USER = "noreply"
+_SMTP_USER = "noreply@ustb.world"
 _SMTP_PWD_B64 = "dXN0YndvcmxkbWFpbA=="
 _SMTP_FROM = "像素北科"
 _SMTP_SSL = True
@@ -58,7 +58,7 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://vustb:vustb@postgres:5432/vustb"
     redis_url: str = "redis://redis:6379/0"
 
-    jwt_secret: str = "change-me-in-production"
+    jwt_secret: str = "change-me-in-production-use-32bytes"
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60 * 24 * 7
 

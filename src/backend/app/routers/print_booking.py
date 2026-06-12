@@ -1,14 +1,11 @@
-"""3D 打印预约系统 API。
-
-公开接口：打印机状态、预约时间表
-用户接口：创建/取消/签到预约（贝壳积分计费）
-管理接口（super_admin / admin / teacher）：审批、打印机管理、报表导出
-"""
+"""3D 打印预约系统"""
 from __future__ import annotations
 
 import io
+import logging
 import math
 import os
+import time as _time
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -29,7 +26,7 @@ from app.utils.user_groups import is_admin_group
 
 router = APIRouter(prefix="/api/print", tags=["print-booking"])
 
-# ──────────────── helpers ────────────────
+# helpers
 
 def _can_manage_printer(user: User) -> bool:
     return user.user_group in (UserGroup.SUPER_ADMIN, UserGroup.ADMIN, UserGroup.TEACHER)
@@ -42,7 +39,59 @@ def _shell_cost(weight: float) -> int:
     return math.ceil(weight / 10)
 
 
-# ──────────────── Pydantic schemas ────────────────
+def _is_slot_past(date_str: str, slot_type: SlotType, now: datetime | None = None) -> bool:
+    """判断时段是否已过去（北京时间）。"""
+    if now is None:
+        now = datetime.now(timezone(timedelta(hours=8)))
+    today = now.strftime("%Y-%m-%d")
+    current_time = now.strftime("%H:%M")
+
+    if date_str < today:
+        return True
+    if date_str == today:
+        if slot_type == SlotType.AM and current_time >= "12:00":
+            return True
+    return False
+
+
+async def _auto_complete_past_running(db: AsyncSession) -> int:
+    """自动完成已过时段的 RUNNING 预约（惰性触发，60秒节流）。"""
+    global _last_auto_complete_ts
+    now_ts = _time.time()
+    if now_ts - _last_auto_complete_ts < 60:
+        return 0
+    _last_auto_complete_ts = now_ts
+
+    try:
+        now = datetime.now(timezone(timedelta(hours=8)))
+        running = (
+            await db.execute(
+                select(Booking).where(Booking.status == BookingStatus.RUNNING)
+            )
+        ).scalars().all()
+
+        count = 0
+        for b in running:
+            if _is_slot_past(b.date, b.slot_type, now):
+                b.status = BookingStatus.DONE
+                count += 1
+
+        if count:
+            await db.commit()
+        return count
+    except Exception as exc:  # noqa: BLE001
+        logging.getLogger(__name__).warning("auto-complete failed: %s", exc)
+        try:
+            await db.rollback()
+        except Exception:  # noqa: BLE001
+            pass
+        return 0
+
+
+_last_auto_complete_ts: float = 0.0
+
+
+# schemas
 
 class PrinterOut(BaseModel):
     id: int
@@ -108,7 +157,7 @@ class RejectBody(BaseModel):
     reason: str = ""
 
 
-# ──────────────── 公开：打印机状态 ────────────────
+# 公开：打印机状态
 
 @router.get("/printers", response_model=list[PrinterOut])
 async def list_printers(db: AsyncSession = Depends(get_db)):
@@ -121,6 +170,8 @@ async def list_printers(db: AsyncSession = Depends(get_db)):
 
 @router.get("/printers/{printer_id}/status")
 async def printer_status(printer_id: int, db: AsyncSession = Depends(get_db)):
+    await _auto_complete_past_running(db)
+
     printer = (await db.execute(select(Printer3D).where(Printer3D.id == printer_id))).scalar_one_or_none()
     if not printer:
         raise HTTPException(status_code=404, detail="打印机不存在")
@@ -136,7 +187,7 @@ async def printer_status(printer_id: int, db: AsyncSession = Depends(get_db)):
         logic_status = "暂停使用"
         css_class = "paused"
     else:
-        # 优先检查：该打印机是否有正在运行的预约（不限时段）
+        # 检查是否有运行中的预约
         running_booking = (
             await db.execute(
                 select(Booking).where(
@@ -149,7 +200,7 @@ async def printer_status(printer_id: int, db: AsyncSession = Depends(get_db)):
             logic_status = "正在运行"
             css_class = "running"
         else:
-            # 再检查当前时段是否有预约
+            # 当前时段预约
             current_slot = None
             if "00:00" <= current_time <= "11:59":
                 current_slot = SlotType.AM
@@ -180,7 +231,7 @@ async def printer_status(printer_id: int, db: AsyncSession = Depends(get_db)):
     }
 
 
-# ──────────────── 管理员：打印机 CRUD ────────────────
+# 管理员：打印机 CRUD
 
 @router.post("/printers", response_model=PrinterOut)
 async def create_printer(
@@ -232,7 +283,7 @@ async def delete_printer(
     return {"ok": True}
 
 
-# ──────────────── 用户：预约 ────────────────
+# 用户：预约
 
 @router.get("/bookings", response_model=list[BookingOut])
 async def list_bookings(
@@ -242,7 +293,9 @@ async def list_bookings(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """获取预约列表。mine=true 只返回当前用户的。"""
+    """获取预约列表，mine=true 只返回当前用户的。"""
+    await _auto_complete_past_running(db)
+
     q = select(Booking, User).join(User, Booking.user_id == User.id, isouter=True)
     if mine:
         q = q.where(Booking.user_id == user.id)
@@ -269,14 +322,18 @@ async def create_booking(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    # 检查是否绑定北京科技大学统一验证登录
+    # 需先绑定北科大统一验证
     if not user.real_name or not user.student_id:
         raise HTTPException(
             status_code=403,
             detail="请先绑定北京科技大学统一验证登录后再创建预约",
         )
 
-    # 检查打印机是否暂停
+    # 时段已过去
+    if _is_slot_past(body.date, body.slot_type):
+        raise HTTPException(status_code=400, detail="该时段已过去，无法预约")
+
+    # 打印机暂停
     if body.printer_id:
         printer = (await db.execute(select(Printer3D).where(Printer3D.id == body.printer_id))).scalar_one_or_none()
         if not printer:
@@ -284,7 +341,7 @@ async def create_booking(
         if printer.is_paused:
             raise HTTPException(status_code=400, detail="打印机暂停使用中，无法预约")
 
-    # 冲突检查：同一打印机（或无打印机时同一时段全局）不可重复
+    # 冲突检查
     conflict_q = select(Booking).where(
         Booking.date == body.date,
         Booking.slot_type == body.slot_type,
@@ -298,10 +355,9 @@ async def create_booking(
     if existing:
         raise HTTPException(status_code=409, detail="该时段已被预约")
 
-    # 计算贝壳积分消耗
     shell_cost = _shell_cost(body.weight)
 
-    # 扣减贝壳积分
+    # 扣减积分
     if shell_cost > 0:
         acct = (
             await db.execute(select(PointAccount).where(PointAccount.user_id == user.id))
@@ -317,7 +373,7 @@ async def create_booking(
             type=PointType.SHELL,
             amount=-shell_cost,
             reason=PointReason.PRINT_BOOKING,
-            ref_id=None,  # will update after flush
+            ref_id=None,
             balance_after=acct.shell_points,
         )
         db.add(tx)
@@ -339,12 +395,52 @@ async def create_booking(
     db.add(booking)
     await db.flush()
 
-    # Update ref_id in transaction with booking id
+    # 关联预约 ID
     if shell_cost > 0:
         tx.ref_id = str(booking.id)
 
     await db.commit()
     await db.refresh(booking)
+
+    # 审批通知邮件
+    try:
+        from app.utils.email_utils import email_sender
+        managers = (await db.execute(
+            select(User).where(
+                User.user_group.in_((UserGroup.SUPER_ADMIN, UserGroup.ADMIN, UserGroup.TEACHER)),
+                User.is_banned == False,
+            )
+        )).scalars().all()
+
+        # 打印机名称
+        printer_name = "未指定"
+        if booking.printer_id:
+            printer_obj = (await db.execute(select(Printer3D).where(Printer3D.id == booking.printer_id))).scalar_one_or_none()
+            if printer_obj:
+                printer_name = printer_obj.name
+
+        booking_info = {
+            "username": user.username or "",
+            "real_name": user.real_name or "",
+            "student_id": user.student_id or "",
+            "phone": user.phone or "",
+            "email": user.email or "",
+            "date": booking.date,
+            "slot_type": booking.slot_type.value,
+            "printer_name": printer_name,
+            "file_name": booking.file_name or "未指定",
+            "purpose": booking.purpose or "未说明",
+            "weight": booking.weight,
+            "cost": booking.cost,
+        }
+        for manager in managers:
+            if manager.email:
+                await email_sender.send_booking_notification(db, manager.email, booking_info)
+    except Exception:
+        # 邮件失败不影响预约
+        import logging
+        logging.getLogger(__name__).warning("Failed to send booking notification emails", exc_info=True)
+
     d = booking.to_dict()
     d.update({"username": user.username, "real_name": user.real_name, "student_id": user.student_id})
     return BookingOut(**d)
@@ -391,16 +487,15 @@ async def update_booking(
     for k, v in updates.items():
         setattr(booking, k, v)
 
-    # Recalculate shell cost if weight changed
+    # 重新计算积分
     new_weight = updates.get("weight", old_weight)
     new_cost = _shell_cost(new_weight)
     booking.weight = new_weight
     booking.cost = new_cost
 
-    # Handle shell points difference
+    # 积分差额
     cost_diff = new_cost - old_cost
     if cost_diff > 0:
-        # Need to deduct additional points
         acct = (
             await db.execute(select(PointAccount).where(PointAccount.user_id == booking.user_id))
         ).scalar_one_or_none()
@@ -417,7 +512,6 @@ async def update_booking(
         )
         db.add(tx)
     elif cost_diff < 0:
-        # Refund excess points
         refund = abs(cost_diff)
         acct = (
             await db.execute(select(PointAccount).where(PointAccount.user_id == booking.user_id))
@@ -455,7 +549,7 @@ async def cancel_booking(
     if booking.user_id != user.id and not _can_manage_printer(user):
         raise HTTPException(status_code=403, detail="无权操作")
 
-    # Refund shell points if booking was pending/booked and had cost
+    # 退还积分
     if booking.cost > 0 and booking.status in (BookingStatus.PENDING, BookingStatus.BOOKED):
         acct = (
             await db.execute(select(PointAccount).where(PointAccount.user_id == booking.user_id))
@@ -532,7 +626,7 @@ async def complete_booking(
     return {"ok": True}
 
 
-# ──────────────── 管理员：审批 ────────────────
+# 管理员：审批
 
 @router.get("/admin/approvals", response_model=list[BookingOut])
 async def list_pending_approvals(
@@ -541,6 +635,7 @@ async def list_pending_approvals(
 ):
     if not _can_manage_printer(user):
         raise HTTPException(status_code=403, detail="需要管理员或教师权限")
+    await _auto_complete_past_running(db)
     rows = (
         await db.execute(
             select(Booking, User)
@@ -586,7 +681,7 @@ async def reject_booking(
     if not booking:
         raise HTTPException(status_code=404, detail="预约不存在")
 
-    # Refund shell points on rejection
+# 拒绝时退还积分
     if booking.cost > 0:
         acct = (
             await db.execute(select(PointAccount).where(PointAccount.user_id == booking.user_id))
@@ -626,7 +721,7 @@ async def admin_delete_booking(
     return {"ok": True}
 
 
-# ──────────────── 周报导出 ────────────────
+# 周报导出
 
 @router.get("/admin/reports/export")
 async def export_report(
@@ -705,7 +800,7 @@ async def print_stats(
     }
 
 
-# ──────────────── 周报管理 ────────────────
+# 周报管理
 
 class WeeklyReportOut(BaseModel):
     id: int
@@ -742,13 +837,13 @@ async def generate_weekly_report(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """手动生成本周周报并保存到数据库。"""
+    """手动生成本周周报。"""
     if not _can_manage_printer(user):
         raise HTTPException(status_code=403, detail="需要管理员或教师权限")
 
     from datetime import timedelta
     now = datetime.now(timezone(timedelta(hours=8)))
-    # 本周一到本周日
+    # 本周一到周日
     monday = now - timedelta(days=now.weekday())
     start_date = monday.strftime("%Y-%m-%d")
     end_date = (monday + timedelta(days=6)).strftime("%Y-%m-%d")
@@ -781,7 +876,7 @@ async def delete_weekly_report(
     return {"ok": True}
 
 
-# ──────────────── 周时间表 ────────────────
+# 周时间表
 
 @router.get("/schedule")
 async def get_weekly_schedule(
@@ -791,6 +886,8 @@ async def get_weekly_schedule(
     db: AsyncSession = Depends(get_db),
 ):
     """获取指定日期范围的预约时间表（公开）。"""
+    await _auto_complete_past_running(db)
+
     q = select(Booking, User).join(User, Booking.user_id == User.id)
     q = q.where(
         Booking.date >= date_from,

@@ -1,14 +1,4 @@
-"""材质静态文件服务
-
-为 Yggdrasil 材质（皮肤/披风）提供静态文件响应，并添加适合 MC 客户端
-重复请求的 Cache-Control 头。
-
-同时提供用户头像接口。
-
-Yggdrasil 规范要求：
-- 材质 URL 响应头中的 Content-Type 必须为 image/png
-- 客户端会缓存材质，Cache-Control 可减少重复请求
-"""
+"""材质静态文件与头像接口。"""
 import os
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
@@ -24,7 +14,7 @@ from app.utils.image import default_steve_head_avatar, extract_skin_head_avatar
 router = APIRouter(tags=["static"])
 
 
-# ====== 材质文件 ======
+# 材质文件
 
 @router.head("/static/textures/{filename}")
 @router.get("/static/textures/{filename}")
@@ -55,7 +45,7 @@ async def serve_texture(filename: str):
     )
 
 
-# ====== 用户头像 ======
+# 用户头像
 
 @router.get("/api/users/{user_id}/avatar")
 async def user_avatar(user_id: int, db: AsyncSession = Depends(get_db)):

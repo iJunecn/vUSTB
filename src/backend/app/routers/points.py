@@ -1,8 +1,4 @@
-"""积分系统 API。
-
-用户接口：积分查询、每日签到、积分流水、爱发电充值验证
-公开接口：爱发电 webhook 回调
-"""
+"""积分系统 API。"""
 from __future__ import annotations
 
 import hashlib
@@ -24,7 +20,7 @@ from app.models import User, PointAccount, PointTransaction, PointType, PointRea
 
 router = APIRouter(prefix="/api/points", tags=["points"])
 
-# ──────────────── helpers ────────────────
+# helpers
 
 BJ_TZ = timezone(timedelta(hours=8))
 
@@ -32,14 +28,14 @@ BJ_TZ = timezone(timedelta(hours=8))
 async def _get_or_create_account(
     db: AsyncSession, user_id: int
 ) -> PointAccount:
-    """获取用户积分账户，不存在则创建（像素积分默认 0，注册时另设）。"""
+    """获取用户积分账户，不存在则创建（像素积分默认 10，注册赠送）。"""
     acct = (
         await db.execute(
             select(PointAccount).where(PointAccount.user_id == user_id)
         )
     ).scalar_one_or_none()
     if not acct:
-        acct = PointAccount(user_id=user_id, pixel_points=0, shell_points=0)
+        acct = PointAccount(user_id=user_id, pixel_points=10, shell_points=0)
         db.add(acct)
         await db.flush()
     return acct
@@ -207,7 +203,7 @@ async def _process_afdian_order(
     return {"ok": True, "recharged": recharge_amount, "shell_points": acct.shell_points}
 
 
-# ──────────────── Pydantic schemas ────────────────
+# schemas
 
 class AccountOut(BaseModel):
     pixel_points: int
@@ -235,7 +231,7 @@ class VerifyAfdianBody(BaseModel):
     out_trade_no: str
 
 
-# ──────────────── 用户：积分查询 ────────────────
+# 积分查询
 
 @router.get("/account", response_model=AccountOut)
 async def get_account(
@@ -250,7 +246,7 @@ async def get_account(
     )
 
 
-# ──────────────── 用户：每日签到 ────────────────
+# 每日签到
 
 @router.post("/checkin", response_model=CheckinOut)
 async def daily_checkin(
@@ -289,7 +285,7 @@ async def daily_checkin(
     )
 
 
-# ──────────────── 用户：积分流水 ────────────────
+# 积分流水
 
 @router.get("/transactions", response_model=list[TransactionOut])
 async def list_transactions(
@@ -309,7 +305,7 @@ async def list_transactions(
     return [TransactionOut(**tx.to_dict()) for tx in rows]
 
 
-# ──────────────── 用户：确认爱发电购买 ────────────────
+# 爱发电购买
 
 @router.post("/verify-afdian")
 async def verify_afdian(
@@ -325,7 +321,7 @@ async def verify_afdian(
     return await _process_afdian_order(db, order, user.id)
 
 
-# ──────────────── 公开：爱发电 webhook ────────────────
+# 爱发电 webhook
 
 @router.post("/webhook/afdian")
 async def afdian_webhook(

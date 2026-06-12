@@ -100,7 +100,7 @@ export function parseMotdSegments(raw: string | null | undefined): MotdSegment[]
   return segments;
 }
 
-// ---------- motd.minebbs.com API response type ----------
+// motd API types
 type MotdApiResponse = {
   status: 'online' | 'error' | string;
   type?: string;           // "je" or "be"

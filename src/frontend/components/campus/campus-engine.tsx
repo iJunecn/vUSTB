@@ -152,7 +152,7 @@ export function CampusEngine({
   );
 }
 
-// ========== Renderer Factory ==========
+// Renderer Factory
 
 type Renderer = {
   start: () => Promise<void>;

@@ -55,7 +55,7 @@ export default function ProfilePage() {
     }
   }, [user]);
 
-  const isPrivileged = user && (user.user_group === 'super_admin' || user.user_group === 'admin');
+  const isPrivileged = user && ['super_admin', 'admin', 'server_manager'].includes(user.user_group);
 
   async function saveProfile() {
     setSaving(true);

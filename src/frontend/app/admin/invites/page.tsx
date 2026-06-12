@@ -21,11 +21,13 @@ type Invite = {
 const GROUP_LABELS: Record<string, string> = {
   admin: '管理员',
   teacher: '教师',
+  server_manager: '服务器管理员',
 };
 
 const GROUP_COLORS: Record<string, string> = {
   admin: '#409EFF',
   teacher: '#9B59B6',
+  server_manager: '#E6A23C',
 };
 
 export default function AdminInvitesPage() {
@@ -59,10 +61,19 @@ export default function AdminInvitesPage() {
       return [
         { value: '', label: '普通用户' },
         { value: 'teacher', label: '教师' },
+        { value: 'server_manager', label: '服务器管理员' },
         { value: 'admin', label: '管理员' },
       ];
     }
-    if (group === 'admin' || group === 'teacher') {
+    if (group === 'admin') {
+      return [
+        { value: '', label: '普通用户' },
+        { value: 'teacher', label: '教师' },
+        { value: 'server_manager', label: '服务器管理员' },
+      ];
+    }
+    // teacher 和 server_manager 只能选普通用户或教师
+    if (group === 'teacher' || group === 'server_manager') {
       return [
         { value: '', label: '普通用户' },
         { value: 'teacher', label: '教师' },

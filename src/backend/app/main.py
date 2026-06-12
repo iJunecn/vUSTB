@@ -12,7 +12,6 @@ import os
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 确保 texture/carousel 目录存在
     os.makedirs(settings.textures_directory, exist_ok=True)
     os.makedirs(settings.carousel_directory, exist_ok=True)
     yield
@@ -25,18 +24,14 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-
-# ====== Yggdrasil 中间件：为所有 /api/yggdrasil/* 响应添加 ALI 头 ======
-# 规范要求每个 Yggdrasil 响应都包含 X-Authlib-Injector-API-Location 头，
-# 值为对外 API 根地址。此中间件从请求头推断公开 URL 并添加 ALI 头。
 _DEFAULT_SITE_URL = "http://localhost"
 
 
+# Yggdrasil ALI 中间件
 @app.middleware("http")
 async def yggdrasil_ali_middleware(request: Request, call_next):
     response = await call_next(request)
     if request.url.path.startswith("/api/yggdrasil"):
-        # 解析公开 URL：优先环境变量（非默认值），否则从请求头推断
         configured = (settings.site_url or "").rstrip("/")
         if configured and configured != _DEFAULT_SITE_URL:
             base = configured
@@ -46,10 +41,7 @@ async def yggdrasil_ali_middleware(request: Request, call_next):
                      request.url.scheme)
             host = (request.headers.get("x-forwarded-host") or
                     request.headers.get("host"))
-            if host:
-                base = f"{proto}://{host}"
-            else:
-                base = _DEFAULT_SITE_URL
+            base = f"{proto}://{host}" if host else _DEFAULT_SITE_URL
         response.headers["X-Authlib-Injector-API-Location"] = base.rstrip("/") + "/skinapi/"
     return response
 
@@ -61,10 +53,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-# ====== Yggdrasil 规范错误统一处理 ======
-# 规范要求：错误响应的 {error, errorMessage} 必须位于顶层 JSON 对象，不能被
-# FastAPI 默认的 {"detail": ...} 信封包裹。
+# Yggdrasil 错误格式：顶层 {error, errorMessage}，不走 FastAPI 默认信封
 from app.routers.yggdrasil import YggdrasilError  # noqa: E402
 
 
@@ -87,13 +76,9 @@ async def _validation_exception_handler(request: Request, exc: RequestValidation
     if _is_yggdrasil_path(request):
         return JSONResponse(
             status_code=400,
-            content={
-                "error": "IllegalArgumentException",
-                "errorMessage": "Invalid request payload.",
-            },
+            content={"error": "IllegalArgumentException", "errorMessage": "Invalid request payload."},
             media_type="application/json; charset=utf-8",
         )
-    # 非 Yggdrasil 路径走 FastAPI 默认格式
     return JSONResponse(status_code=422, content={"detail": exc.errors()})
 
 
@@ -102,15 +87,11 @@ async def health():
     return {"status": "ok", "service": "vustb-backend", "version": "0.1.0"}
 
 
-# ====== 挂载静态文件 ======
-# 注：textures 目录由 app.routers.static_files 提供路由（支持 Cache-Control 等头），
-# 不再使用 StaticFiles 挂载，否则路由优先级问题会导致自定义头丢失。
-# carousel 目录仍使用 StaticFiles 挂载。
+# 静态文件挂载（textures 由 static_files 路由提供，carousel 用 StaticFiles）
 if os.path.exists(settings.carousel_directory):
     app.mount("/static/carousel", StaticFiles(directory=settings.carousel_directory), name="carousel")
 
 
-# ====== 注册路由 ======
 from app.routers import register_routers  # noqa: E402
 
 register_routers(app)

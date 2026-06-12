@@ -1,7 +1,4 @@
-"""微软正版验证模块路由 — 从 vSkin microsoft_routes 搬运，适配 SQLAlchemy。
-
-提供微软 OAuth 登录、Minecraft 正版角色获取和导入功能。
-"""
+"""微软正版验证路由。"""
 import secrets
 import time
 import urllib.parse
