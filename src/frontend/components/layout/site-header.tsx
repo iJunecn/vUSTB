@@ -14,6 +14,7 @@ const navItems = [
   { href: '/skin', label: '皮肤站' },
   { href: '/launcher', label: '启动器' },
   { href: '/print', label: '打印预约' },
+  { href: '/guide', label: '新手指南' },
   { href: '/about', label: '关于' },
 ];
 
