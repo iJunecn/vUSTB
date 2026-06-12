@@ -10,7 +10,6 @@ import {
   Compass,
   Cpu,
   Gamepad2,
-  GraduationCap,
   Sparkles,
 } from 'lucide-react';
 
@@ -286,6 +285,7 @@ function GuideSidebar({
         </nav>
 
         <div className="guide-sidebar-footer">
+          <p className="guide-sidebar-author">教程作者：LYOfficial、Commissar</p>
           <p>遇到问题？</p>
           <a className="guide-sidebar-link" href="https://qm.qq.com/q/737880867" target="_blank" rel="noreferrer">
             加入官方社群 (QQ 群 737880867)
@@ -406,23 +406,6 @@ export default function GuidePage() {
             <span className="guide-hero-stat-num">~30</span>
             <span className="guide-hero-stat-label">分钟阅读</span>
           </div>
-        </div>
-
-        <div className="guide-hero-actions">
-          <button
-            className="btn-primary"
-            onClick={() => jumpTo('platform')}
-            style={{ padding: '12px 28px', fontSize: 15, display: 'inline-flex', alignItems: 'center', gap: 8 }}
-          >
-            <GraduationCap style={{ width: 18, height: 18 }} /> 开始阅读
-          </button>
-          <button
-            className="btn-ghost"
-            onClick={() => setTocOpen(true)}
-            style={{ padding: '12px 28px', fontSize: 15, display: 'inline-flex', alignItems: 'center', gap: 8 }}
-          >
-            <BookOpen style={{ width: 18, height: 18 }} /> 查看大纲
-          </button>
         </div>
       </section>
 
